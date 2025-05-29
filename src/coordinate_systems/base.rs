@@ -8,6 +8,7 @@
 #[derive(Debug, PartialEq, Copy, Clone, Default)]
 pub struct Degrees(pub f64);
 
+#[allow(dead_code)]
 impl Degrees {
     pub const fn new_unchecked(value: f64) -> Self {
         // TODO:
