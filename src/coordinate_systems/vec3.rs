@@ -1,3 +1,7 @@
+// A5
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) A5 contributors
+
 /// 3D floating-point vector.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {

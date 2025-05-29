@@ -1,3 +1,7 @@
+// A5
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) A5 contributors
+
 use super::{base::Radians, vec2::Vec2, vec3::Vec3};
 
 // 2D coordinate systems
