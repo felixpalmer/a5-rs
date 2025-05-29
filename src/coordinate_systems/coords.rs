@@ -6,8 +6,6 @@ use super::{base::Radians, vec2::Vec2, vec3::Vec3};
 /// a dodecahedron face
 pub struct Face(pub Vec2);
 
-
-
 /// 2D planar coordinate system defined by the eigenvectors of
 /// the lattice tiling
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -22,4 +20,3 @@ pub struct KJ(pub Vec2);
 /// 3D cartesian system centered on unit sphere/dodecahedron
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct Cartesian(pub Vec3);
-
