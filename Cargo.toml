@@ -1,7 +1,7 @@
 [package]
-name = "a5-rs"
+name = "a5"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Rust implementation of A5"
 license = "Apache-2.0"
 repository = "https://github.com/felixpalmer/a5-rs"
@@ -9,9 +9,5 @@ repository = "https://github.com/felixpalmer/a5-rs"
 [lib]
 path = "src/lib.rs"
 
-[dependencies]
-num-bigint = "0.4"  # For handling big integers
-num-traits = "0.2"  # For Num trait
-
 [dev-dependencies]
-criterion = "0.5"  # For benchmarking 
+approx = "0.5.1"
