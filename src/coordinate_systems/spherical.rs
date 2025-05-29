@@ -21,7 +21,7 @@ impl Spherical {
     /// Unproject spherical coordinates to polar
     /// coordinates using gnomonic projection.
     pub fn unproject_gnomonic(self) -> Polar {
-        let thetha = self.theta;
+        let theta = self.theta;
         let phi = self.phi;
         Polar::new(phi.get().tan(), thetha)
     }
