@@ -1,4 +1,4 @@
-//! Coordinate systems used by H3 internally.
+//! Coordinate systems used by A5 internally.
 
 mod base;
 pub use base::Radians;
