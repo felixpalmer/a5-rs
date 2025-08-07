@@ -6,13 +6,13 @@ use num_bigint::BigInt;
 use num_traits::Num;
 
 /// Converts a hexadecimal string to a BigInt
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `hex` - A string containing a hexadecimal number
-/// 
+///
 /// # Returns
-/// 
+///
 /// A BigInt representing the hexadecimal value
 pub fn hex_to_big_int(hex: &str) -> BigInt {
     // Remove any "0x" prefix if present
@@ -21,14 +21,14 @@ pub fn hex_to_big_int(hex: &str) -> BigInt {
 }
 
 /// Converts a BigInt to a hexadecimal string
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `value` - A BigInt to convert
-/// 
+///
 /// # Returns
-/// 
+///
 /// A string containing the hexadecimal representation
 pub fn big_int_to_hex(value: &BigInt) -> String {
     format!("{:x}", value)
-} 
+}
