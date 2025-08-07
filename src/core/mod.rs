@@ -2,4 +2,4 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-pub mod hex; 
+pub mod hex;

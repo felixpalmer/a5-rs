@@ -1,4 +1,4 @@
-use a5_rs::core::hex::{hex_to_big_int, big_int_to_hex};
+use a5_rs::core::hex::{big_int_to_hex, hex_to_big_int};
 
 #[test]
 fn test_hex_conversion() {
@@ -22,4 +22,4 @@ fn test_hex_conversion_with_large_number() {
     let big_int = hex_to_big_int(hex);
     let result = big_int_to_hex(&big_int);
     assert_eq!(result, hex);
-} 
+}
