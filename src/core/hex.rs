@@ -30,5 +30,5 @@ pub fn hex_to_big_int(hex: &str) -> BigInt {
 ///
 /// A string containing the hexadecimal representation
 pub fn big_int_to_hex(value: &BigInt) -> String {
-    format!("{:x}", value)
+    format!("{value:x}")
 }
