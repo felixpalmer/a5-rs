@@ -14,4 +14,5 @@ num-bigint = "0.4"  # For handling big integers
 num-traits = "0.2"  # For Num trait
 
 [dev-dependencies]
-criterion = "0.5"  # For benchmarking 
+approx = "0.5.1"
+criterion = "0.5"  # For benchmarking
