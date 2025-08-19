@@ -23,6 +23,6 @@ impl Spherical {
     pub fn unproject_gnomonic(self) -> Polar {
         let theta = self.theta;
         let phi = self.phi;
-        Polar::new(phi.get().tan(), thetha)
+        Polar::new(phi.get().tan(), theta)
     }
 }
