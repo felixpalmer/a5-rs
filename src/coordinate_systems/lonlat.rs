@@ -30,7 +30,10 @@ impl LonLat {
 
     /// Create new longitude/latitude coordinates without validation
     pub const fn new_unchecked(longitude: Degrees, latitude: Degrees) -> Self {
-        Self { longitude, latitude }
+        Self {
+            longitude,
+            latitude,
+        }
     }
 
     /// Get longitude in degrees

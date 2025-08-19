@@ -68,10 +68,10 @@ fn test_lonlat_creation() {
     let lonlat = LonLat::new(120.5, 35.7);
     assert_eq!(lonlat.longitude(), 120.5);
     assert_eq!(lonlat.latitude(), 35.7);
-    
+
     let from_tuple: LonLat = (120.5, 35.7).into();
     assert_eq!(from_tuple, lonlat);
-    
+
     let to_tuple: (f64, f64) = lonlat.into();
     assert_eq!(to_tuple, (120.5, 35.7));
 }
@@ -81,7 +81,7 @@ fn test_degrees_radians_conversion() {
     let degrees = Degrees::new(180.0);
     let radians = degrees.to_radians();
     assert_relative_eq!(radians.get(), PI, epsilon = 1e-10);
-    
+
     let back_to_degrees = radians.to_degrees();
     assert_relative_eq!(back_to_degrees.get(), 180.0, epsilon = 1e-10);
 }

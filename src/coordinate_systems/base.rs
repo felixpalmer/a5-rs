@@ -80,7 +80,11 @@ impl Radians {
     pub fn new(value: f64) -> Self {
         use std::f64::consts::TAU; // 2π
         let normalized = value % TAU;
-        Radians(if normalized < 0.0 { normalized + TAU } else { normalized })
+        Radians(if normalized < 0.0 {
+            normalized + TAU
+        } else {
+            normalized
+        })
     }
 
     /// Get the raw value in radians
