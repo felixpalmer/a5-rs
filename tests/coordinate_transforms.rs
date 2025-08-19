@@ -53,8 +53,14 @@ fn test_angle_conversions() {
 #[test]
 fn test_polar_face_conversions() {
     let test_cases = [
-        (Face::new(0.0, 0.0), Polar::new(0.0, Radians::new_unchecked(0.0))),
-        (Face::new(1.0, 0.0), Polar::new(1.0, Radians::new_unchecked(0.0))),
+        (
+            Face::new(0.0, 0.0),
+            Polar::new(0.0, Radians::new_unchecked(0.0)),
+        ),
+        (
+            Face::new(1.0, 0.0),
+            Polar::new(1.0, Radians::new_unchecked(0.0)),
+        ),
         (
             Face::new(0.0, 1.0),
             Polar::new(1.0, Radians::new_unchecked(std::f64::consts::PI / 2.0)),
@@ -274,7 +280,7 @@ fn test_coordinate_type_conversions() {
     // Test FaceTriangle conversions
     let triangle_arr = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
     let triangle = FaceTriangle::from(triangle_arr);
-    
+
     assert_eq!(triangle.a.x(), 0.0);
     assert_eq!(triangle.a.y(), 0.0);
     assert_eq!(triangle.b.x(), 1.0);

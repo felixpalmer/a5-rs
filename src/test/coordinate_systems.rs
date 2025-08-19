@@ -1,5 +1,6 @@
 use crate::coordinate_systems::{
-    Barycentric, Cartesian, Degrees, Face, FaceTriangle, IJ, KJ, LonLat, Polar, Radians, Spherical, SphericalTriangle
+    Barycentric, Cartesian, Degrees, Face, FaceTriangle, LonLat, Polar, Radians, Spherical,
+    SphericalTriangle, IJ, KJ,
 };
 use approx::assert_relative_eq;
 use std::f64::consts::PI;

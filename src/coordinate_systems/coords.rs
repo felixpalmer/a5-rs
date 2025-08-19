@@ -170,11 +170,7 @@ impl From<[Face; 3]> for FaceTriangle {
 
 impl From<[[f64; 2]; 3]> for FaceTriangle {
     fn from(arr: [[f64; 2]; 3]) -> Self {
-        FaceTriangle::new(
-            Face::from(arr[0]),
-            Face::from(arr[1]),
-            Face::from(arr[2])
-        )
+        FaceTriangle::new(Face::from(arr[0]), Face::from(arr[1]), Face::from(arr[2]))
     }
 }
 
