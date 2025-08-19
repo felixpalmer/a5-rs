@@ -3,3 +3,4 @@
 // Copyright (c) A5 contributors
 
 pub mod hex;
+pub mod coordinate_transforms;

@@ -1,4 +1,6 @@
-use crate::coordinate_systems::{Degrees, LonLat, Polar, Radians, Spherical};
+use crate::coordinate_systems::{
+    Barycentric, Cartesian, Degrees, Face, FaceTriangle, IJ, KJ, LonLat, Polar, Radians, Spherical, SphericalTriangle
+};
 use approx::assert_relative_eq;
 use std::f64::consts::PI;
 
@@ -84,4 +86,87 @@ fn test_degrees_radians_conversion() {
 
     let back_to_degrees = radians.to_degrees();
     assert_relative_eq!(back_to_degrees.get(), 180.0, epsilon = 1e-10);
+}
+
+#[test]
+fn test_face_coordinate_operations() {
+    let face = Face::new(3.5, 4.2);
+    assert_eq!(face.x(), 3.5);
+    assert_eq!(face.y(), 4.2);
+
+    // Test array conversions
+    let arr: [f64; 2] = face.into();
+    assert_eq!(arr, [3.5, 4.2]);
+
+    let face_from_arr = Face::from([3.5, 4.2]);
+    assert_eq!(face.x(), face_from_arr.x());
+    assert_eq!(face.y(), face_from_arr.y());
+}
+
+#[test]
+fn test_cartesian_coordinate_operations() {
+    let cart = Cartesian::new(1.1, 2.2, 3.3);
+    assert_eq!(cart.x(), 1.1);
+    assert_eq!(cart.y(), 2.2);
+    assert_eq!(cart.z(), 3.3);
+
+    // Test array conversions
+    let arr: [f64; 3] = cart.into();
+    assert_eq!(arr, [1.1, 2.2, 3.3]);
+
+    let cart_from_arr = Cartesian::from([1.1, 2.2, 3.3]);
+    assert_eq!(cart.x(), cart_from_arr.x());
+    assert_eq!(cart.y(), cart_from_arr.y());
+    assert_eq!(cart.z(), cart_from_arr.z());
+}
+
+#[test]
+fn test_ij_kj_coordinates() {
+    let ij = IJ::new(5.0, 6.0);
+    assert_eq!(ij.x(), 5.0);
+    assert_eq!(ij.y(), 6.0);
+
+    let kj = KJ::new(7.0, 8.0);
+    assert_eq!(kj.x(), 7.0);
+    assert_eq!(kj.y(), 8.0);
+}
+
+#[test]
+fn test_barycentric_coordinates() {
+    let bary = Barycentric::new(0.3, 0.4, 0.3);
+    assert_eq!(bary.u, 0.3);
+    assert_eq!(bary.v, 0.4);
+    assert_eq!(bary.w, 0.3);
+
+    assert!(bary.is_valid());
+    assert!(bary.is_inside_triangle());
+
+    // Test invalid coordinates (sum != 1)
+    let invalid = Barycentric::new(0.3, 0.4, 0.4);
+    assert!(!invalid.is_valid());
+
+    // Test outside triangle (negative coordinate)
+    let outside = Barycentric::new(-0.1, 0.6, 0.5);
+    assert!(!outside.is_inside_triangle());
+}
+
+#[test]
+fn test_triangle_types() {
+    let face_triangle = FaceTriangle::new(
+        Face::new(0.0, 0.0),
+        Face::new(1.0, 0.0),
+        Face::new(0.0, 1.0),
+    );
+    assert_eq!(face_triangle.a.x(), 0.0);
+    assert_eq!(face_triangle.b.x(), 1.0);
+    assert_eq!(face_triangle.c.y(), 1.0);
+
+    let spherical_triangle = SphericalTriangle::new(
+        Cartesian::new(1.0, 0.0, 0.0),
+        Cartesian::new(0.0, 1.0, 0.0),
+        Cartesian::new(0.0, 0.0, 1.0),
+    );
+    assert_eq!(spherical_triangle.a.x(), 1.0);
+    assert_eq!(spherical_triangle.b.y(), 1.0);
+    assert_eq!(spherical_triangle.c.z(), 1.0);
 }
