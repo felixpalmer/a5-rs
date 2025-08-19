@@ -10,6 +10,7 @@ dependencies = [
  "criterion",
  "num-bigint",
  "num-traits",
+ "serde_json",
 ]
 
 [[package]]
