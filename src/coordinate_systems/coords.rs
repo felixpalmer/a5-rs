@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use super::{base::Radians, vec2::Vec2, vec3::Vec3};
+use super::{vec2::Vec2, vec3::Vec3};
 
 // 2D coordinate systems
 
 /// 2D cartesian coordinate system with origin at the center of
 /// a dodecahedron face
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct Face(pub Vec2);
 
 /// 2D planar coordinate system defined by the eigenvectors of

@@ -1,4 +1,4 @@
-use crate::coordinate_systems::{Polar, Radians, Spherical};
+use crate::coordinate_systems::{Degrees, LonLat, Polar, Radians, Spherical};
 use approx::assert_relative_eq;
 use std::f64::consts::PI;
 
@@ -46,4 +46,42 @@ fn test_unproject_gnomonic() {
         assert_relative_eq!(result.rho, input_coords.rho, epsilon = 1e-4);
         assert_relative_eq!(result.gamma.get(), input_coords.gamma.get(), epsilon = 1e-4);
     }
+}
+
+#[test]
+fn test_degrees_normalization() {
+    assert_eq!(Degrees::new(370.0).get(), 10.0);
+    assert_eq!(Degrees::new(-190.0).get(), 170.0);
+    assert_eq!(Degrees::new(180.0).get(), 180.0);
+    assert_eq!(Degrees::new(-180.0).get(), 180.0);
+}
+
+#[test]
+fn test_degrees_latitude_clamping() {
+    assert_eq!(Degrees::new_latitude(100.0).get(), 90.0);
+    assert_eq!(Degrees::new_latitude(-100.0).get(), -90.0);
+    assert_eq!(Degrees::new_latitude(45.0).get(), 45.0);
+}
+
+#[test]
+fn test_lonlat_creation() {
+    let lonlat = LonLat::new(120.5, 35.7);
+    assert_eq!(lonlat.longitude(), 120.5);
+    assert_eq!(lonlat.latitude(), 35.7);
+    
+    let from_tuple: LonLat = (120.5, 35.7).into();
+    assert_eq!(from_tuple, lonlat);
+    
+    let to_tuple: (f64, f64) = lonlat.into();
+    assert_eq!(to_tuple, (120.5, 35.7));
+}
+
+#[test]
+fn test_degrees_radians_conversion() {
+    let degrees = Degrees::new(180.0);
+    let radians = degrees.to_radians();
+    assert_relative_eq!(radians.get(), PI, epsilon = 1e-10);
+    
+    let back_to_degrees = radians.to_degrees();
+    assert_relative_eq!(back_to_degrees.get(), 180.0, epsilon = 1e-10);
 }

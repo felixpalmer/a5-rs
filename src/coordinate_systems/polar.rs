@@ -23,6 +23,16 @@ impl Polar {
         Self { rho, gamma }
     }
 
+    /// Get rho (radial distance from face center)
+    pub const fn rho(&self) -> f64 {
+        self.rho
+    }
+
+    /// Get gamma (azimuthal angle) in radians
+    pub const fn gamma(&self) -> Radians {
+        self.gamma
+    }
+
     /// Project polar coordinates to spherical coordinates
     /// using gnomonic projection.
     pub fn project_gnomonic(&self) -> Spherical {
