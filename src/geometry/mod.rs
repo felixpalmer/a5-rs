@@ -4,3 +4,6 @@
 
 pub mod pentagon;
 pub use pentagon::*;
+
+pub mod spherical_polygon;
+pub use spherical_polygon::*;
