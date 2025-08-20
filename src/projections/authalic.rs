@@ -6,6 +6,7 @@ use crate::coordinate_systems::Radians;
 
 // Authalic conversion coefficients obtained from: https://arxiv.org/pdf/2212.05818
 // See: authalic_constants.py for the derivation of the coefficients
+#[allow(clippy::excessive_precision)]
 const GEODETIC_TO_AUTHALIC: [f64; 6] = [
     -2.2392098386786394e-03,
     2.1308606513250217e-06,
@@ -15,6 +16,7 @@ const GEODETIC_TO_AUTHALIC: [f64; 6] = [
     6.6749287038481596e-18,
 ];
 
+#[allow(clippy::excessive_precision)]
 const AUTHALIC_TO_GEODETIC: [f64; 6] = [
     2.2392089963541657e-03,
     2.8831978048607556e-06,
