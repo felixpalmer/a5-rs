@@ -9,6 +9,7 @@ use crate::utils::vector::{slerp, triple_product};
 /// Using [x, y, z] gives equal precision in all directions, unlike spherical coordinates
 pub type SphericalPolygon = Vec<Cartesian>;
 
+#[derive(Debug)]
 pub struct SphericalPolygonShape {
     vertices: SphericalPolygon,
     area: Option<Radians>,
