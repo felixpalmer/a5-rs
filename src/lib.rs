@@ -5,6 +5,7 @@
 pub mod coordinate_systems;
 pub mod core;
 pub mod projections;
+pub mod utils;
 
 #[cfg(test)]
 mod test;
