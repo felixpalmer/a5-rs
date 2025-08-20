@@ -12,6 +12,7 @@ path = "src/lib.rs"
 [dependencies]
 num-bigint = "0.4"  # For handling big integers
 num-traits = "0.2"  # For Num trait
+lazy_static = "1.4"  # For static pattern arrays
 
 [dev-dependencies]
 approx = "0.5.1"

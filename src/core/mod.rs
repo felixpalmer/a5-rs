@@ -5,3 +5,4 @@
 pub mod constants;
 pub mod coordinate_transforms;
 pub mod hex;
+pub mod hilbert;
