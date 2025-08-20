@@ -4,6 +4,7 @@
 
 pub mod coordinate_systems;
 pub mod core;
+pub mod geometry;
 pub mod projections;
 pub mod utils;
 
