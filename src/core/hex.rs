@@ -32,3 +32,16 @@ pub fn hex_to_big_int(hex: &str) -> BigInt {
 pub fn big_int_to_hex(value: &BigInt) -> String {
     format!("{value:x}")
 }
+
+/// Converts a u64 to a hexadecimal string
+///
+/// # Arguments
+///
+/// * `value` - A u64 to convert
+///
+/// # Returns
+///
+/// A string containing the hexadecimal representation
+pub fn u64_to_hex(value: u64) -> String {
+    format!("{value:x}")
+}
