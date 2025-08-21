@@ -4,8 +4,7 @@
 
 use a5_rs::coordinate_systems::Face;
 use a5_rs::core::pentagon::{
-    a, b, c, d, e, pentagon, u, v, w, v_angle, triangle, basis, basis_inverse, A, B, C, D, E,
-    Mat2,
+    a, b, basis, basis_inverse, c, d, e, pentagon, triangle, u, v, v_angle, w, Mat2, A, B, C, D, E,
 };
 
 const TOLERANCE: f64 = 1e-10;
@@ -146,10 +145,26 @@ fn test_basis_matrices() {
     assert!(close_to(basis_mat.m11, expected_basis[3], TOLERANCE));
 
     // Test inverse basis matrix values
-    assert!(close_to(basis_inverse_mat.m00, expected_inverse[0], TOLERANCE));
-    assert!(close_to(basis_inverse_mat.m10, expected_inverse[1], TOLERANCE));
-    assert!(close_to(basis_inverse_mat.m01, expected_inverse[2], TOLERANCE));
-    assert!(close_to(basis_inverse_mat.m11, expected_inverse[3], TOLERANCE));
+    assert!(close_to(
+        basis_inverse_mat.m00,
+        expected_inverse[0],
+        TOLERANCE
+    ));
+    assert!(close_to(
+        basis_inverse_mat.m10,
+        expected_inverse[1],
+        TOLERANCE
+    ));
+    assert!(close_to(
+        basis_inverse_mat.m01,
+        expected_inverse[2],
+        TOLERANCE
+    ));
+    assert!(close_to(
+        basis_inverse_mat.m11,
+        expected_inverse[3],
+        TOLERANCE
+    ));
 }
 
 #[test]
@@ -165,26 +180,10 @@ fn test_basis_matrix_multiplication_identity() {
     let r11 = basis_mat.m10 * basis_inverse_mat.m01 + basis_mat.m11 * basis_inverse_mat.m11;
 
     // Should be identity matrix [[1, 0], [0, 1]]
-    assert!(
-        close_to(r00, 1.0, TOLERANCE),
-        "Expected 1.0, got {}",
-        r00
-    );
-    assert!(
-        close_to(r01, 0.0, TOLERANCE),
-        "Expected 0.0, got {}",
-        r01
-    );
-    assert!(
-        close_to(r10, 0.0, TOLERANCE),
-        "Expected 0.0, got {}",
-        r10
-    );
-    assert!(
-        close_to(r11, 1.0, TOLERANCE),
-        "Expected 1.0, got {}",
-        r11
-    );
+    assert!(close_to(r00, 1.0, TOLERANCE), "Expected 1.0, got {}", r00);
+    assert!(close_to(r01, 0.0, TOLERANCE), "Expected 0.0, got {}", r01);
+    assert!(close_to(r10, 0.0, TOLERANCE), "Expected 0.0, got {}", r10);
+    assert!(close_to(r11, 1.0, TOLERANCE), "Expected 1.0, got {}", r11);
 }
 
 #[test]

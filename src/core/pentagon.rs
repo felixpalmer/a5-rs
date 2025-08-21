@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use crate::coordinate_systems::{Degrees, Face, Radians};
-use crate::core::constants::{DISTANCE_TO_EDGE, PI_OVER_5, PI_OVER_10};
+use crate::core::constants::{DISTANCE_TO_EDGE, PI_OVER_10, PI_OVER_5};
 use crate::geometry::PentagonShape;
 
 // Pentagon vertex angles
@@ -25,7 +25,7 @@ pub struct PentagonVertices {
 /// Triangle vertices (u, v, w) and angle V
 pub struct TriangleVertices {
     pub u: Face,
-    pub v: Face, 
+    pub v: Face,
     pub w: Face,
     pub v_angle: Radians,
 }
@@ -47,7 +47,7 @@ impl Mat2 {
     pub fn from_cols(col0: Face, col1: Face) -> Self {
         Self {
             m00: col0.x(),
-            m01: col1.x(), 
+            m01: col1.x(),
             m10: col0.y(),
             m11: col1.y(),
         }
@@ -62,7 +62,7 @@ impl Mat2 {
         if det.abs() < f64::EPSILON {
             return None;
         }
-        
+
         let inv_det = 1.0 / det;
         Some(Mat2 {
             m00: self.m11 * inv_det,
@@ -115,7 +115,7 @@ impl PentagonConstants {
             // Scale
             let scaled_x = vertex.x() * scale;
             let scaled_y = vertex.y() * scale;
-            
+
             // Rotate
             let cos_angle = basis_rotation.cos();
             let sin_angle = basis_rotation.sin();
@@ -147,11 +147,11 @@ impl PentagonConstants {
         Self {
             vertices: PentagonVertices { a, b, c, d, e },
             pentagon,
-            triangle_vertices: TriangleVertices { 
-                u, 
-                v, 
-                w, 
-                v_angle: Radians::new_unchecked(v_angle_value) 
+            triangle_vertices: TriangleVertices {
+                u,
+                v,
+                w,
+                v_angle: Radians::new_unchecked(v_angle_value),
             },
             triangle,
             basis,
@@ -161,7 +161,8 @@ impl PentagonConstants {
 }
 
 /// Global pentagon constants
-static PENTAGON_CONSTANTS: std::sync::LazyLock<PentagonConstants> = std::sync::LazyLock::new(PentagonConstants::compute);
+static PENTAGON_CONSTANTS: std::sync::LazyLock<PentagonConstants> =
+    std::sync::LazyLock::new(PentagonConstants::compute);
 
 /// Pentagon vertex a
 pub fn a() -> Face {
