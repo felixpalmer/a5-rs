@@ -10,4 +10,5 @@ pub mod hilbert;
 pub mod origin;
 pub mod pentagon;
 pub mod serialization;
+pub mod tiling;
 pub mod utils;
