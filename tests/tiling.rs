@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::{IJ, Polar, Radians};
+use a5_rs::coordinate_systems::{Polar, Radians, IJ};
 use a5_rs::core::hilbert::{Anchor, Flip};
 use a5_rs::core::tiling::{
     get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices,
@@ -125,7 +125,7 @@ fn test_get_pentagon_vertices() {
             "Test case {}: vertex count mismatch",
             index
         );
-        
+
         for (vertex, expected) in vertices.iter().zip(output.vertices.iter()) {
             assert_close(vertex.x(), expected[0], 1e-15);
             assert_close(vertex.y(), expected[1], 1e-15);
@@ -155,7 +155,7 @@ fn test_get_quintant_vertices() {
 
         // Check vertices match
         assert_eq!(vertices.len(), output.vertices.len());
-        
+
         for (vertex, expected) in vertices.iter().zip(output.vertices.iter()) {
             assert_close(vertex.x(), expected[0], 1e-15);
             assert_close(vertex.y(), expected[1], 1e-15);
@@ -164,7 +164,7 @@ fn test_get_quintant_vertices() {
         // Check area matches
         assert_close(area, output.area, 1e-15);
 
-        // Check center matches  
+        // Check center matches
         assert_close(center.x(), output.center[0], 1e-15);
         assert_close(center.y(), output.center[1], 1e-15);
     }
@@ -182,7 +182,7 @@ fn test_get_face_vertices() {
 
     // Check vertices match
     assert_eq!(vertices.len(), expected.vertices.len());
-    
+
     for (vertex, expected_vertex) in vertices.iter().zip(expected.vertices.iter()) {
         assert_close(vertex.x(), expected_vertex[0], 1e-15);
         assert_close(vertex.y(), expected_vertex[1], 1e-15);
@@ -206,8 +206,7 @@ fn test_get_quintant_polar() {
 
         let polar = Polar::new(input.polar[0], Radians::new(input.polar[1]));
         let result = get_quintant_polar(polar);
-        
-        
+
         assert_eq!(result, output.quintant);
     }
 }
