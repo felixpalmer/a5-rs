@@ -18,3 +18,4 @@ lazy_static = "1.4"  # For static pattern arrays
 approx = "0.5.1"
 criterion = "0.5"  # For benchmarking
 serde_json = "1.0"  # For reading test fixtures
+serde = { version = "1.0", features = ["derive"] }
