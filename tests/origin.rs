@@ -116,17 +116,26 @@ fn test_find_nearest_origin_for_boundary_points() {
     let boundary_points = [
         // Between north pole and equatorial faces
         (
-            Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(PI_OVER_5.get() / 2.0)),
+            Spherical::new(
+                Radians::new_unchecked(0.0),
+                Radians::new_unchecked(PI_OVER_5.get() / 2.0),
+            ),
             vec![0, 1],
         ),
         // Between equatorial faces
         (
-            Spherical::new(Radians::new_unchecked(2.0 * PI_OVER_5.get()), Radians::new_unchecked(PI_OVER_5.get())),
+            Spherical::new(
+                Radians::new_unchecked(2.0 * PI_OVER_5.get()),
+                Radians::new_unchecked(PI_OVER_5.get()),
+            ),
             vec![3, 4],
         ),
         // Between equatorial and south pole
         (
-            Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI - PI_OVER_5.get() / 2.0)),
+            Spherical::new(
+                Radians::new_unchecked(0.0),
+                Radians::new_unchecked(std::f64::consts::PI - PI_OVER_5.get() / 2.0),
+            ),
             vec![9, 10],
         ),
     ];
@@ -190,10 +199,22 @@ fn test_haversine_symmetry() {
 fn test_haversine_increases_with_angular_separation() {
     let origin = Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(0.0));
     let distances = [
-        Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI / 6.0)), // 30°
-        Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI / 4.0)), // 45°
-        Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI / 3.0)), // 60°
-        Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI / 2.0)), // 90°
+        Spherical::new(
+            Radians::new_unchecked(0.0),
+            Radians::new_unchecked(std::f64::consts::PI / 6.0),
+        ), // 30°
+        Spherical::new(
+            Radians::new_unchecked(0.0),
+            Radians::new_unchecked(std::f64::consts::PI / 4.0),
+        ), // 45°
+        Spherical::new(
+            Radians::new_unchecked(0.0),
+            Radians::new_unchecked(std::f64::consts::PI / 3.0),
+        ), // 60°
+        Spherical::new(
+            Radians::new_unchecked(0.0),
+            Radians::new_unchecked(std::f64::consts::PI / 2.0),
+        ), // 90°
     ];
 
     let mut last_distance = 0.0;
@@ -208,8 +229,14 @@ fn test_haversine_increases_with_angular_separation() {
 fn test_haversine_longitude_separation() {
     let lat = std::f64::consts::PI / 4.0; // Fixed latitude
     let p1 = Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(lat));
-    let p2 = Spherical::new(Radians::new_unchecked(std::f64::consts::PI), Radians::new_unchecked(lat));
-    let p3 = Spherical::new(Radians::new_unchecked(std::f64::consts::PI / 2.0), Radians::new_unchecked(lat));
+    let p2 = Spherical::new(
+        Radians::new_unchecked(std::f64::consts::PI),
+        Radians::new_unchecked(lat),
+    );
+    let p3 = Spherical::new(
+        Radians::new_unchecked(std::f64::consts::PI / 2.0),
+        Radians::new_unchecked(lat),
+    );
 
     let d1 = haversine(p1, p2); // 180° separation
     let d2 = haversine(p1, p3); // 90° separation
@@ -223,12 +250,21 @@ fn test_haversine_known_values() {
     let cases = [
         (
             Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(0.0)),
-            Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI / 2.0)),
+            Spherical::new(
+                Radians::new_unchecked(0.0),
+                Radians::new_unchecked(std::f64::consts::PI / 2.0),
+            ),
             0.5, // sin²(π/4) = 0.5
         ),
         (
-            Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI / 4.0)),
-            Spherical::new(Radians::new_unchecked(std::f64::consts::PI / 2.0), Radians::new_unchecked(std::f64::consts::PI / 4.0)),
+            Spherical::new(
+                Radians::new_unchecked(0.0),
+                Radians::new_unchecked(std::f64::consts::PI / 4.0),
+            ),
+            Spherical::new(
+                Radians::new_unchecked(std::f64::consts::PI / 2.0),
+                Radians::new_unchecked(std::f64::consts::PI / 4.0),
+            ),
             0.25, // For points at same latitude
         ),
     ];
@@ -268,17 +304,26 @@ fn test_is_nearest_origin_for_boundary_points() {
     let boundary_points = [
         // Between north pole and equatorial faces
         (
-            Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(PI_OVER_5.get() / 2.0)),
+            Spherical::new(
+                Radians::new_unchecked(0.0),
+                Radians::new_unchecked(PI_OVER_5.get() / 2.0),
+            ),
             &origins[0],
         ),
         // Between equatorial faces
         (
-            Spherical::new(Radians::new_unchecked(2.0 * PI_OVER_5.get()), Radians::new_unchecked(PI_OVER_5.get())),
+            Spherical::new(
+                Radians::new_unchecked(2.0 * PI_OVER_5.get()),
+                Radians::new_unchecked(PI_OVER_5.get()),
+            ),
             &origins[3],
         ),
         // Between equatorial and south pole
         (
-            Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI - PI_OVER_5.get() / 2.0)),
+            Spherical::new(
+                Radians::new_unchecked(0.0),
+                Radians::new_unchecked(std::f64::consts::PI - PI_OVER_5.get() / 2.0),
+            ),
             &origins[9],
         ),
     ];

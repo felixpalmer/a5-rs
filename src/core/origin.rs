@@ -82,7 +82,7 @@ fn generate_origins() -> Vec<Origin> {
         let inverse_quat = quat_conjugate(quaternion);
         let orientation = QUINTANT_ORIENTATIONS_ARRAYS[origin_id as usize].to_vec();
         let first_quintant = QUINTANT_FIRST[origin_id as usize];
-        
+
         let origin = Origin {
             id: origin_id,
             axis,
@@ -97,18 +97,40 @@ fn generate_origins() -> Vec<Origin> {
     };
 
     // North pole
-    add_origin(Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(0.0)), Radians::new_unchecked(0.0), QUATERNIONS[0]);
+    add_origin(
+        Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(0.0)),
+        Radians::new_unchecked(0.0),
+        QUATERNIONS[0],
+    );
 
     // Middle band
     for i in 0..5 {
         let alpha = (i as f64) * TWO_PI_OVER_5.get();
         let alpha2 = alpha + PI_OVER_5.get();
-        add_origin(Spherical::new(Radians::new_unchecked(alpha), INTERHEDRAL_ANGLE), Radians::new_unchecked(PI_OVER_5.get()), QUATERNIONS[i + 1]);
-        add_origin(Spherical::new(Radians::new_unchecked(alpha2), Radians::new_unchecked(std::f64::consts::PI - INTERHEDRAL_ANGLE.get())), Radians::new_unchecked(PI_OVER_5.get()), QUATERNIONS[(i + 3) % 5 + 6]);
+        add_origin(
+            Spherical::new(Radians::new_unchecked(alpha), INTERHEDRAL_ANGLE),
+            Radians::new_unchecked(PI_OVER_5.get()),
+            QUATERNIONS[i + 1],
+        );
+        add_origin(
+            Spherical::new(
+                Radians::new_unchecked(alpha2),
+                Radians::new_unchecked(std::f64::consts::PI - INTERHEDRAL_ANGLE.get()),
+            ),
+            Radians::new_unchecked(PI_OVER_5.get()),
+            QUATERNIONS[(i + 3) % 5 + 6],
+        );
     }
 
     // South pole
-    add_origin(Spherical::new(Radians::new_unchecked(0.0), Radians::new_unchecked(std::f64::consts::PI)), Radians::new_unchecked(0.0), QUATERNIONS[11]);
+    add_origin(
+        Spherical::new(
+            Radians::new_unchecked(0.0),
+            Radians::new_unchecked(std::f64::consts::PI),
+        ),
+        Radians::new_unchecked(0.0),
+        QUATERNIONS[11],
+    );
 
     // Reorder origins to match the order of the hilbert curve
     let mut reordered = Vec::with_capacity(12);
@@ -150,7 +172,7 @@ pub fn segment_to_quintant(segment: usize, origin: &Origin) -> (usize, Orientati
 
     let face_relative_quintant = (segment + 5 - origin.first_quintant) % 5;
     let orientation = layout[face_relative_quintant];
-    
+
     // Handle the arithmetic more carefully to avoid overflow
     let step_offset = (step * face_relative_quintant as i32) % 5;
     let quintant = if step_offset >= 0 {
@@ -173,7 +195,7 @@ pub fn find_nearest_origin(point: Spherical) -> &'static Origin {
     let origins = get_origins();
     let mut min_distance = f64::INFINITY;
     let mut nearest = &origins[0];
-    
+
     for origin in origins {
         let distance = haversine(point, origin.axis);
         if distance < min_distance {
