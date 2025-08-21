@@ -8,4 +8,6 @@ pub mod dodecahedron_quaternions;
 pub mod hex;
 pub mod hilbert;
 pub mod origin;
+pub mod pentagon;
+pub mod serialization;
 pub mod utils;
