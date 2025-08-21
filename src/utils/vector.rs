@@ -124,8 +124,13 @@ fn cross(a: Cartesian, b: Cartesian) -> Cartesian {
 }
 
 /// Compute length of a vector
-fn length(v: Cartesian) -> f64 {
+pub fn length(v: Cartesian) -> f64 {
     (v.x() * v.x() + v.y() * v.y() + v.z() * v.z()).sqrt()
+}
+
+/// Helper alias for the public length function
+pub fn vec3_length(v: &Cartesian) -> f64 {
+    length(*v)
 }
 
 /// Normalize a vector
@@ -149,6 +154,11 @@ fn lerp(a: Cartesian, b: Cartesian, t: f64) -> Cartesian {
 /// Subtract two vectors
 fn subtract(a: Cartesian, b: Cartesian) -> Cartesian {
     Cartesian::new(a.x() - b.x(), a.y() - b.y(), a.z() - b.z())
+}
+
+/// Distance between two 3D vectors
+pub fn vec3_distance(a: &Cartesian, b: &Cartesian) -> f64 {
+    length(subtract(*a, *b))
 }
 
 /// Add two vectors

@@ -41,5 +41,5 @@ pub struct A5Cell {
     /// Position along Hilbert curve within triangular segment
     pub s: BigInt,
     /// Resolution of the cell
-    pub resolution: usize,
+    pub resolution: i32,
 }
