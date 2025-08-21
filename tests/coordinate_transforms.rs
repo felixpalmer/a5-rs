@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use a5_rs::coordinate_systems::{
-    Barycentric, Cartesian, Degrees, Face, FaceTriangle, LonLat, Polar, Radians, Spherical, IJ,
+    Barycentric, Cartesian, Degrees, Face, FaceTriangle, LonLat, Polar, Radians, Spherical,
 };
 use a5_rs::core::coordinate_transforms::{
     barycentric_to_face, deg_to_rad, face_to_barycentric, face_to_ij, from_lon_lat, ij_to_face,
