@@ -99,8 +99,7 @@ mod tests {
 
     #[test]
     fn test_first_ring_structure() {
-        for i in 1..=5 {
-            let q = QUATERNIONS[i];
+        for q in QUATERNIONS.iter().take(6).skip(1) {
             // Third component should be 0 for first ring
             assert!((q[2] - 0.0).abs() < 1e-15);
             // Fourth component should be cosAlpha for first ring
@@ -110,8 +109,7 @@ mod tests {
 
     #[test]
     fn test_second_ring_structure() {
-        for i in 6..=10 {
-            let q = QUATERNIONS[i];
+        for q in QUATERNIONS.iter().take(11).skip(6) {
             // Third component should be 0 for second ring
             assert!((q[2] - 0.0).abs() < 1e-15);
             // Fourth component should be sinAlpha for second ring

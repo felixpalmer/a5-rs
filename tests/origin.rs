@@ -56,10 +56,10 @@ fn test_origins_match_fixture() {
 
         // Check quaternion
         let expected_quat = expected["quat"].as_array().unwrap();
-        for i in 0..4 {
+        for (i, expected_component) in expected_quat.iter().enumerate().take(4) {
             assert_abs_diff_eq!(
                 origin.quat[i],
-                expected_quat[i].as_f64().unwrap(),
+                expected_component.as_f64().unwrap(),
                 epsilon = TOLERANCE
             );
         }

@@ -100,8 +100,7 @@ fn test_first_ring_quaternions() {
     let cos_alpha = (1.0 + (0.2_f64).sqrt()) / 2.0;
     let cos_alpha = cos_alpha.sqrt();
 
-    for i in 1..=5 {
-        let q = QUATERNIONS[i];
+    for q in QUATERNIONS.iter().take(6).skip(1) {
         // Third component should be 0 for first ring
         assert_abs_diff_eq!(q[2], 0.0, epsilon = 1e-15);
         // Fourth component should be cosAlpha for first ring
@@ -114,8 +113,7 @@ fn test_second_ring_quaternions() {
     let sin_alpha = (1.0 - (0.2_f64).sqrt()) / 2.0;
     let sin_alpha = sin_alpha.sqrt();
 
-    for i in 6..=10 {
-        let q = QUATERNIONS[i];
+    for q in QUATERNIONS.iter().take(11).skip(6) {
         // Third component should be 0 for second ring
         assert_abs_diff_eq!(q[2], 0.0, epsilon = 1e-15);
         // Fourth component should be sinAlpha for second ring
