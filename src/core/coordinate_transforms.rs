@@ -3,8 +3,10 @@
 // Copyright (c) A5 contributors
 
 use crate::coordinate_systems::{
-    Barycentric, Cartesian, Degrees, Face, FaceTriangle, LonLat, Polar, Radians, Spherical,
+    Barycentric, Cartesian, Degrees, Face, FaceTriangle, LonLat, Polar, Radians, Spherical, IJ,
 };
+use crate::core::pentagon::{basis, basis_inverse};
+use crate::projections::authalic::AuthalicProjection;
 
 /// Convert degrees to radians
 pub fn deg_to_rad(deg: Degrees) -> Radians {
@@ -95,26 +97,49 @@ pub fn to_cartesian(spherical: Spherical) -> Cartesian {
 /// of the first two origins (dodecahedron face centers)
 const LONGITUDE_OFFSET: f64 = 93.0;
 
+/// Contour type alias for a sequence of longitude/latitude points
+pub type Contour = Vec<LonLat>;
+
+/// Convert face coordinates to IJ coordinates using BASIS_INVERSE matrix
+pub fn face_to_ij(face: Face) -> IJ {
+    let basis_inverse_mat = basis_inverse();
+    let x = face.x();
+    let y = face.y();
+
+    let u = basis_inverse_mat.m00 * x + basis_inverse_mat.m01 * y;
+    let v = basis_inverse_mat.m10 * x + basis_inverse_mat.m11 * y;
+
+    IJ::new(u, v)
+}
+
+/// Convert IJ coordinates to face coordinates using BASIS matrix
+pub fn ij_to_face(ij: IJ) -> Face {
+    let basis_mat = basis();
+    let u = ij.x();
+    let v = ij.y();
+
+    let x = basis_mat.m00 * u + basis_mat.m01 * v;
+    let y = basis_mat.m10 * u + basis_mat.m11 * v;
+
+    Face::new(x, y)
+}
+
 /// Convert longitude/latitude to spherical coordinates
-/// Note: This is a simplified version that doesn't include authalic projection
-/// The full implementation would require the authalic projection module
 pub fn from_lon_lat(lonlat: LonLat) -> Spherical {
     let longitude = lonlat.longitude();
     let latitude = lonlat.latitude();
 
     let theta = deg_to_rad(Degrees::new_unchecked(longitude + LONGITUDE_OFFSET));
 
-    // Simplified conversion without authalic projection
-    // In the full implementation, this would use authalic.forward(geodetic_lat)
     let geodetic_lat = deg_to_rad(Degrees::new_unchecked(latitude));
-    let phi = Radians::new_unchecked(std::f64::consts::FRAC_PI_2 - geodetic_lat.get());
+    let authalic = AuthalicProjection;
+    let authalic_lat = authalic.forward(geodetic_lat);
+    let phi = Radians::new_unchecked(std::f64::consts::FRAC_PI_2 - authalic_lat.get());
 
     Spherical::new(theta, phi)
 }
 
 /// Convert spherical coordinates to longitude/latitude
-/// Note: This is a simplified version that doesn't include authalic projection
-/// The full implementation would require the authalic projection module
 pub fn to_lon_lat(spherical: Spherical) -> LonLat {
     let theta = spherical.theta();
     let phi = spherical.phi();
@@ -122,10 +147,74 @@ pub fn to_lon_lat(spherical: Spherical) -> LonLat {
     let longitude = rad_to_deg(theta);
     let longitude = Degrees::new_unchecked(longitude.get() - LONGITUDE_OFFSET);
 
-    // Simplified conversion without authalic projection
-    // In the full implementation, this would use authalic.inverse(authalic_lat)
-    let authalic_lat = std::f64::consts::FRAC_PI_2 - phi.get();
-    let latitude = rad_to_deg(Radians::new_unchecked(authalic_lat));
+    let authalic_lat = Radians::new_unchecked(std::f64::consts::FRAC_PI_2 - phi.get());
+    let authalic = AuthalicProjection;
+    let geodetic_lat = authalic.inverse(authalic_lat);
+    let latitude = rad_to_deg(geodetic_lat);
 
     LonLat::new(longitude.get(), latitude.get())
+}
+
+/// Normalizes longitude values in a contour to handle antimeridian crossing
+pub fn normalize_longitudes(contour: Contour) -> Contour {
+    if contour.is_empty() {
+        return contour;
+    }
+
+    // Calculate center in Cartesian space to avoid poles & antimeridian crossing issues
+    let points: Vec<Cartesian> = contour
+        .iter()
+        .map(|&lonlat| to_cartesian(from_lon_lat(lonlat)))
+        .collect();
+
+    let mut center = Cartesian::new(0.0, 0.0, 0.0);
+    for point in &points {
+        center = Cartesian::new(
+            center.x() + point.x(),
+            center.y() + point.y(),
+            center.z() + point.z(),
+        );
+    }
+
+    // Normalize center
+    let length = (center.x().powi(2) + center.y().powi(2) + center.z().powi(2)).sqrt();
+    if length > 0.0 {
+        center = Cartesian::new(
+            center.x() / length,
+            center.y() / length,
+            center.z() / length,
+        );
+    }
+
+    let center_spherical = to_spherical(center);
+    let center_lonlat = to_lon_lat(center_spherical);
+    let mut center_lon = center_lonlat.longitude();
+    let center_lat = center_lonlat.latitude();
+
+    // Near poles, use first point's longitude
+    if !(-89.99..=89.99).contains(&center_lat) {
+        center_lon = contour[0].longitude();
+    }
+
+    // Normalize center longitude to be in the range -180 to 180
+    center_lon = ((center_lon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0;
+
+    // Normalize each point relative to center
+    contour
+        .into_iter()
+        .map(|lonlat| {
+            let mut longitude = lonlat.longitude();
+            let latitude = lonlat.latitude();
+
+            // Adjust longitude to be closer to center
+            while longitude - center_lon > 180.0 {
+                longitude -= 360.0;
+            }
+            while longitude - center_lon < -180.0 {
+                longitude += 360.0;
+            }
+
+            LonLat::new(longitude, latitude)
+        })
+        .collect()
 }

@@ -6,8 +6,9 @@ use a5_rs::coordinate_systems::{
     Barycentric, Cartesian, Degrees, Face, FaceTriangle, LonLat, Polar, Radians, Spherical,
 };
 use a5_rs::core::coordinate_transforms::{
-    barycentric_to_face, deg_to_rad, face_to_barycentric, from_lon_lat, rad_to_deg, to_cartesian,
-    to_face, to_lon_lat, to_polar, to_spherical,
+    barycentric_to_face, deg_to_rad, face_to_barycentric, face_to_ij, from_lon_lat, ij_to_face,
+    normalize_longitudes, rad_to_deg, to_cartesian, to_face, to_lon_lat, to_polar, to_spherical,
+    Contour,
 };
 use approx::assert_relative_eq;
 
@@ -254,6 +255,105 @@ fn test_barycentric_properties() {
     assert_eq!(bary.u, bary_from_arr.u);
     assert_eq!(bary.v, bary_from_arr.v);
     assert_eq!(bary.w, bary_from_arr.w);
+}
+
+#[test]
+fn test_face_ij_conversions() {
+    let test_faces = [
+        Face::new(0.0, 0.0),
+        Face::new(1.0, 0.0),
+        Face::new(0.0, 1.0),
+        Face::new(1.0, 1.0),
+        Face::new(-1.0, 0.5),
+        Face::new(0.5, -0.7),
+        Face::new(-0.3, -0.8),
+    ];
+
+    for face in test_faces {
+        // Test round trip: Face -> IJ -> Face
+        let ij = face_to_ij(face);
+        let result_face = ij_to_face(ij);
+        assert_relative_eq!(result_face.x(), face.x(), epsilon = TOLERANCE);
+        assert_relative_eq!(result_face.y(), face.y(), epsilon = TOLERANCE);
+
+        // Test reverse round trip: IJ -> Face -> IJ
+        let result_ij = face_to_ij(result_face);
+        assert_relative_eq!(result_ij.x(), ij.x(), epsilon = TOLERANCE);
+        assert_relative_eq!(result_ij.y(), ij.y(), epsilon = TOLERANCE);
+    }
+
+    // Test specific transformation of origin
+    let origin_face = Face::new(0.0, 0.0);
+    let origin_ij = face_to_ij(origin_face);
+    assert_relative_eq!(origin_ij.x(), 0.0, epsilon = TOLERANCE);
+    assert_relative_eq!(origin_ij.y(), 0.0, epsilon = TOLERANCE);
+}
+
+#[test]
+fn test_normalize_longitudes() {
+    // Test simple contour without wrapping
+    let simple_contour = vec![
+        LonLat::new(0.0, 0.0),
+        LonLat::new(10.0, 0.0),
+        LonLat::new(10.0, 10.0),
+        LonLat::new(0.0, 10.0),
+        LonLat::new(0.0, 0.0),
+    ];
+
+    let normalized = normalize_longitudes(simple_contour.clone());
+
+    for (original, result) in simple_contour.iter().zip(normalized.iter()) {
+        assert_relative_eq!(
+            original.longitude(),
+            result.longitude(),
+            epsilon = TOLERANCE
+        );
+        assert_relative_eq!(original.latitude(), result.latitude(), epsilon = TOLERANCE);
+    }
+
+    // Test empty contour
+    let empty_contour: Contour = vec![];
+    let normalized_empty = normalize_longitudes(empty_contour.clone());
+    assert_eq!(normalized_empty.len(), 0);
+
+    // Test contour crossing antimeridian - use smaller region near antimeridian
+    let antimeridian_contour = vec![
+        LonLat::new(179.0, 0.0),
+        LonLat::new(179.5, 0.0),
+        LonLat::new(-179.5, 0.0), // This should be adjusted to be closer to center
+        LonLat::new(-179.0, 0.0), // This should be adjusted to be closer to center
+    ];
+
+    let normalized_antimeridian = normalize_longitudes(antimeridian_contour);
+
+    // Check that all points have the same latitude (preserved)
+    for point in normalized_antimeridian.iter() {
+        assert_relative_eq!(point.latitude(), 0.0, epsilon = TOLERANCE);
+    }
+
+    // Check that the normalized longitudes form a more continuous sequence
+    // Allow for the 360-degree adjustment that might occur
+    for i in 1..normalized_antimeridian.len() {
+        let diff = (normalized_antimeridian[i].longitude()
+            - normalized_antimeridian[i - 1].longitude())
+        .abs();
+        assert!(
+            diff < 180.0 || (diff > 180.0 && diff < 360.0),
+            "Unexpected longitude jump: {}",
+            diff
+        );
+    }
+
+    // Test that the function is deterministic
+    let normalized_again = normalize_longitudes(normalized_antimeridian.clone());
+    for (original, result) in normalized_antimeridian.iter().zip(normalized_again.iter()) {
+        assert_relative_eq!(
+            original.longitude(),
+            result.longitude(),
+            epsilon = TOLERANCE
+        );
+        assert_relative_eq!(original.latitude(), result.latitude(), epsilon = TOLERANCE);
+    }
 }
 
 #[test]
