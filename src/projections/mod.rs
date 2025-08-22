@@ -4,10 +4,12 @@
 
 pub mod authalic;
 pub mod crs;
+pub mod dodecahedron;
 pub mod gnomonic;
 pub mod polyhedral;
 
 pub use authalic::AuthalicProjection;
 pub use crs::CRS;
+pub use dodecahedron::DodecahedronProjection;
 pub use gnomonic::GnomonicProjection;
 pub use polyhedral::PolyhedralProjection;
