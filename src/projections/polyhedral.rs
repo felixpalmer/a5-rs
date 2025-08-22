@@ -5,23 +5,23 @@
 // IVEA (Icosahedral Vertex Equal Area) projection implementation
 // Adaptation of icoVertexGreatCircle.ec from DGGAL project
 // BSD 3-Clause License
-// 
+//
 // Copyright (c) 2014-2025, Ecere Corporation
-// 
+//
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
-// 
+//
 // 1. Redistributions of source code must retain the above copyright notice, this
 //    list of conditions and the following disclaimer.
-// 
+//
 // 2. Redistributions in binary form must reproduce the above copyright notice,
 //    this list of conditions and the following disclaimer in the documentation
 //    and/or other materials provided with the distribution.
-// 
+//
 // 3. Neither the name of the copyright holder nor the names of its
 //    contributors may be used to endorse or promote products derived from
 //    this software without specific prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 // AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -81,14 +81,16 @@ impl PolyhedralProjection {
         let scaled_area = h / area_abc;
         let b_coords = Barycentric::new(
             1.0 - h,
-            scaled_area * SphericalTriangleShape::new(vec![a, p, c])
-                .expect("Failed to create spherical triangle")
-                .get_area()
-                .get(),
-            scaled_area * SphericalTriangleShape::new(vec![a, b, p])
-                .expect("Failed to create spherical triangle")
-                .get_area()
-                .get(),
+            scaled_area
+                * SphericalTriangleShape::new(vec![a, p, c])
+                    .expect("Failed to create spherical triangle")
+                    .get_area()
+                    .get(),
+            scaled_area
+                * SphericalTriangleShape::new(vec![a, b, p])
+                    .expect("Failed to create spherical triangle")
+                    .get_area()
+                    .get(),
         );
         barycentric_to_face(b_coords, face_triangle)
     }
