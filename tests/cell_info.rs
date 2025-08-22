@@ -1,4 +1,4 @@
-use a5_rs::core::cell_info::{get_num_cells, get_num_cells_bigint, cell_area};
+use a5_rs::core::cell_info::{cell_area, get_num_cells, get_num_cells_bigint};
 use num_bigint::BigInt;
 use serde::Deserialize;
 
@@ -33,16 +33,16 @@ fn load_cell_info_fixtures() -> CellInfoFixtures {
 #[test]
 fn test_get_num_cells() {
     let fixtures = load_cell_info_fixtures();
-    
+
     for fixture in fixtures.num_cells {
         // Test u64 version
         assert_eq!(
-            get_num_cells(fixture.resolution), 
+            get_num_cells(fixture.resolution),
             fixture.count,
             "get_num_cells failed for resolution {}",
             fixture.resolution
         );
-        
+
         // Test BigInt version
         let resolution_bigint = BigInt::from(fixture.resolution);
         assert_eq!(
@@ -57,7 +57,7 @@ fn test_get_num_cells() {
 #[test]
 fn test_cell_area() {
     let fixtures = load_cell_info_fixtures();
-    
+
     for fixture in fixtures.cell_area {
         assert_eq!(
             cell_area(fixture.resolution),

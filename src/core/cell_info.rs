@@ -8,13 +8,13 @@ const AUTHALIC_RADIUS: f64 = 6371007.2; // m
 const AUTHALIC_AREA: f64 = 510065624779439.1; // m^2 - matches JavaScript Math.PI precision
 
 /// Returns the number of cells at a given resolution.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `resolution` - The resolution level
-/// 
+///
 /// # Returns
-/// 
+///
 /// Number of cells at the given resolution
 pub fn get_num_cells(resolution: i32) -> u64 {
     if resolution < 0 {
@@ -23,7 +23,7 @@ pub fn get_num_cells(resolution: i32) -> u64 {
     if resolution == 0 {
         return 12;
     }
-    
+
     // Match JavaScript's precision behavior exactly
     // For resolution 28, JavaScript returns 1080863910568919000 due to precision loss
     if resolution == 28 {
@@ -35,52 +35,52 @@ pub fn get_num_cells(resolution: i32) -> u64 {
     if resolution == 30 {
         return 17293822569102705000;
     }
-    
+
     // For lower resolutions, exact calculation works fine
     60 * (4_u64.pow((resolution - 1) as u32))
 }
 
 /// Returns the number of cells at a given resolution (BigInt version for high resolutions).
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `resolution` - The resolution level as BigInt
-/// 
+///
 /// # Returns
-/// 
+///
 /// Number of cells at the given resolution as BigInt
 pub fn get_num_cells_bigint(resolution: &BigInt) -> BigInt {
     let zero = BigInt::from(0);
     let one = BigInt::from(1);
-    
+
     if resolution < &zero {
         return zero;
     }
     if resolution == &zero {
         return BigInt::from(12);
     }
-    
+
     let sixty = BigInt::from(60);
     let four = BigInt::from(4);
     let resolution_minus_one = resolution - &one;
-    
+
     sixty * four.pow(resolution_minus_one.try_into().unwrap_or(0))
 }
 
 /// Returns the area of a cell at a given resolution in square meters.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `resolution` - The resolution level
-/// 
+///
 /// # Returns
-/// 
+///
 /// Area of a cell in square meters
 pub fn cell_area(resolution: i32) -> f64 {
     if resolution < 0 {
         return AUTHALIC_AREA;
     }
-    
+
     // Match JavaScript's floating-point precision exactly by using exact values from JSON parsing
     // This avoids precision differences between JavaScript and Rust floating-point arithmetic
     match resolution {
