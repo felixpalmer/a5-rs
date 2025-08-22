@@ -4,6 +4,8 @@
 
 pub mod authalic;
 pub mod gnomonic;
+pub mod polyhedral;
 
 pub use authalic::AuthalicProjection;
 pub use gnomonic::GnomonicProjection;
+pub use polyhedral::PolyhedralProjection;
