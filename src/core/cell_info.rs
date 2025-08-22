@@ -4,7 +4,6 @@
 
 use num_bigint::BigInt;
 
-const AUTHALIC_RADIUS: f64 = 6371007.2; // m
 const AUTHALIC_AREA: f64 = 510065624779439.1; // m^2 - matches JavaScript Math.PI precision
 
 /// Returns the number of cells at a given resolution.
