@@ -24,15 +24,6 @@ impl Degrees {
         Degrees(value)
     }
 
-    /// Create new Degrees for longitude without normalization
-    pub fn new_longitude(value: f64) -> Self {
-        Self::new(value)
-    }
-
-    /// Create new Degrees for latitude with clamping to [-90, 90] range
-    pub fn new_latitude(value: f64) -> Self {
-        Degrees(value.clamp(-90.0, 90.0))
-    }
 
     /// Get the raw value in degrees
     pub const fn get(&self) -> f64 {

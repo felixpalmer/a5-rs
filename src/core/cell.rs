@@ -232,13 +232,13 @@ pub fn cell_to_boundary(
     // Split each edge into segments before projection
     // Important to do before projection to obtain equal area cells
     let split_pentagon = pentagon.split_edges(segments as usize);
-    let vertices = split_pentagon.get_vertices();
+    let vertices = split_pentagon.get_vertices_vec();
 
     // Unproject to obtain lon/lat coordinates
     let mut dodecahedron = DodecahedronProjection::new()?;
     let mut unprojected_vertices = Vec::new();
     for vertex in vertices {
-        let unprojected = dodecahedron.inverse(vertex, cell_data.origin.id)?;
+        let unprojected = dodecahedron.inverse(*vertex, cell_data.origin.id)?;
         unprojected_vertices.push(unprojected);
     }
 
