@@ -19,19 +19,12 @@ impl Degrees {
         Degrees(value)
     }
 
-    /// Create new Degrees with normalization to [-180, 180] range
-    /// Allows flexibility for antimeridian-spanning coordinates
+    /// Create new Degrees without any normalization
     pub fn new(value: f64) -> Self {
-        let mut normalized = value % 360.0;
-        if normalized > 180.0 {
-            normalized -= 360.0;
-        } else if normalized <= -180.0 {
-            normalized += 360.0;
-        }
-        Degrees(normalized)
+        Degrees(value)
     }
 
-    /// Create new Degrees for longitude with normalization to [-180, 180] range
+    /// Create new Degrees for longitude without normalization
     pub fn new_longitude(value: f64) -> Self {
         Self::new(value)
     }
