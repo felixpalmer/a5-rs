@@ -24,7 +24,6 @@ impl Degrees {
         Degrees(value)
     }
 
-
     /// Get the raw value in degrees
     pub const fn get(&self) -> f64 {
         self.0
