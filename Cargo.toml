@@ -17,5 +17,6 @@ lazy_static = "1.4"  # For static pattern arrays
 [dev-dependencies]
 approx = "0.5.1"
 criterion = "0.5"  # For benchmarking
-serde_json = "1.0"  # For reading test fixtures
+serde_json = "1.0"  # For reading test fixtures and examples
 serde = { version = "1.0", features = ["derive"] }
+tempfile = "3.0"  # For temporary files in tests
