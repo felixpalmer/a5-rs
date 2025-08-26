@@ -7,7 +7,7 @@
 //! This example replicates the functionality of the Python wireframe example
 //! found in `git/a5-py/examples/wireframe/index.py`
 //!
-//! Usage: cargo run --example wireframe <resolution> <output.json>
+//! Usage: cargo run --example wireframe \<resolution\> \<output.json\>
 
 use a5_rs::core::cell::{cell_to_boundary, CellToBoundaryOptions};
 use a5_rs::core::hex::u64_to_hex;
