@@ -127,23 +127,8 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
         let pentagon_shape = get_quintant_vertices(quintant);
         return Ok(pentagon_shape);
     } else if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
-        let tiling_shape = get_face_vertices();
-        return match tiling_shape {
-            crate::core::tiling::TilingShape::Pentagon(p) => Ok(p),
-            crate::core::tiling::TilingShape::Triangle(t) => {
-                let vertices = t.get_vertices();
-                let pentagon_vertices = [
-                    vertices[0],
-                    vertices[1],
-                    vertices[2],
-                    vertices[0],
-                    vertices[1], // Repeat first two to make 5 vertices
-                ];
-                Ok(crate::geometry::pentagon::PentagonShape::new(
-                    pentagon_vertices,
-                ))
-            }
-        };
+        let pentagon_shape = get_face_vertices();
+        return Ok(pentagon_shape);
     }
 
     let hilbert_resolution = cell.resolution - FIRST_HILBERT_RESOLUTION + 1;
@@ -153,23 +138,8 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
         .parse::<u64>()
         .map_err(|_| "Failed to convert BigInt to u64")?;
     let anchor = s_to_anchor(s_u64, hilbert_resolution as usize, orientation);
-    let tiling_shape = get_pentagon_vertices(hilbert_resolution, quintant, &anchor);
-    match tiling_shape {
-        crate::core::tiling::TilingShape::Pentagon(p) => Ok(p),
-        crate::core::tiling::TilingShape::Triangle(t) => {
-            let vertices = t.get_vertices();
-            let pentagon_vertices = [
-                vertices[0],
-                vertices[1],
-                vertices[2],
-                vertices[0],
-                vertices[1], // Repeat first two to make 5 vertices
-            ];
-            Ok(crate::geometry::pentagon::PentagonShape::new(
-                pentagon_vertices,
-            ))
-        }
-    }
+    let pentagon_shape = get_pentagon_vertices(hilbert_resolution, quintant, &anchor);
+    Ok(pentagon_shape)
 }
 
 /// Convert A5 cell ID to lon/lat coordinates of cell center
@@ -246,7 +216,7 @@ pub fn cell_to_boundary(
 
 /// Test if an A5 cell contains a given point
 pub fn a5cell_contains_point(cell: &A5Cell, point: LonLat) -> Result<f64, String> {
-    use crate::core::tiling::{get_face_vertices, get_quintant_vertices, TilingShape};
+    use crate::core::tiling::{get_face_vertices, get_quintant_vertices};
 
     let spherical = from_lon_lat(point);
     let mut dodecahedron = DodecahedronProjection::new()?;
@@ -259,12 +229,9 @@ pub fn a5cell_contains_point(cell: &A5Cell, point: LonLat) -> Result<f64, String
         let pentagon_shape = get_quintant_vertices(quintant);
         pentagon_shape.contains_point(projected_point)
     } else if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
-        // Use face vertices
-        let tiling_shape = get_face_vertices();
-        match tiling_shape {
-            TilingShape::Pentagon(pentagon) => pentagon.contains_point(projected_point),
-            TilingShape::Triangle(triangle) => triangle.contains_point(projected_point),
-        }
+        // Use face vertices (pentagon)
+        let pentagon_shape = get_face_vertices();
+        pentagon_shape.contains_point(projected_point)
     } else {
         // Use pentagon for higher resolutions
         let pentagon = get_pentagon(cell)?;
