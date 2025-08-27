@@ -10,9 +10,6 @@ use crate::geometry::PentagonShape;
 
 const TRIANGLE_MODE: bool = false;
 
-
-
-
 /// Shift right vector (clone of w)
 fn shift_right() -> Face {
     w()
@@ -68,7 +65,6 @@ fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
         *pentagon = PentagonShape::new_triangle(pentagon_vertices);
     }
 }
-
 
 /// Get pentagon vertices with transformations applied
 ///
@@ -143,7 +139,8 @@ pub fn get_quintant_vertices(quintant: usize) -> crate::geometry::pentagon::Pent
     let triangle_verts = triangle().get_vertices();
     let triangle_3_verts = [triangle_verts[0], triangle_verts[1], triangle_verts[2]];
 
-    let mut pentagon_shape = crate::geometry::pentagon::PentagonShape::new_triangle(triangle_3_verts);
+    let mut pentagon_shape =
+        crate::geometry::pentagon::PentagonShape::new_triangle(triangle_3_verts);
     let rotations = quintant_rotations();
     transform_pentagon(&mut pentagon_shape, &rotations[quintant]);
     pentagon_shape
