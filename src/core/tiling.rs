@@ -10,111 +10,6 @@ use crate::geometry::PentagonShape;
 
 const TRIANGLE_MODE: bool = false;
 
-/// A triangle shape that mimics PentagonShape behavior but with 3 vertices
-#[derive(Debug, Clone)]
-pub struct TriangleShape {
-    vertices: [Face; 3],
-}
-
-/// A shape that can be either a pentagon or triangle for tiling operations
-#[derive(Debug, Clone)]
-pub enum TilingShape {
-    Pentagon(PentagonShape),
-    Triangle(TriangleShape),
-}
-
-impl TilingShape {
-    pub fn get_vertices(&self) -> Vec<Face> {
-        match self {
-            TilingShape::Pentagon(p) => p.get_vertices().to_vec(),
-            TilingShape::Triangle(t) => t.get_vertices().to_vec(),
-        }
-    }
-
-    pub fn get_area(&self) -> f64 {
-        match self {
-            TilingShape::Pentagon(p) => p.get_area(),
-            TilingShape::Triangle(t) => t.get_area(),
-        }
-    }
-
-    pub fn get_center(&self) -> Face {
-        match self {
-            TilingShape::Pentagon(p) => p.get_center(),
-            TilingShape::Triangle(t) => t.get_center(),
-        }
-    }
-}
-
-impl TriangleShape {
-    pub fn new(vertices: [Face; 3]) -> Self {
-        let mut triangle = Self { vertices };
-        if !triangle.is_winding_correct() {
-            triangle.vertices.reverse();
-        }
-        triangle
-    }
-
-    pub fn get_vertices(&self) -> &[Face; 3] {
-        &self.vertices
-    }
-
-    pub fn get_area(&self) -> f64 {
-        let mut signed_area = 0.0;
-        for i in 0..3 {
-            let j = (i + 1) % 3;
-            signed_area += (self.vertices[j].x() - self.vertices[i].x())
-                * (self.vertices[j].y() + self.vertices[i].y());
-        }
-        signed_area
-    }
-
-    fn is_winding_correct(&self) -> bool {
-        self.get_area() >= 0.0
-    }
-
-    pub fn get_center(&self) -> Face {
-        let sum_x = (self.vertices[0].x() + self.vertices[1].x() + self.vertices[2].x()) / 3.0;
-        let sum_y = (self.vertices[0].y() + self.vertices[1].y() + self.vertices[2].y()) / 3.0;
-        Face::new(sum_x, sum_y)
-    }
-
-    /// Tests if a point is inside the triangle by checking if it's on the correct side of all edges.
-    /// Uses the same algorithm as Pentagon::contains_point but for triangles.
-    /// Returns 1.0 if point is inside, otherwise a negative value proportional to the distance from the point to the edge
-    pub fn contains_point(&self, point: Face) -> f64 {
-        if !self.is_winding_correct() {
-            panic!("Triangle is not counter-clockwise");
-        }
-
-        let mut d_max: f64 = 1.0;
-        for i in 0..3 {
-            let v1 = self.vertices[i];
-            let v2 = self.vertices[(i + 1) % 3];
-
-            // Calculate the cross product to determine which side of the line the point is on
-            // (v1 - v2) × (point - v1)
-            let dx = v1.x() - v2.x();
-            let dy = v1.y() - v2.y();
-            let px = point.x() - v1.x();
-            let py = point.y() - v1.y();
-
-            // Cross product: dx * py - dy * px
-            // If positive, point is on the wrong side
-            // If negative, point is on the correct side
-            let cross_product = dx * py - dy * px;
-            if cross_product < 0.0 {
-                // Only normalize by distance of point to edge as we can assume the edges of the
-                // triangle are all the same length
-                let p_length = (px * px + py * py).sqrt();
-                d_max = d_max.min(cross_product / p_length);
-            }
-        }
-
-        d_max
-    }
-}
-
 /// Shift right vector (clone of w)
 fn shift_right() -> Face {
     w()
@@ -152,7 +47,7 @@ fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
     }
 
     // Create new pentagon with transformed vertices - need 5 for Pentagon type
-    if transformed_vertices.len() >= 5 {
+    if transformed_vertices.len() == 5 {
         let pentagon_vertices: [Face; 5] = [
             transformed_vertices[0],
             transformed_vertices[1],
@@ -161,23 +56,14 @@ fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
             transformed_vertices[4],
         ];
         *pentagon = PentagonShape::new(pentagon_vertices);
+    } else if transformed_vertices.len() == 3 {
+        let pentagon_vertices: [Face; 3] = [
+            transformed_vertices[0],
+            transformed_vertices[1],
+            transformed_vertices[2],
+        ];
+        *pentagon = PentagonShape::new_triangle(pentagon_vertices);
     }
-}
-
-/// Transform a triangle shape using a 2x2 matrix
-fn transform_triangle(triangle: &mut TriangleShape, matrix: &Mat2) {
-    let vertices = triangle.get_vertices();
-    let mut transformed_vertices = [Face::new(0.0, 0.0); 3];
-
-    for i in 0..3 {
-        let vertex = &vertices[i];
-        let transformed_x = matrix.m00 * vertex.x() + matrix.m01 * vertex.y();
-        let transformed_y = matrix.m10 * vertex.x() + matrix.m11 * vertex.y();
-        transformed_vertices[i] = Face::new(transformed_x, transformed_y);
-    }
-
-    // Create new triangle with transformed vertices
-    *triangle = TriangleShape::new(transformed_vertices);
 }
 
 /// Get pentagon vertices with transformations applied
@@ -191,7 +77,7 @@ fn transform_triangle(triangle: &mut TriangleShape, matrix: &Mat2) {
 /// # Returns
 ///
 /// A pentagon shape with transformed vertices
-pub fn get_pentagon_vertices(resolution: i32, quintant: usize, anchor: &Anchor) -> TilingShape {
+pub fn get_pentagon_vertices(resolution: i32, quintant: usize, anchor: &Anchor) -> PentagonShape {
     let mut pentagon_shape = if TRIANGLE_MODE {
         triangle().clone()
     } else {
@@ -236,7 +122,7 @@ pub fn get_pentagon_vertices(resolution: i32, quintant: usize, anchor: &Anchor) 
     let rotations = quintant_rotations();
     transform_pentagon(&mut pentagon_shape, &rotations[quintant]);
 
-    TilingShape::Pentagon(pentagon_shape)
+    pentagon_shape
 }
 
 /// Get quintant vertices
@@ -247,16 +133,17 @@ pub fn get_pentagon_vertices(resolution: i32, quintant: usize, anchor: &Anchor) 
 ///
 /// # Returns
 ///
-/// Triangle vertices for the specified quintant wrapped as TilingShape
-pub fn get_quintant_vertices(quintant: usize) -> TilingShape {
+/// Triangle vertices for the specified quintant as PentagonShape
+pub fn get_quintant_vertices(quintant: usize) -> crate::geometry::pentagon::PentagonShape {
     // Create proper 3-vertex triangle from the triangle vertices
     let triangle_verts = triangle().get_vertices();
     let triangle_3_verts = [triangle_verts[0], triangle_verts[1], triangle_verts[2]];
 
-    let mut triangle_shape = TriangleShape::new(triangle_3_verts);
+    let mut pentagon_shape =
+        crate::geometry::pentagon::PentagonShape::new_triangle(triangle_3_verts);
     let rotations = quintant_rotations();
-    transform_triangle(&mut triangle_shape, &rotations[quintant]);
-    TilingShape::Triangle(triangle_shape)
+    transform_pentagon(&mut pentagon_shape, &rotations[quintant]);
+    pentagon_shape
 }
 
 /// Get face vertices with correct winding order
@@ -264,7 +151,7 @@ pub fn get_quintant_vertices(quintant: usize) -> TilingShape {
 /// # Returns
 ///
 /// Pentagon shape representing the face vertices
-pub fn get_face_vertices() -> TilingShape {
+pub fn get_face_vertices() -> PentagonShape {
     let mut vertices = Vec::new();
     let v_vertex = v();
     let rotations = quintant_rotations();
@@ -287,7 +174,7 @@ pub fn get_face_vertices() -> TilingShape {
         vertices[3],
         vertices[4],
     ];
-    TilingShape::Pentagon(PentagonShape::new(pentagon_vertices))
+    PentagonShape::new(pentagon_vertices)
 }
 
 /// Get quintant from polar coordinates
