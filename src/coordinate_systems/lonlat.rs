@@ -23,8 +23,8 @@ impl LonLat {
     /// Create new longitude/latitude coordinates with validation
     pub fn new(longitude: f64, latitude: f64) -> Self {
         Self {
-            longitude: Degrees::new_longitude(longitude),
-            latitude: Degrees::new_latitude(latitude),
+            longitude: Degrees::new(longitude),
+            latitude: Degrees::new(latitude),
         }
     }
 

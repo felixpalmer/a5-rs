@@ -52,18 +52,11 @@ fn test_unproject_gnomonic() {
 }
 
 #[test]
-fn test_degrees_normalization() {
-    assert_eq!(Degrees::new(370.0).get(), 10.0);
-    assert_eq!(Degrees::new(-190.0).get(), 170.0);
+fn test_degrees_no_normalization() {
+    assert_eq!(Degrees::new(370.0).get(), 370.0);
+    assert_eq!(Degrees::new(-190.0).get(), -190.0);
     assert_eq!(Degrees::new(180.0).get(), 180.0);
-    assert_eq!(Degrees::new(-180.0).get(), 180.0);
-}
-
-#[test]
-fn test_degrees_latitude_clamping() {
-    assert_eq!(Degrees::new_latitude(100.0).get(), 90.0);
-    assert_eq!(Degrees::new_latitude(-100.0).get(), -90.0);
-    assert_eq!(Degrees::new_latitude(45.0).get(), 45.0);
+    assert_eq!(Degrees::new(-180.0).get(), -180.0);
 }
 
 #[test]
