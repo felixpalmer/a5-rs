@@ -54,7 +54,7 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
             unique_estimates.push(estimate.clone());
 
             // Check if we have a hit, storing distance if not
-            let distance = a5cell_contains_point(&estimate, sample)?;
+            let distance = a5cell_contains_point(&estimate, lonlat)?;
             if distance > 0.0 {
                 return serialize(&estimate);
             } else {
@@ -263,9 +263,33 @@ pub fn cell_to_boundary(
 
 /// Test if an A5 cell contains a given point
 pub fn a5cell_contains_point(cell: &A5Cell, point: LonLat) -> Result<f64, String> {
-    let pentagon = get_pentagon(cell)?;
+    use crate::core::tiling::{get_quintant_vertices, get_face_vertices, TilingShape};
+    
     let spherical = from_lon_lat(point);
     let mut dodecahedron = DodecahedronProjection::new()?;
     let projected_point = dodecahedron.forward(spherical, cell.origin.id)?;
-    Ok(pentagon.contains_point(projected_point))
+    
+    let (quintant, _orientation) = segment_to_quintant(cell.segment, &cell.origin);
+    
+    let containment_result = if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
+        // Use quintant vertices (triangle)
+        let tiling_shape = get_quintant_vertices(quintant);
+        match tiling_shape {
+            TilingShape::Pentagon(pentagon) => pentagon.contains_point(projected_point),
+            TilingShape::Triangle(triangle) => triangle.contains_point(projected_point),
+        }
+    } else if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
+        // Use face vertices  
+        let tiling_shape = get_face_vertices();
+        match tiling_shape {
+            TilingShape::Pentagon(pentagon) => pentagon.contains_point(projected_point),
+            TilingShape::Triangle(triangle) => triangle.contains_point(projected_point),
+        }
+    } else {
+        // Use pentagon for higher resolutions
+        let pentagon = get_pentagon(cell)?;
+        pentagon.contains_point(projected_point)
+    };
+    
+    Ok(containment_result)
 }
