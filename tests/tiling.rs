@@ -149,7 +149,7 @@ fn test_get_quintant_vertices() {
         let output = &test_case.output;
 
         let shape = get_quintant_vertices(input.quintant);
-        let vertices = shape.get_vertices();
+        let vertices = shape.get_vertices_vec();
         let area = shape.get_area();
         let center = shape.get_center();
 
