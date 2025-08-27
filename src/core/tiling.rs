@@ -78,6 +78,41 @@ impl TriangleShape {
         let sum_y = (self.vertices[0].y() + self.vertices[1].y() + self.vertices[2].y()) / 3.0;
         Face::new(sum_x, sum_y)
     }
+
+    /// Tests if a point is inside the triangle by checking if it's on the correct side of all edges.
+    /// Uses the same algorithm as Pentagon::contains_point but for triangles.
+    /// Returns 1.0 if point is inside, otherwise a negative value proportional to the distance from the point to the edge
+    pub fn contains_point(&self, point: Face) -> f64 {
+        if !self.is_winding_correct() {
+            panic!("Triangle is not counter-clockwise");
+        }
+
+        let mut d_max: f64 = 1.0;
+        for i in 0..3 {
+            let v1 = self.vertices[i];
+            let v2 = self.vertices[(i + 1) % 3];
+
+            // Calculate the cross product to determine which side of the line the point is on
+            // (v1 - v2) × (point - v1)
+            let dx = v1.x() - v2.x();
+            let dy = v1.y() - v2.y();
+            let px = point.x() - v1.x();
+            let py = point.y() - v1.y();
+
+            // Cross product: dx * py - dy * px
+            // If positive, point is on the wrong side
+            // If negative, point is on the correct side
+            let cross_product = dx * py - dy * px;
+            if cross_product < 0.0 {
+                // Only normalize by distance of point to edge as we can assume the edges of the
+                // triangle are all the same length
+                let p_length = (px * px + py * py).sqrt();
+                d_max = d_max.min(cross_product / p_length);
+            }
+        }
+
+        d_max
+    }
 }
 
 /// Shift right vector (clone of w)
