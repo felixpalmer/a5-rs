@@ -5,6 +5,7 @@
 use crate::coordinate_systems::Face;
 
 pub type Pentagon = [Face; 5];
+pub type Triangle = [Face; 3];
 
 #[derive(Debug, Clone)]
 pub struct PentagonShape {
@@ -13,6 +14,16 @@ pub struct PentagonShape {
 
 impl PentagonShape {
     pub fn new(vertices: Pentagon) -> Self {
+        let mut pentagon = Self {
+            vertices: vertices.to_vec(),
+        };
+        if !pentagon.is_winding_correct() {
+            pentagon.vertices.reverse();
+        }
+        pentagon
+    }
+
+    pub fn new_triangle(vertices: Triangle) -> Self {
         let mut pentagon = Self {
             vertices: vertices.to_vec(),
         };

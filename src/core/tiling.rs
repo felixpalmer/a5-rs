@@ -152,7 +152,7 @@ fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
     }
 
     // Create new pentagon with transformed vertices - need 5 for Pentagon type
-    if transformed_vertices.len() >= 5 {
+    if transformed_vertices.len() == 5 {
         let pentagon_vertices: [Face; 5] = [
             transformed_vertices[0],
             transformed_vertices[1],
@@ -161,6 +161,13 @@ fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
             transformed_vertices[4],
         ];
         *pentagon = PentagonShape::new(pentagon_vertices);
+    } else if transformed_vertices.len() == 3 {
+        let pentagon_vertices: [Face; 3] = [
+            transformed_vertices[0],
+            transformed_vertices[1],
+            transformed_vertices[2],
+        ];
+        *pentagon = PentagonShape::new_triangle(pentagon_vertices);
     }
 }
 
@@ -247,16 +254,16 @@ pub fn get_pentagon_vertices(resolution: i32, quintant: usize, anchor: &Anchor) 
 ///
 /// # Returns
 ///
-/// Triangle vertices for the specified quintant wrapped as TilingShape
-pub fn get_quintant_vertices(quintant: usize) -> TilingShape {
+/// Triangle vertices for the specified quintant as PentagonShape
+pub fn get_quintant_vertices(quintant: usize) -> crate::geometry::pentagon::PentagonShape {
     // Create proper 3-vertex triangle from the triangle vertices
     let triangle_verts = triangle().get_vertices();
     let triangle_3_verts = [triangle_verts[0], triangle_verts[1], triangle_verts[2]];
 
-    let mut triangle_shape = TriangleShape::new(triangle_3_verts);
+    let mut pentagon_shape = crate::geometry::pentagon::PentagonShape::new_triangle(triangle_3_verts);
     let rotations = quintant_rotations();
-    transform_triangle(&mut triangle_shape, &rotations[quintant]);
-    TilingShape::Triangle(triangle_shape)
+    transform_pentagon(&mut pentagon_shape, &rotations[quintant]);
+    pentagon_shape
 }
 
 /// Get face vertices with correct winding order

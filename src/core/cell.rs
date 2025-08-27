@@ -124,25 +124,8 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
     let (quintant, orientation) = segment_to_quintant(cell.segment, &cell.origin);
 
     if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
-        let tiling_shape = get_quintant_vertices(quintant);
-        return match tiling_shape {
-            crate::core::tiling::TilingShape::Pentagon(p) => Ok(p),
-            crate::core::tiling::TilingShape::Triangle(t) => {
-                // Convert triangle to pentagon shape by using the triangle vertices
-                // This is a fallback - the triangle represents a triangular region that approximates a pentagon
-                let vertices = t.get_vertices();
-                let pentagon_vertices = [
-                    vertices[0],
-                    vertices[1],
-                    vertices[2],
-                    vertices[0],
-                    vertices[1], // Repeat first two to make 5 vertices
-                ];
-                Ok(crate::geometry::pentagon::PentagonShape::new(
-                    pentagon_vertices,
-                ))
-            }
-        };
+        let pentagon_shape = get_quintant_vertices(quintant);
+        return Ok(pentagon_shape);
     } else if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
         let tiling_shape = get_face_vertices();
         return match tiling_shape {
@@ -272,12 +255,9 @@ pub fn a5cell_contains_point(cell: &A5Cell, point: LonLat) -> Result<f64, String
     let (quintant, _orientation) = segment_to_quintant(cell.segment, &cell.origin);
 
     let containment_result = if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
-        // Use quintant vertices (triangle)
-        let tiling_shape = get_quintant_vertices(quintant);
-        match tiling_shape {
-            TilingShape::Pentagon(pentagon) => pentagon.contains_point(projected_point),
-            TilingShape::Triangle(triangle) => triangle.contains_point(projected_point),
-        }
+        // Use quintant vertices (triangle as PentagonShape)
+        let pentagon_shape = get_quintant_vertices(quintant);
+        pentagon_shape.contains_point(projected_point)
     } else if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
         // Use face vertices
         let tiling_shape = get_face_vertices();
