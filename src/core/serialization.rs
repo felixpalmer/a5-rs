@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use crate::core::origin::get_origins;
-use crate::core::utils::A5Cell;
+use crate::core::utils::{A5Cell, OriginId};
 use num_bigint::BigInt;
 
 pub const FIRST_HILBERT_RESOLUTION: i32 = 2;
@@ -48,9 +48,8 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
     // Technically not a resolution, but can be useful to think of as an
     // abstract cell that contains the whole world
     if resolution == -1 {
-        let origins = get_origins();
         return Ok(A5Cell {
-            origin: origins[0].clone(),
+            origin_id: 0,
             segment: 0,
             s: BigInt::from(0),
             resolution,
@@ -61,27 +60,27 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
     let top6_bits = (index >> 58) as usize;
 
     // Find origin and segment that multiply to give this product
-    let (origin, segment) = if resolution == 0 {
+    let (origin_id, segment) = if resolution == 0 {
         let origin_id = top6_bits;
         let origins = get_origins();
         if origin_id >= origins.len() {
             return Err(format!("Could not parse origin: {}", top6_bits));
         }
-        (origins[origin_id].clone(), 0)
+        (origin_id as OriginId, 0)
     } else {
         let origin_id = top6_bits / 5;
         let origins = get_origins();
         if origin_id >= origins.len() {
             return Err(format!("Could not parse origin: {}", top6_bits));
         }
-        let origin = origins[origin_id].clone();
+        let origin = &origins[origin_id];
         let segment = (top6_bits + origin.first_quintant) % 5;
-        (origin, segment)
+        (origin_id as OriginId, segment)
     };
 
     if resolution < FIRST_HILBERT_RESOLUTION {
         return Ok(A5Cell {
-            origin,
+            origin_id,
             segment,
             s: BigInt::from(0),
             resolution,
@@ -95,7 +94,7 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
     let s = (index & REMOVAL_MASK) >> shift;
 
     Ok(A5Cell {
-        origin,
+        origin_id,
         segment,
         s: BigInt::from(s),
         resolution,
@@ -104,7 +103,7 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
 
 pub fn serialize(cell: &A5Cell) -> Result<u64, String> {
     let A5Cell {
-        origin,
+        origin_id,
         segment,
         s,
         resolution,
@@ -129,12 +128,13 @@ pub fn serialize(cell: &A5Cell) -> Result<u64, String> {
     };
 
     // First 6 bits are the origin id and the segment
+    let origin = &crate::core::origin::get_origins()[*origin_id as usize];
     let segment_n = (*segment + 5 - origin.first_quintant) % 5;
 
     let mut index = if *resolution == 0 {
-        (origin.id as u64) << 58
+        (*origin_id as u64) << 58
     } else {
-        ((5 * origin.id as usize + segment_n) as u64) << 58
+        ((5 * (*origin_id as usize) + segment_n) as u64) << 58
     };
 
     if *resolution >= FIRST_HILBERT_RESOLUTION {
@@ -167,7 +167,7 @@ pub fn serialize(cell: &A5Cell) -> Result<u64, String> {
 pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec<u64>, String> {
     let cell = deserialize(index)?;
     let A5Cell {
-        origin,
+        origin_id,
         segment,
         s,
         resolution: current_resolution,
@@ -193,11 +193,11 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
         return Ok(vec![index]);
     }
 
-    let mut new_origins = vec![origin.clone()];
+    let mut new_origin_ids = vec![origin_id];
     let mut new_segments = vec![segment];
 
     if current_resolution == -1 {
-        new_origins = get_origins().clone();
+        new_origin_ids = (0..12).collect();
     }
 
     if (current_resolution == -1 && new_resolution > 0) || current_resolution == 0 {
@@ -221,12 +221,12 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
         s.clone()
     };
 
-    for new_origin in &new_origins {
+    for &new_origin_id in &new_origin_ids {
         for &new_segment in &new_segments {
             for i in 0..children_count {
                 let new_s = &shifted_s + BigInt::from(i);
                 let new_cell = A5Cell {
-                    origin: new_origin.clone(),
+                    origin_id: new_origin_id,
                     segment: new_segment,
                     s: new_s,
                     resolution: new_resolution,
@@ -242,7 +242,7 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
 pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64, String> {
     let cell = deserialize(index)?;
     let A5Cell {
-        origin,
+        origin_id,
         segment,
         s,
         resolution: current_resolution,
@@ -270,7 +270,7 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
     let resolution_diff = current_resolution - new_resolution;
     let shifted_s = &s >> (2 * resolution_diff);
     let new_cell = A5Cell {
-        origin,
+        origin_id,
         segment,
         s: shifted_s,
         resolution: new_resolution,

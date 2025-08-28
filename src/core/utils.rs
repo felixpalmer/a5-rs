@@ -34,12 +34,19 @@ pub struct Origin {
 /// A5 Cell represents a position in the A5 hierarchical indexing system
 #[derive(Debug, Clone, PartialEq)]
 pub struct A5Cell {
-    /// Origin representing one of pentagon face of the dodecahedron
-    pub origin: Origin,
+    /// Origin ID representing one of pentagon face of the dodecahedron
+    pub origin_id: OriginId,
     /// Index (0-4) of triangular segment within pentagonal dodecahedron face
     pub segment: usize,
     /// Position along Hilbert curve within triangular segment
     pub s: BigInt,
     /// Resolution of the cell
     pub resolution: i32,
+}
+
+impl A5Cell {
+    /// Get the origin for this cell
+    pub fn origin(&self) -> &Origin {
+        &crate::core::origin::get_origins()[self.origin_id as usize]
+    }
 }

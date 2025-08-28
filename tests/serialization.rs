@@ -72,7 +72,7 @@ fn test_encodes_resolution_correctly_for_different_values() {
         .map(|(i, _)| {
             // Origin 0 has first quintant 4, so start use segment 4 to obtain start of Hilbert curve
             A5Cell {
-                origin: origin0.clone(),
+                origin_id: origin0.id,
                 segment: 4,
                 s: BigInt::from(0),
                 resolution: i as i32,
@@ -105,7 +105,7 @@ fn test_encodes_origin_segment_and_s_correctly() {
 
     // Origin 0 has first quintant 4, so start use segment 4 to obtain start of Hilbert curve
     let cell = A5Cell {
-        origin: origin0,
+        origin_id: origin0.id,
         segment: 4,
         s: BigInt::from(0),
         resolution: MAX_RESOLUTION - 1,
@@ -120,7 +120,7 @@ fn test_throws_error_when_s_is_too_large_for_resolution() {
     let origin0 = origins[0].clone();
 
     let cell = A5Cell {
-        origin: origin0,
+        origin_id: origin0.id,
         segment: 0,
         s: BigInt::from(16), // Too large for resolution 3 (max is 15)
         resolution: 3,
@@ -139,7 +139,7 @@ fn test_throws_error_when_resolution_exceeds_maximum() {
     let origin0 = origins[0].clone();
 
     let cell = A5Cell {
-        origin: origin0,
+        origin_id: origin0.id,
         segment: 0,
         s: BigInt::from(0),
         resolution: 31, // MAX_RESOLUTION is 30
@@ -240,7 +240,7 @@ fn test_non_hilbert_to_non_hilbert_hierarchy() {
 
     // Test resolution 0 to 1 (both non-Hilbert)
     let cell_data = A5Cell {
-        origin: origin0,
+        origin_id: origin0.id,
         segment: 0,
         s: BigInt::from(0),
         resolution: 0,
@@ -262,7 +262,7 @@ fn test_non_hilbert_to_hilbert_hierarchy() {
 
     // Test resolution 1 to 2 (non-Hilbert to Hilbert)
     let cell_data = A5Cell {
-        origin: origin0,
+        origin_id: origin0.id,
         segment: 0,
         s: BigInt::from(0),
         resolution: 1,
@@ -284,7 +284,7 @@ fn test_hilbert_to_non_hilbert_hierarchy() {
 
     // Test resolution 2 to 1 (Hilbert to non-Hilbert)
     let cell_data = A5Cell {
-        origin: origin0,
+        origin_id: origin0.id,
         segment: 0,
         s: BigInt::from(0),
         resolution: 2,
@@ -307,7 +307,7 @@ fn test_low_resolution_hierarchy_chain() {
         .iter()
         .map(|&res| {
             let cell_data = A5Cell {
-                origin: origin0.clone(),
+                origin_id: origin0.id,
                 segment: 0,
                 s: BigInt::from(0),
                 resolution: res,
@@ -336,7 +336,7 @@ fn test_base_cell_division_counts() {
 
     // Start with the base cell (resolution -1)
     let base_cell_data = A5Cell {
-        origin: origin0,
+        origin_id: origin0.id,
         segment: 0,
         s: BigInt::from(0),
         resolution: -1,
