@@ -48,9 +48,9 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
 
     for sample in samples {
         let estimate = lonlat_to_estimate(sample, resolution)?;
-        let estimate_key = serialize(&estimate)?.to_string();
+        let estimate_key = serialize(&estimate)?;
         if !estimate_set.contains(&estimate_key) {
-            estimate_set.insert(estimate_key.clone());
+            estimate_set.insert(estimate_key);
             unique_estimates.push(estimate.clone());
 
             // Check if we have a hit, storing distance if not
@@ -75,7 +75,7 @@ fn lonlat_to_estimate(lonlat: LonLat, resolution: i32) -> Result<A5Cell, String>
     let spherical = from_lon_lat(lonlat);
     let origin = find_nearest_origin(spherical);
 
-    let mut dodecahedron = DodecahedronProjection::new()?;
+    let mut dodecahedron = DodecahedronProjection::get_global()?;
     let mut dodec_point = dodecahedron.forward(spherical, origin.id)?;
     let polar = to_polar(dodec_point);
     let quintant = get_quintant_polar(polar);
@@ -86,7 +86,7 @@ fn lonlat_to_estimate(lonlat: LonLat, resolution: i32) -> Result<A5Cell, String>
         return Ok(A5Cell {
             s: BigInt::from(0),
             segment,
-            origin: (*origin).clone(),
+            origin_id: origin.id,
             resolution,
         });
     }
@@ -114,14 +114,14 @@ fn lonlat_to_estimate(lonlat: LonLat, resolution: i32) -> Result<A5Cell, String>
     Ok(A5Cell {
         s: BigInt::from(s),
         segment,
-        origin: (*origin).clone(),
+        origin_id: origin.id,
         resolution,
     })
 }
 
 /// Get the pentagon shape for a given A5 cell
 pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
-    let (quintant, orientation) = segment_to_quintant(cell.segment, &cell.origin);
+    let (quintant, orientation) = segment_to_quintant(cell.segment, cell.origin());
 
     if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
         let pentagon_shape = get_quintant_vertices(quintant);
@@ -146,8 +146,8 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
 pub fn cell_to_lonlat(cell: u64) -> Result<LonLat, String> {
     let cell_data = deserialize(cell)?;
     let pentagon = get_pentagon(&cell_data)?;
-    let mut dodecahedron = DodecahedronProjection::new()?;
-    let point = dodecahedron.inverse(pentagon.get_center(), cell_data.origin.id)?;
+    let mut dodecahedron = DodecahedronProjection::get_global()?;
+    let point = dodecahedron.inverse(pentagon.get_center(), cell_data.origin_id)?;
     Ok(to_lon_lat(point))
 }
 
@@ -188,10 +188,10 @@ pub fn cell_to_boundary(
     let vertices = split_pentagon.get_vertices_vec();
 
     // Unproject to obtain lon/lat coordinates
-    let mut dodecahedron = DodecahedronProjection::new()?;
+    let mut dodecahedron = DodecahedronProjection::get_global()?;
     let mut unprojected_vertices = Vec::new();
     for vertex in vertices {
-        let unprojected = dodecahedron.inverse(*vertex, cell_data.origin.id)?;
+        let unprojected = dodecahedron.inverse(*vertex, cell_data.origin_id)?;
         unprojected_vertices.push(unprojected);
     }
 
@@ -219,10 +219,10 @@ pub fn a5cell_contains_point(cell: &A5Cell, point: LonLat) -> Result<f64, String
     use crate::core::tiling::{get_face_vertices, get_quintant_vertices};
 
     let spherical = from_lon_lat(point);
-    let mut dodecahedron = DodecahedronProjection::new()?;
-    let projected_point = dodecahedron.forward(spherical, cell.origin.id)?;
+    let mut dodecahedron = DodecahedronProjection::get_global()?;
+    let projected_point = dodecahedron.forward(spherical, cell.origin_id)?;
 
-    let (quintant, _orientation) = segment_to_quintant(cell.segment, &cell.origin);
+    let (quintant, _orientation) = segment_to_quintant(cell.segment, cell.origin());
 
     let containment_result = if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
         // Use quintant vertices (triangle as PentagonShape)
