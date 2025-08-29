@@ -1,10 +1,24 @@
 [package]
 name = "a5-rs"
-version = "0.1.0"
+version = "0.4.0"
 edition = "2021"
-description = "Rust implementation of A5"
+authors = ["Felix Palmer <felixpalmer@gmail.com>"]
+description = "High-performance Rust implementation of the A5 hierarchical spatial indexing system"
 license = "Apache-2.0"
 repository = "https://github.com/felixpalmer/a5-rs"
+homepage = "https://github.com/felixpalmer/a5-rs"
+documentation = "https://docs.rs/a5-rs"
+keywords = ["geospatial", "indexing", "hierarchical", "spatial", "gis"]
+categories = ["algorithms", "data-structures", "science::geo"]
+exclude = [
+    "tests/*",
+    "*.md",
+    ".github/*",
+    ".claude/*",
+    "*.geojson",
+    "target/*",
+    "examples/*",
+]
 
 [lib]
 path = "src/lib.rs"
