@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::{IJ, KJ};
-use a5_rs::core::hilbert::{
+use a5::coordinate_systems::{IJ, KJ};
+use a5::core::hilbert::{
     get_required_digits, ij_to_kj, ij_to_s, kj_to_ij, quaternary_to_flips, quaternary_to_kj,
     s_to_anchor, Orientation, Quaternary, NO, YES,
 };

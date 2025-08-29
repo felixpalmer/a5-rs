@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::Face;
-use a5_rs::geometry::{Pentagon, PentagonShape};
+use a5::coordinate_systems::Face;
+use a5::geometry::{Pentagon, PentagonShape};
 use serde_json::Value;
 
 const TOLERANCE: f64 = 1e-6;

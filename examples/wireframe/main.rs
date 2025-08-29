@@ -9,9 +9,9 @@
 //!
 //! Usage: cargo run --example wireframe \<resolution\> \<output.json\>
 
-use a5_rs::core::cell::{cell_to_boundary, CellToBoundaryOptions};
-use a5_rs::core::hex::u64_to_hex;
-use a5_rs::core::serialization::{cell_to_children, WORLD_CELL};
+use a5::core::cell::{cell_to_boundary, CellToBoundaryOptions};
+use a5::core::hex::u64_to_hex;
+use a5::core::serialization::{cell_to_children, WORLD_CELL};
 use serde_json::json;
 use std::env;
 use std::fs;

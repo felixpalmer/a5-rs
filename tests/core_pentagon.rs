@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::Face;
-use a5_rs::core::pentagon::{
+use a5::coordinate_systems::Face;
+use a5::core::pentagon::{
     a, b, basis, basis_inverse, c, d, e, pentagon, triangle, u, v, v_angle, w, Mat2, A, B, C, D, E,
 };
 

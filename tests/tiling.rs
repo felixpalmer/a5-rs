@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::{Polar, Radians, IJ};
-use a5_rs::core::hilbert::{Anchor, Flip};
-use a5_rs::core::tiling::{
+use a5::coordinate_systems::{Polar, Radians, IJ};
+use a5::core::hilbert::{Anchor, Flip};
+use a5::core::tiling::{
     get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices,
 };
 use serde::Deserialize;

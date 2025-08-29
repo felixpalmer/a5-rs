@@ -1,4 +1,4 @@
-use a5_rs::core::cell_info::{cell_area, get_num_cells, get_num_cells_bigint};
+use a5::core::cell_info::{cell_area, get_num_cells, get_num_cells_bigint};
 use num_bigint::BigInt;
 use serde::Deserialize;
 

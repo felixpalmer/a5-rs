@@ -1,9 +1,9 @@
-use a5_rs::core::origin::get_origins;
-use a5_rs::core::serialization::{
+use a5::core::origin::get_origins;
+use a5::core::serialization::{
     cell_to_children, cell_to_parent, deserialize, get_res0_cells, get_resolution, serialize,
     FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, REMOVAL_MASK,
 };
-use a5_rs::core::utils::A5Cell;
+use a5::core::utils::A5Cell;
 use num_bigint::BigInt;
 use std::fs;
 

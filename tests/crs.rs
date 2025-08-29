@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::Cartesian;
-use a5_rs::projections::crs::CRS;
-use a5_rs::utils::vector::vec3_length;
+use a5::coordinate_systems::Cartesian;
+use a5::projections::crs::CRS;
+use a5::utils::vector::vec3_length;
 use approx::assert_relative_eq;
 use serde::{Deserialize, Serialize};
 
