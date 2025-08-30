@@ -33,5 +33,7 @@ cargo bench
 ## Publish (for maintainers)
 
 ```bash
+Update version on Cargo.toml
+cargo build
 cargo publish
 ``` 
