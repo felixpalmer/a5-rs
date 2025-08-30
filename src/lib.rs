@@ -17,7 +17,7 @@ pub mod utils;
 // PUBLIC API
 // Indexing
 pub use core::cell::{cell_to_boundary, cell_to_lonlat, lonlat_to_cell};
-pub use core::hex::{u64_to_hex, hex_to_u64};
+pub use core::hex::{hex_to_u64, u64_to_hex};
 
 // Hierarchy
 pub use core::cell_info::{cell_area, get_num_cells};

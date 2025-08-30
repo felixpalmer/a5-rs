@@ -1,4 +1,4 @@
-use a5::core::hex::{u64_to_hex, hex_to_u64};
+use a5::core::hex::{hex_to_u64, u64_to_hex};
 
 #[test]
 fn test_hex_conversion() {
