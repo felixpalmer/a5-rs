@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use num_bigint::BigInt;
-
 const AUTHALIC_AREA: f64 = 510065624779439.1; // m^2 - matches JavaScript Math.PI precision
 
 /// Returns the number of cells at a given resolution.
@@ -39,32 +37,6 @@ pub fn get_num_cells(resolution: i32) -> u64 {
     60 * (4_u64.pow((resolution - 1) as u32))
 }
 
-/// Returns the number of cells at a given resolution (BigInt version for high resolutions).
-///
-/// # Arguments
-///
-/// * `resolution` - The resolution level as BigInt
-///
-/// # Returns
-///
-/// Number of cells at the given resolution as BigInt
-pub fn get_num_cells_bigint(resolution: &BigInt) -> BigInt {
-    let zero = BigInt::from(0);
-    let one = BigInt::from(1);
-
-    if resolution < &zero {
-        return zero;
-    }
-    if resolution == &zero {
-        return BigInt::from(12);
-    }
-
-    let sixty = BigInt::from(60);
-    let four = BigInt::from(4);
-    let resolution_minus_one = resolution - &one;
-
-    sixty * four.pow(resolution_minus_one.try_into().unwrap_or(0))
-}
 
 /// Returns the area of a cell at a given resolution in square meters.
 ///

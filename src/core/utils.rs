@@ -4,7 +4,6 @@
 
 use crate::coordinate_systems::{Radians, Spherical};
 use crate::core::hilbert::Orientation;
-use num_bigint::BigInt;
 
 /// Origin identifier type (0-11)
 pub type OriginId = u8;
@@ -39,7 +38,7 @@ pub struct A5Cell {
     /// Index (0-4) of triangular segment within pentagonal dodecahedron face
     pub segment: usize,
     /// Position along Hilbert curve within triangular segment
-    pub s: BigInt,
+    pub s: u64,
     /// Resolution of the cell
     pub resolution: i32,
 }
