@@ -12,8 +12,6 @@
 ///
 /// A u64 representing the hexadecimal value
 pub fn hex_to_u64(hex: &str) -> Result<u64, String> {
-    // Remove any "0x" prefix if present
-    let hex = hex.trim_start_matches("0x");
     u64::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex string: {}", e))
 }
 
