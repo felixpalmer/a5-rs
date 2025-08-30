@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::Cartesian;
-use a5_rs::geometry::SphericalTriangleShape;
+use a5::coordinate_systems::Cartesian;
+use a5::geometry::SphericalTriangleShape;
 use approx::assert_abs_diff_eq;
 use serde_json::Value;
 

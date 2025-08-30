@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::Radians;
-use a5_rs::projections::AuthalicProjection;
+use a5::coordinate_systems::Radians;
+use a5::projections::AuthalicProjection;
 use serde_json::Value;
 
 const TOLERANCE: f64 = 1e-10;

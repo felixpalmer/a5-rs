@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::{Cartesian, Face, FaceTriangle, SphericalTriangle};
-use a5_rs::projections::polyhedral::PolyhedralProjection;
-use a5_rs::utils::vector::{vec3_distance, vec3_length};
+use a5::coordinate_systems::{Cartesian, Face, FaceTriangle, SphericalTriangle};
+use a5::projections::polyhedral::PolyhedralProjection;
+use a5::utils::vector::{vec3_distance, vec3_length};
 use approx::assert_relative_eq;
 use serde::{Deserialize, Serialize};
 

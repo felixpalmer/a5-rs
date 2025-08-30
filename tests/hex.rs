@@ -1,4 +1,4 @@
-use a5_rs::core::hex::{big_int_to_hex, hex_to_big_int};
+use a5::core::hex::{big_int_to_hex, hex_to_big_int};
 
 #[test]
 fn test_hex_conversion() {

@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::{Radians, Spherical};
-use a5_rs::core::constants::PI_OVER_5;
-use a5_rs::core::coordinate_transforms::to_cartesian;
-use a5_rs::core::origin::{
+use a5::coordinate_systems::{Radians, Spherical};
+use a5::core::constants::PI_OVER_5;
+use a5::core::coordinate_transforms::to_cartesian;
+use a5::core::origin::{
     find_nearest_origin, get_origins, haversine, is_nearest_origin, quintant_to_segment,
     segment_to_quintant,
 };
-use a5_rs::utils::vector::vec3_length;
+use a5::utils::vector::vec3_length;
 use approx::assert_abs_diff_eq;
 use serde_json::Value;
 

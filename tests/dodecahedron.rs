@@ -1,6 +1,6 @@
-use a5_rs::coordinate_systems::{Face, Radians, Spherical};
-use a5_rs::core::utils::OriginId;
-use a5_rs::projections::DodecahedronProjection;
+use a5::coordinate_systems::{Face, Radians, Spherical};
+use a5::core::utils::OriginId;
+use a5::projections::DodecahedronProjection;
 use approx::assert_relative_eq;
 use serde_json::Value;
 

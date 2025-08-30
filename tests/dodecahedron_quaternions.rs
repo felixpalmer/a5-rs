@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::core::dodecahedron_quaternions::QUATERNIONS;
+use a5::core::dodecahedron_quaternions::QUATERNIONS;
 use approx::assert_abs_diff_eq;
 use serde_json::Value;
 

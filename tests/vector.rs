@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::Cartesian;
-use a5_rs::utils::vector::{quadruple_product, slerp, vector_difference};
+use a5::coordinate_systems::Cartesian;
+use a5::utils::vector::{quadruple_product, slerp, vector_difference};
 
 const TOLERANCE: f64 = 1e-6;
 

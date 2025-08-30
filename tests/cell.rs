@@ -1,9 +1,9 @@
-use a5_rs::coordinate_systems::LonLat;
-use a5_rs::core::cell::{
+use a5::coordinate_systems::LonLat;
+use a5::core::cell::{
     a5cell_contains_point, cell_to_boundary, lonlat_to_cell, CellToBoundaryOptions,
 };
-use a5_rs::core::hex::hex_to_big_int;
-use a5_rs::core::serialization::{deserialize, MAX_RESOLUTION};
+use a5::core::hex::hex_to_big_int;
+use a5::core::serialization::{deserialize, MAX_RESOLUTION};
 use serde::Deserialize;
 use std::collections::HashMap;
 

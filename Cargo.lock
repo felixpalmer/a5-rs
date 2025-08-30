@@ -3,8 +3,8 @@
 version = 4
 
 [[package]]
-name = "a5-rs"
-version = "0.1.0"
+name = "a5"
+version = "0.4.0"
 dependencies = [
  "approx",
  "criterion",

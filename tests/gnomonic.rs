@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5_rs::coordinate_systems::{Polar, Radians, Spherical};
-use a5_rs::projections::GnomonicProjection;
+use a5::coordinate_systems::{Polar, Radians, Spherical};
+use a5::projections::GnomonicProjection;
 use serde_json::Value;
 
 const TOLERANCE: f64 = 1e-10;
