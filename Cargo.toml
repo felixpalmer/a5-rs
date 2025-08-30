@@ -10,6 +10,7 @@ homepage = "https://github.com/felixpalmer/a5-rs"
 documentation = "https://docs.rs/a5"
 keywords = ["geospatial", "indexing", "hierarchical", "spatial", "gis"]
 categories = ["algorithms", "data-structures", "science::geo"]
+readme = "README.md"
 exclude = [
     "tests/*",
     "*.md",
