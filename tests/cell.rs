@@ -2,7 +2,7 @@ use a5::coordinate_systems::LonLat;
 use a5::core::cell::{
     a5cell_contains_point, cell_to_boundary, lonlat_to_cell, CellToBoundaryOptions,
 };
-use a5::core::hex::hex_to_big_int;
+use a5::core::hex::hex_to_u64;
 use a5::core::serialization::{deserialize, MAX_RESOLUTION};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -40,11 +40,7 @@ fn test_antimeridian_cell_longitude_span() {
 
     for cell_id_hex in &antimeridian_cells {
         for &segment in &segments {
-            let cell_id = hex_to_big_int(cell_id_hex);
-            let cell_id_u64 = cell_id
-                .to_string()
-                .parse::<u64>()
-                .expect("Failed to convert to u64");
+            let cell_id_u64 = hex_to_u64(cell_id_hex).expect("Failed to parse hex");
 
             let options = CellToBoundaryOptions {
                 closed_ring: true,
@@ -67,11 +63,7 @@ fn test_antimeridian_cell_longitude_span() {
         }
 
         // Test with 'auto' segments (None option)
-        let cell_id = hex_to_big_int(cell_id_hex);
-        let cell_id_u64 = cell_id
-            .to_string()
-            .parse::<u64>()
-            .expect("Failed to convert to u64");
+        let cell_id_u64 = hex_to_u64(cell_id_hex).expect("Failed to parse hex");
 
         let boundary = cell_to_boundary(cell_id_u64, None).expect("Failed to get boundary");
 
