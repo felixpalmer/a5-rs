@@ -14,16 +14,15 @@ pub mod projections;
 #[cfg_attr(not(test), allow(unused))]
 pub mod utils;
 
-
 // PUBLIC API
 // Indexing
 pub use core::cell::{cell_to_boundary, cell_to_lonlat, lonlat_to_cell};
-pub use core::hex::{hex_to_big_int, big_int_to_hex};
+pub use core::hex::{u64_to_hex, hex_to_u64};
 
 // Hierarchy
-pub use core::serialization::{cell_to_parent, cell_to_children, get_resolution, get_res0_cells};
-pub use core::cell_info::{get_num_cells, cell_area};
+pub use core::cell_info::{cell_area, get_num_cells};
+pub use core::serialization::{cell_to_children, cell_to_parent, get_res0_cells, get_resolution};
 
 // Types
-pub use coordinate_systems::{Degrees, Radians, LonLat};
+pub use coordinate_systems::{Degrees, LonLat, Radians};
 pub use core::utils::A5Cell;
