@@ -39,7 +39,6 @@ fn test_get_num_cells() {
             "get_num_cells failed for resolution {}",
             fixture.resolution
         );
-
     }
 }
 

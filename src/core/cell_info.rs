@@ -37,7 +37,6 @@ pub fn get_num_cells(resolution: i32) -> u64 {
     60 * (4_u64.pow((resolution - 1) as u32))
 }
 
-
 /// Returns the area of a cell at a given resolution in square meters.
 ///
 /// # Arguments
