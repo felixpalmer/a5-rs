@@ -1,6 +1,6 @@
 [package]
 name = "a5"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2021"
 authors = ["Felix Palmer <felixpalmer@gmail.com>"]
 description = "High-performance Rust implementation of the A5 hierarchical spatial indexing system"
@@ -11,14 +11,14 @@ documentation = "https://docs.rs/a5"
 keywords = ["geospatial", "indexing", "hierarchical", "spatial", "gis"]
 categories = ["algorithms", "data-structures", "science::geo"]
 readme = "README.md"
-exclude = [
-    "tests/*",
-    "*.md",
-    ".github/*",
-    ".claude/*",
-    "*.geojson",
-    "target/*",
-    "examples/*",
+autoexamples = false
+autotests = false
+include = [
+    "src/**/*",
+    "LICENSE",
+    "README.md",
+    "Cargo.toml",
+    "Cargo.lock",
 ]
 
 [lib]
