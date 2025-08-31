@@ -111,7 +111,7 @@ fn lonlat_to_estimate(lonlat: LonLat, resolution: i32) -> Result<A5Cell, String>
     let s = ij_to_s(ij, hilbert_resolution as usize, orientation);
 
     Ok(A5Cell {
-        s: s,
+        s,
         segment,
         origin_id: origin.id,
         resolution,

@@ -95,7 +95,7 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
     Ok(A5Cell {
         origin_id,
         segment,
-        s: s,
+        s,
         resolution,
     })
 }
@@ -267,7 +267,7 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
     }
 
     let resolution_diff = current_resolution - new_resolution;
-    let shifted_s = &s >> (2 * resolution_diff);
+    let shifted_s = s >> (2 * resolution_diff);
     let new_cell = A5Cell {
         origin_id,
         segment,
