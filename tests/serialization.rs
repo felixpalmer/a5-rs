@@ -4,7 +4,6 @@ use a5::core::serialization::{
     FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, REMOVAL_MASK,
 };
 use a5::core::utils::A5Cell;
-use num_bigint::BigInt;
 use std::fs;
 
 const RESOLUTION_MASKS: [&str; 30] = [
@@ -74,7 +73,7 @@ fn test_encodes_resolution_correctly_for_different_values() {
             A5Cell {
                 origin_id: origin0.id,
                 segment: 4,
-                s: BigInt::from(0),
+                s: 0,
                 resolution: i as i32,
             }
         })
@@ -107,7 +106,7 @@ fn test_encodes_origin_segment_and_s_correctly() {
     let cell = A5Cell {
         origin_id: origin0.id,
         segment: 4,
-        s: BigInt::from(0),
+        s: 0,
         resolution: MAX_RESOLUTION - 1,
     };
     let serialized = serialize(&cell).unwrap();
@@ -122,7 +121,7 @@ fn test_throws_error_when_s_is_too_large_for_resolution() {
     let cell = A5Cell {
         origin_id: origin0.id,
         segment: 0,
-        s: BigInt::from(16), // Too large for resolution 3 (max is 15)
+        s: 16, // Too large for resolution 3 (max is 15)
         resolution: 3,
     };
 
@@ -141,7 +140,7 @@ fn test_throws_error_when_resolution_exceeds_maximum() {
     let cell = A5Cell {
         origin_id: origin0.id,
         segment: 0,
-        s: BigInt::from(0),
+        s: 0,
         resolution: 31, // MAX_RESOLUTION is 30
     };
 
@@ -242,7 +241,7 @@ fn test_non_hilbert_to_non_hilbert_hierarchy() {
     let cell_data = A5Cell {
         origin_id: origin0.id,
         segment: 0,
-        s: BigInt::from(0),
+        s: 0,
         resolution: 0,
     };
     let cell = serialize(&cell_data).unwrap();
@@ -264,7 +263,7 @@ fn test_non_hilbert_to_hilbert_hierarchy() {
     let cell_data = A5Cell {
         origin_id: origin0.id,
         segment: 0,
-        s: BigInt::from(0),
+        s: 0,
         resolution: 1,
     };
     let cell = serialize(&cell_data).unwrap();
@@ -286,7 +285,7 @@ fn test_hilbert_to_non_hilbert_hierarchy() {
     let cell_data = A5Cell {
         origin_id: origin0.id,
         segment: 0,
-        s: BigInt::from(0),
+        s: 0,
         resolution: 2,
     };
     let cell = serialize(&cell_data).unwrap();
@@ -309,7 +308,7 @@ fn test_low_resolution_hierarchy_chain() {
             let cell_data = A5Cell {
                 origin_id: origin0.id,
                 segment: 0,
-                s: BigInt::from(0),
+                s: 0,
                 resolution: res,
             };
             serialize(&cell_data).unwrap()
@@ -338,7 +337,7 @@ fn test_base_cell_division_counts() {
     let base_cell_data = A5Cell {
         origin_id: origin0.id,
         segment: 0,
-        s: BigInt::from(0),
+        s: 0,
         resolution: -1,
     };
     let base_cell = serialize(&base_cell_data).unwrap();

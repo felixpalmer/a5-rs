@@ -16,7 +16,6 @@ use crate::core::tiling::{
 use crate::core::utils::A5Cell;
 use crate::geometry::pentagon::PentagonShape;
 use crate::projections::dodecahedron::DodecahedronProjection;
-use num_bigint::BigInt;
 use std::collections::HashSet;
 
 /// Convert lon/lat coordinates to A5 cell ID
@@ -84,7 +83,7 @@ fn lonlat_to_estimate(lonlat: LonLat, resolution: i32) -> Result<A5Cell, String>
     if resolution < FIRST_HILBERT_RESOLUTION {
         // For low resolutions there is no Hilbert curve
         return Ok(A5Cell {
-            s: BigInt::from(0),
+            s: 0,
             segment,
             origin_id: origin.id,
             resolution,
@@ -112,7 +111,7 @@ fn lonlat_to_estimate(lonlat: LonLat, resolution: i32) -> Result<A5Cell, String>
     let s = ij_to_s(ij, hilbert_resolution as usize, orientation);
 
     Ok(A5Cell {
-        s: BigInt::from(s),
+        s,
         segment,
         origin_id: origin.id,
         resolution,

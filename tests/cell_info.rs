@@ -1,13 +1,10 @@
-use a5::core::cell_info::{cell_area, get_num_cells, get_num_cells_bigint};
-use num_bigint::BigInt;
+use a5::core::cell_info::{cell_area, get_num_cells};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct NumCellsFixture {
     resolution: i32,
     count: u64,
-    #[serde(rename = "countBigInt")]
-    count_big_int: String,
 }
 
 #[derive(Deserialize)]
@@ -40,15 +37,6 @@ fn test_get_num_cells() {
             get_num_cells(fixture.resolution),
             fixture.count,
             "get_num_cells failed for resolution {}",
-            fixture.resolution
-        );
-
-        // Test BigInt version
-        let resolution_bigint = BigInt::from(fixture.resolution);
-        assert_eq!(
-            get_num_cells_bigint(&resolution_bigint).to_string(),
-            fixture.count_big_int,
-            "get_num_cells_bigint failed for resolution {}",
             fixture.resolution
         );
     }

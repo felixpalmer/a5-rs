@@ -4,7 +4,6 @@
 
 use crate::core::origin::get_origins;
 use crate::core::utils::{A5Cell, OriginId};
-use num_bigint::BigInt;
 
 pub const FIRST_HILBERT_RESOLUTION: i32 = 2;
 pub const MAX_RESOLUTION: i32 = 30;
@@ -51,7 +50,7 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
         return Ok(A5Cell {
             origin_id: 0,
             segment: 0,
-            s: BigInt::from(0),
+            s: 0,
             resolution,
         });
     }
@@ -82,7 +81,7 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
         return Ok(A5Cell {
             origin_id,
             segment,
-            s: BigInt::from(0),
+            s: 0,
             resolution,
         });
     }
@@ -96,7 +95,7 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
     Ok(A5Cell {
         origin_id,
         segment,
-        s: BigInt::from(s),
+        s,
         resolution,
     })
 }
@@ -143,16 +142,16 @@ pub fn serialize(cell: &A5Cell) -> Result<u64, String> {
         let hilbert_bits = 2 * hilbert_levels as u32;
 
         // Check if S fits in the required bits
-        let max_s = BigInt::from(1u64) << hilbert_bits;
-        if s >= &max_s {
+        let max_s = 1u64 << hilbert_bits;
+        if *s >= max_s {
             return Err(format!(
                 "S ({}) is too large for resolution level {}",
                 s, resolution
             ));
         }
 
-        // Convert BigInt to u64 for shifting
-        let s_u64 = s.to_u64_digits().1.first().copied().unwrap_or(0);
+        // S is already u64
+        let s_u64 = *s;
 
         // Next (2 * hilbertResolution) bits are S (hilbert index within segment)
         index += s_u64 << (HILBERT_START_BIT - hilbert_bits);
@@ -216,15 +215,15 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
     };
     let mut children = Vec::new();
     let shifted_s = if resolution_diff > 0 {
-        &s << (2 * resolution_diff)
+        s << (2 * resolution_diff)
     } else {
-        s.clone()
+        s
     };
 
     for &new_origin_id in &new_origin_ids {
         for &new_segment in &new_segments {
             for i in 0..children_count {
-                let new_s = &shifted_s + BigInt::from(i);
+                let new_s = shifted_s + i as u64;
                 let new_cell = A5Cell {
                     origin_id: new_origin_id,
                     segment: new_segment,
@@ -268,7 +267,7 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
     }
 
     let resolution_diff = current_resolution - new_resolution;
-    let shifted_s = &s >> (2 * resolution_diff);
+    let shifted_s = s >> (2 * resolution_diff);
     let new_cell = A5Cell {
         origin_id,
         segment,
