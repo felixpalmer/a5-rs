@@ -14,7 +14,7 @@ Cells can also be used to group (aggregate) point data, to understand how it spa
 
 To understand how it works, take a look at the [Examples](https://a5geo.org/examples).
 
-A5 is implemented in TypeScript and is available as a [library](https://www.npmjs.com/package/a5-js), with [API documentation here](https://a5geo.org/docs/api-reference). It is [open source](https://github.com/felixpalmer/a5) and licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0.txt).
+A5 is implemented in Rust and is available as a [library](https://crates.io/crates/a5), with [API documentation here](https://a5geo.org/docs/api-reference). It is [open source](https://github.com/felixpalmer/a5) and licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0.txt).
 
 ## Benefits over alternative systems
 
