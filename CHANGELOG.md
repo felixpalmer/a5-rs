@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to A5-Rust will be documented in this file.
+All notable changes to a5-rs will be documented in this file.
 
 For the latest documentation, visit [A5 Documentation](https://a5geo.org)
 
@@ -17,15 +17,15 @@ Each version should:
 Ref: http://keepachangelog.com/en/0.3.0/
 -->
 
-## A5-Rust v0.5
+## a5-rs v0.5
 
-#### A5-Rust [v0.5.0] - Sep 21 2025
+#### a5-rs [v0.5.0] - Sep 21 2025
 
 - Changed: Version bump to align with TypeScript and Python implementations
 
-## A5-Rust v0.4
+## a5-rs v0.4
 
-#### A5-Rust [v0.4.3] - Aug 31 2025
+#### a5-rs [v0.4.3] - Aug 31 2025
 
 - Fixed: Avoid warnings when publishing (#29)
 - Removed: bigint dependency (#28)
@@ -34,13 +34,13 @@ Ref: http://keepachangelog.com/en/0.3.0/
 - Added: Public API finalization (#25)
 - Changed: Prepare for publishing (#24)
 
-#### A5-Rust [v0.4.2] - Aug 28 2025
+#### a5-rs [v0.4.2] - Aug 28 2025
 
 - Added: 10X speed improvement by global projection instance (#23)
 - Removed: TilingShape and TriangleShape (#22)
 - Added: Port cell functions (#21)
 
-#### A5-Rust [v0.4.1] - Aug 22 2025
+#### a5-rs [v0.4.1] - Aug 22 2025
 
 - Added: Port dodecahedron projection (#20)
 - Added: Port CRS (#19)
@@ -50,7 +50,7 @@ Ref: http://keepachangelog.com/en/0.3.0/
 - Added: Port pentagon & serialization (#15)
 - Added: Port origin & dodecahedron quat (#14)
 
-#### A5-Rust [v0.4.0] - Aug 20 2025
+#### a5-rs [v0.4.0] - Aug 20 2025
 
 - Added: Port core/utils (#13)
 - Added: Spherical triangle (#12)
@@ -63,21 +63,21 @@ Ref: http://keepachangelog.com/en/0.3.0/
 - Added: Port the gnomonic projection (#5)
 - Added: Coordinate systems and gnomonic transformations (#4)
 
-## A5-Rust v0.3
+## a5-rs v0.3
 
-#### A5-Rust [v0.3.0] - Aug 7 2025
+#### a5-rs [v0.3.0] - Aug 7 2025
 
 - Changed: Update GitHub workflows (#3)
 
-## A5-Rust v0.2
+## a5-rs v0.2
 
-#### A5-Rust [v0.2.0] - May 25 2025
+#### a5-rs [v0.2.0] - May 25 2025
 
 - Added: Setup CI (#2)
 
-## A5-Rust v0.1
+## a5-rs v0.1
 
-#### A5-Rust [v0.1.0] - May 25 2025
+#### a5-rs [v0.1.0] - May 25 2025
 
 - Added: Initial Rust implementation of A5 - Global Pentagonal Geospatial Index
 - Added: Implementation of hex functions (#1)
