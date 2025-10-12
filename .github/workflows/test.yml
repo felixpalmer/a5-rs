@@ -46,7 +46,7 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v4
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.86.0
         with:
           components: clippy
       - name: Check the lints
