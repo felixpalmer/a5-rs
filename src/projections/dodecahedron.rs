@@ -167,7 +167,7 @@ impl DodecahedronProjection {
             (v_corner1.y() + v_corner2.y()) / 2.0,
         );
 
-        let even = face_triangle_index.is_multiple_of(2);
+        let even = face_triangle_index % 2 == 0;
 
         // Note: center & midpoint compared to DGGAL implementation are swapped
         // as we are using a dodecahedron, rather than an icosahedron.
@@ -188,7 +188,7 @@ impl DodecahedronProjection {
         let (mut a, b, c) = (base.a, base.b, base.c);
 
         // Reflect dodecahedron center (A) across edge (BC)
-        let even = face_triangle_index.is_multiple_of(2);
+        let even = face_triangle_index % 2 == 0;
         a = Face::new(-a.x(), -a.y());
         let midpoint = if even { b } else { c };
 
