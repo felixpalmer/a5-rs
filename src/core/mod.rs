@@ -4,6 +4,7 @@
 
 pub mod cell;
 pub mod cell_info;
+pub mod compact;
 pub mod constants;
 pub mod coordinate_transforms;
 pub mod dodecahedron_quaternions;

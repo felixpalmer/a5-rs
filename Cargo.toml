@@ -12,7 +12,6 @@ keywords = ["geospatial", "indexing", "hierarchical", "spatial", "gis"]
 categories = ["algorithms", "data-structures", "science::geo"]
 readme = "README.md"
 autoexamples = false
-autotests = false
 include = [
     "src/**/*",
     "LICENSE",

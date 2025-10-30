@@ -248,6 +248,11 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
     } = cell;
     let new_resolution = parent_resolution.unwrap_or(current_resolution - 1);
 
+    // Special case: parent of resolution 0 cells is the world cell
+    if new_resolution == -1 {
+        return Ok(WORLD_CELL);
+    }
+
     if new_resolution < 0 {
         return Err(format!(
             "Target resolution ({}) cannot be negative",
@@ -284,4 +289,33 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
 /// Returns Array of 12 cell indices
 pub fn get_res0_cells() -> Result<Vec<u64>, String> {
     cell_to_children(WORLD_CELL, Some(0))
+}
+
+/// Check whether index corresponds to first child of its parent
+pub fn is_first_child(index: u64, resolution: Option<i32>) -> bool {
+    let resolution = resolution.unwrap_or_else(|| get_resolution(index));
+
+    if resolution < 2 {
+        // For resolution 0: first child is origin 0 (child count = 12)
+        // For resolution 1: first children are at multiples of 5 (child count = 5)
+        let top6_bits = (index >> HILBERT_START_BIT) as usize;
+        let child_count = if resolution == 0 { 12 } else { 5 };
+        return top6_bits % child_count == 0;
+    }
+
+    let s_position = 2 * (MAX_RESOLUTION - resolution) as u32;
+    let s_mask = 3u64 << s_position; // Mask for the 2 LSBs of S
+    (index & s_mask) == 0
+}
+
+/// Difference between two neighbouring sibling cells at a given resolution
+pub fn get_stride(resolution: i32) -> u64 {
+    // Both level 0 & 1 just write values 0-11 or 0-59 to the first 6 bits
+    if resolution < 2 {
+        return 1u64 << HILBERT_START_BIT;
+    }
+
+    // For hilbert levels, the position shifts by 2 bits per resolution level
+    let s_position = 2 * (MAX_RESOLUTION - resolution) as u32;
+    1u64 << s_position
 }
