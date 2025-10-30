@@ -61,8 +61,7 @@ fn load_fixtures() -> CompactFixtures {
     let fixtures_path = "tests/fixtures/compact.json";
     let fixtures_data = fs::read_to_string(fixtures_path)
         .unwrap_or_else(|_| panic!("Failed to read fixtures file: {}", fixtures_path));
-    serde_json::from_str(&fixtures_data)
-        .unwrap_or_else(|_| panic!("Failed to parse fixtures JSON"))
+    serde_json::from_str(&fixtures_data).unwrap_or_else(|_| panic!("Failed to parse fixtures JSON"))
 }
 
 #[test]
@@ -95,8 +94,9 @@ fn test_uncompact_all_fixtures() {
 
         // All results should be at target resolution
         for &cell in &result {
-            let cell_data = deserialize(cell)
-                .unwrap_or_else(|_| panic!("Failed to deserialize cell in test: {}", test_case.name));
+            let cell_data = deserialize(cell).unwrap_or_else(|_| {
+                panic!("Failed to deserialize cell in test: {}", test_case.name)
+            });
             assert_eq!(
                 cell_data.resolution, test_case.target_resolution,
                 "Failed test case: {}",
