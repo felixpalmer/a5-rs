@@ -108,9 +108,9 @@ pub fn compact(cells: &[u64]) -> Result<Vec<u64>, String> {
             let expected_children = if resolution >= FIRST_HILBERT_RESOLUTION {
                 4 // Hilbert levels have 4 siblings
             } else if resolution == 0 {
-                12 // First level has 12 siblings
+                12 // First two levels are exceptions, with 12 & 5 siblings
             } else {
-                5 // Second level has 5 siblings
+                5
             };
 
             if i + expected_children <= current_cells.len() {
