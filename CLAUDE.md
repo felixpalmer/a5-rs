@@ -77,6 +77,39 @@ cargo publish
 - **Dependencies**: Minimal runtime dependencies (lazy_static for constants)
 - **Performance**: Use criterion for benchmarking performance-critical code
 
+## CI Checks (run as a final verification)
+```bash
+# 1. Build
+cargo build --verbose
+
+# 2. Run tests
+cargo test --verbose
+
+# 3. Check lints (clippy)
+cargo clippy --tests --verbose -- -D warnings
+
+# 4. Check formatting
+cargo fmt -- --check --verbose
+
+# 5. Check documentation
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items --all-features --examples
+
+# 6. Test publish
+cargo publish --dry-run
+```
+
+These are the same checks that run in CI (.github/workflows/test.yml). Run these to verify your changes before the user reviews the code. The CI also checks links in markdown files using lychee.
+
+## Git Usage
+
+- **DO** use git commands for debugging and information gathering:
+  - `git status` - Check current state
+  - `git diff` - Compare changes
+  - `git log` - View commit history
+  - `git diff main` - Compare to main branch
+  - `git show <commit>` - View specific commits
+- **DO NOT** create git commits - the user will review the code and commit it themselves
+
 ## Testing Strategy
 
 - Tests are written such that they can easily be ported to other languages
