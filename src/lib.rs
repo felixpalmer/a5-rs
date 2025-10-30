@@ -23,6 +23,9 @@ pub use core::hex::{hex_to_u64, u64_to_hex};
 pub use core::cell_info::{cell_area, get_num_cells};
 pub use core::serialization::{cell_to_children, cell_to_parent, get_res0_cells, get_resolution};
 
+// Compaction
+pub use core::compact::{compact, uncompact};
+
 // Types
 pub use coordinate_systems::{Degrees, LonLat, Radians};
 pub use core::utils::A5Cell;

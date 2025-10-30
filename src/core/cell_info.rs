@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
+use crate::core::serialization::FIRST_HILBERT_RESOLUTION;
+
 const AUTHALIC_AREA: f64 = 510065624779439.1; // m^2 - matches JavaScript Math.PI precision
 
 /// Returns the number of cells at a given resolution.
@@ -35,6 +37,34 @@ pub fn get_num_cells(resolution: i32) -> u64 {
 
     // For lower resolutions, exact calculation works fine
     60 * (4_u64.pow((resolution - 1) as u32))
+}
+
+/// Returns the number of children between two resolutions.
+///
+/// # Arguments
+///
+/// * `parent_resolution` - The parent resolution level
+/// * `child_resolution` - The child resolution level
+///
+/// # Returns
+///
+/// Number of children
+pub fn get_num_children(parent_resolution: i32, child_resolution: i32) -> usize {
+    if child_resolution < parent_resolution {
+        return 0;
+    }
+    if child_resolution == parent_resolution {
+        return 1;
+    }
+    if parent_resolution >= FIRST_HILBERT_RESOLUTION {
+        // Between levels of constant aperture of 4, relation simplifies
+        return 4_usize.pow((child_resolution - parent_resolution) as u32);
+    }
+
+    let parent_count = get_num_cells(parent_resolution);
+    let parent_count = if parent_count == 0 { 1 } else { parent_count };
+    let child_count = get_num_cells(child_resolution);
+    (child_count / parent_count) as usize
 }
 
 /// Returns the area of a cell at a given resolution in square meters.
