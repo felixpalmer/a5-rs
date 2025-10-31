@@ -76,6 +76,21 @@ cargo publish
 - **Error Handling**: Use `Result` types for fallible operations
 - **Dependencies**: Minimal runtime dependencies (lazy_static for constants)
 - **Performance**: Use criterion for benchmarking performance-critical code
+- **Coordinate Types**: LonLat has `new()` constructor - use `LonLat::new(lon, lat)`
+
+## Porting from TypeScript
+When porting features from TypeScript:
+1. **Reference implementation**: TypeScript in `../a5` is the source of truth
+2. **Key file mappings**:
+   - `modules/core/cell.ts` → `src/core/cell.rs`
+   - `tests/cell.test.ts` → `tests/cell.rs`
+   - `modules/index.ts` → `src/lib.rs`
+3. **Type conversions**:
+   - `bigint` → `u64`
+   - `LonLat` tuple → `LonLat::new(lon, lat)`
+   - Errors → `Result<T, String>` (use `?` for propagation)
+   - `void` functions → `Result<(), String>` for consistency
+4. **Test patterns**: Use `#[test]` functions in `/tests` directory with descriptive names
 
 ## CI Checks (run as a final verification)
 ```bash
