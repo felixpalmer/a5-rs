@@ -1,6 +1,6 @@
 use a5::coordinate_systems::LonLat;
 use a5::core::cell::{
-    a5cell_contains_point, cell_to_boundary, lonlat_to_cell, CellToBoundaryOptions,
+    a5cell_contains_point, cell_to_boundary, cell_to_lonlat, lonlat_to_cell, CellToBoundaryOptions,
 };
 use a5::core::hex::hex_to_u64;
 use a5::core::serialization::{deserialize, MAX_RESOLUTION};
@@ -31,6 +31,25 @@ struct GeoJSONFeatureCollection {
 fn load_populated_places() -> GeoJSONFeatureCollection {
     let data = include_str!("../tests/data/ne_50m_populated_places_nameonly.json");
     serde_json::from_str(data).expect("Failed to parse populated places data")
+}
+
+#[test]
+fn test_world_cell_for_resolution_minus_1() {
+    let cell_id = lonlat_to_cell(LonLat::new(0.0, 0.0), -1).expect("Failed to get cell");
+    assert_eq!(cell_id, 0);
+}
+
+#[test]
+fn test_world_cell_center() {
+    let lon_lat = cell_to_lonlat(0).expect("Failed to get center");
+    assert_eq!(lon_lat.longitude(), 0.0);
+    assert_eq!(lon_lat.latitude(), 0.0);
+}
+
+#[test]
+fn test_world_cell_boundary() {
+    let boundary = cell_to_boundary(0, None).expect("Failed to get boundary");
+    assert!(boundary.is_empty());
 }
 
 #[test]

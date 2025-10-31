@@ -9,7 +9,7 @@ use crate::core::coordinate_transforms::{
 };
 use crate::core::hilbert::{ij_to_s, s_to_anchor};
 use crate::core::origin::{find_nearest_origin, quintant_to_segment, segment_to_quintant};
-use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
+use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL};
 use crate::core::tiling::{
     get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices,
 };
@@ -20,6 +20,11 @@ use std::collections::HashSet;
 
 /// Convert lon/lat coordinates to A5 cell ID
 pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
+    // Resolution -1 represents WORLD_CELL, which covers the entire world
+    if resolution == -1 {
+        return Ok(WORLD_CELL);
+    }
+
     if resolution < FIRST_HILBERT_RESOLUTION {
         // For low resolutions there is no Hilbert curve, so we can just return as the result is exact
         let estimate = lonlat_to_estimate(lonlat, resolution)?;
@@ -143,6 +148,11 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
 
 /// Convert A5 cell ID to lon/lat coordinates of cell center
 pub fn cell_to_lonlat(cell: u64) -> Result<LonLat, String> {
+    // WORLD_CELL represents the entire world, return (0, 0) as a reasonable default
+    if cell == WORLD_CELL {
+        return Ok(LonLat::new(0.0, 0.0));
+    }
+
     let cell_data = deserialize(cell)?;
     let pentagon = get_pentagon(&cell_data)?;
     let mut dodecahedron = DodecahedronProjection::get_global()?;
@@ -172,6 +182,11 @@ pub fn cell_to_boundary(
     cell_id: u64,
     options: Option<CellToBoundaryOptions>,
 ) -> Result<Vec<LonLat>, String> {
+    // WORLD_CELL represents the entire world and is unbounded
+    if cell_id == WORLD_CELL {
+        return Ok(Vec::new());
+    }
+
     let opts = options.unwrap_or_default();
     let cell_data = deserialize(cell_id)?;
 
