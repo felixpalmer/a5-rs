@@ -1,6 +1,6 @@
 [package]
 name = "a5"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 authors = ["Felix Palmer <felixpalmer@gmail.com>"]
 description = "High-performance Rust implementation of the A5 hierarchical spatial indexing system"

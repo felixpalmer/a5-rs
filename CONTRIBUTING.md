@@ -34,6 +34,8 @@ cargo bench
 
 ```bash
 Update version on Cargo.toml
+rm -rf target/*
 cargo build
+cargo test
 cargo publish
 ``` 
