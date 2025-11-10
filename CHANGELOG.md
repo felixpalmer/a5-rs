@@ -17,7 +17,19 @@ Each version should:
 Ref: http://keepachangelog.com/en/0.3.0/
 -->
 
-## a5-rs v0.5
+## a5-rs
+
+#### a5-rs [v0.6.1] - Nov 11 2025
+
+- feat: World cell handling (#36)
+
+#### a5-rs [v0.6.0] - Oct 30 2025
+
+- Feature: cell compaction/uncompaction (#35)
+
+#### a5-rs [v0.5.1] - Oct 12 2025
+
+- fix: support older Rust compiler versions back to 1.86.0 (#32)
 
 #### a5-rs [v0.5.0] - Sep 21 2025
 
