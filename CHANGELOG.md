@@ -19,7 +19,11 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## a5-rs
 
-#### a5-rs [v0.6.1] - Nov 11 2025
+#### a5-rs [v0.6.2] - Nov 10 2025
+
+- Change to thread local caching for dodecahedron projection (#37)
+
+#### a5-rs [v0.6.1] - Nov 7 2025
 
 - feat: World cell handling (#36)
 
