@@ -13,11 +13,17 @@ use crate::core::utils::OriginId;
 use crate::projections::crs::CRS;
 use crate::projections::gnomonic::GnomonicProjection;
 use crate::projections::polyhedral::PolyhedralProjection;
-use std::sync::{Mutex, OnceLock};
+use std::thread_local;
 
 type FaceTriangleIndex = usize; // 0-9
 
-static GLOBAL_DODECAHEDRON: OnceLock<Mutex<DodecahedronProjection>> = OnceLock::new();
+thread_local! {
+    // Each thread gets its own heap-allocated DodecahedronProjection
+    static THREAD_DODECA: *mut DodecahedronProjection = {
+        let b = Box::new(DodecahedronProjection::new().unwrap());
+        Box::into_raw(b) // raw pointer, lifetime is tied to thread
+    };
+}
 
 pub struct DodecahedronProjection {
     face_triangles: Vec<Option<FaceTriangle>>,
@@ -38,16 +44,9 @@ impl DodecahedronProjection {
         })
     }
 
-    /// Get a reference to the global dodecahedron projection instance
-    pub fn get_global() -> Result<std::sync::MutexGuard<'static, DodecahedronProjection>, String> {
-        GLOBAL_DODECAHEDRON
-            .get_or_init(|| {
-                let proj = DodecahedronProjection::new()
-                    .unwrap_or_else(|_| panic!("Failed to create global DodecahedronProjection"));
-                Mutex::new(proj)
-            })
-            .lock()
-            .map_err(|_| "Failed to lock global DodecahedronProjection".to_string())
+    /// Get a reference to the thread local dodecahedron projection instance
+    pub fn get_thread_local() -> &'static mut DodecahedronProjection {
+        THREAD_DODECA.with(|ptr| unsafe { &mut **ptr })
     }
 
     /// Projects spherical coordinates to face coordinates using dodecahedron projection
