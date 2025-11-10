@@ -79,7 +79,7 @@ fn lonlat_to_estimate(lonlat: LonLat, resolution: i32) -> Result<A5Cell, String>
     let spherical = from_lon_lat(lonlat);
     let origin = find_nearest_origin(spherical);
 
-    let mut dodecahedron = DodecahedronProjection::get_global()?;
+    let dodecahedron = DodecahedronProjection::get_thread_local();
     let mut dodec_point = dodecahedron.forward(spherical, origin.id)?;
     let polar = to_polar(dodec_point);
     let quintant = get_quintant_polar(polar);
@@ -155,7 +155,7 @@ pub fn cell_to_lonlat(cell: u64) -> Result<LonLat, String> {
 
     let cell_data = deserialize(cell)?;
     let pentagon = get_pentagon(&cell_data)?;
-    let mut dodecahedron = DodecahedronProjection::get_global()?;
+    let dodecahedron = DodecahedronProjection::get_thread_local();
     let point = dodecahedron.inverse(pentagon.get_center(), cell_data.origin_id)?;
     Ok(to_lon_lat(point))
 }
@@ -202,7 +202,7 @@ pub fn cell_to_boundary(
     let vertices = split_pentagon.get_vertices_vec();
 
     // Unproject to obtain lon/lat coordinates
-    let mut dodecahedron = DodecahedronProjection::get_global()?;
+    let dodecahedron = DodecahedronProjection::get_thread_local();
     let mut unprojected_vertices = Vec::new();
     for vertex in vertices {
         let unprojected = dodecahedron.inverse(*vertex, cell_data.origin_id)?;
@@ -233,7 +233,7 @@ pub fn a5cell_contains_point(cell: &A5Cell, point: LonLat) -> Result<f64, String
     use crate::core::tiling::{get_face_vertices, get_quintant_vertices};
 
     let spherical = from_lon_lat(point);
-    let mut dodecahedron = DodecahedronProjection::get_global()?;
+    let dodecahedron = DodecahedronProjection::get_thread_local();
     let projected_point = dodecahedron.forward(spherical, cell.origin_id)?;
 
     let (quintant, _orientation) = segment_to_quintant(cell.segment, cell.origin());
