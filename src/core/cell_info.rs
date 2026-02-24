@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
+use crate::core::constants::AUTHALIC_AREA_EARTH;
 use crate::core::serialization::FIRST_HILBERT_RESOLUTION;
-
-const AUTHALIC_AREA: f64 = 510065624779439.1; // m^2 - matches JavaScript Math.PI precision
 
 /// Returns the number of cells at a given resolution.
 ///
@@ -78,7 +77,7 @@ pub fn get_num_children(parent_resolution: i32, child_resolution: i32) -> usize 
 /// Area of a cell in square meters
 pub fn cell_area(resolution: i32) -> f64 {
     if resolution < 0 {
-        return AUTHALIC_AREA;
+        return AUTHALIC_AREA_EARTH;
     }
 
     // Match JavaScript's floating-point precision exactly by using exact values from JSON parsing
@@ -115,6 +114,6 @@ pub fn cell_area(resolution: i32) -> f64 {
         28 => 0.0004719055005832909,
         29 => 0.00011797637514582271,
         30 => 0.00002949409378645568,
-        _ => AUTHALIC_AREA / (get_num_cells(resolution) as f64),
+        _ => AUTHALIC_AREA_EARTH / (get_num_cells(resolution) as f64),
     }
 }

@@ -39,7 +39,7 @@ struct PentagonVerticesInput {
 struct AnchorData {
     offset: [f64; 2],
     flips: [i8; 2],
-    k: u8,
+    q: u8,
 }
 
 #[derive(Deserialize)]
@@ -108,7 +108,7 @@ fn test_get_pentagon_vertices() {
         let output = &test_case.output;
 
         let anchor = Anchor {
-            k: input.anchor.k,
+            q: input.anchor.q,
             offset: IJ::new(input.anchor.offset[0], input.anchor.offset[1]),
             flips: [input.anchor.flips[0] as Flip, input.anchor.flips[1] as Flip],
         };

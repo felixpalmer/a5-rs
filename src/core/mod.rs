@@ -8,6 +8,7 @@ pub mod compact;
 pub mod constants;
 pub mod coordinate_transforms;
 pub mod dodecahedron_quaternions;
+pub mod face_adjacency;
 pub mod hex;
 pub mod hilbert;
 pub mod origin;
