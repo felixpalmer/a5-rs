@@ -125,12 +125,10 @@ fn test_estimate_cell_radius() {
     let fixtures = load_fixtures();
     for f in &fixtures.helpers.estimate_cell_radius {
         let result = estimate_cell_radius(f.resolution);
-        assert!(
-            (result - f.expected_meters).abs() < 1e-10,
-            "estimate_cell_radius({}) = {} expected {}",
-            f.resolution,
-            result,
-            f.expected_meters
+        assert_eq!(
+            result, f.expected_meters,
+            "estimate_cell_radius({})",
+            f.resolution
         );
     }
 }

@@ -18,12 +18,23 @@ const CELL_RADIUS_SAFETY_FACTOR: f64 = 2.0;
 /// Minimum cells in the cap before hierarchical subdivision is worthwhile
 const MIN_CELLS_FOR_SUBDIVISION: f64 = 20.0;
 
-// Pre-compute cell radii
+// Pre-compute cell radii.
+//
+// Derived from: cellRadius = SAFETY * sqrt(cellArea / PI)
+//             = SAFETY * sqrt(4*PI*R² / (numCells * PI))
+//             = SAFETY * 2R / sqrt(numCells)
+//
+// For r >= 1: numCells = 60 * 4^(r-1), so sqrt(numCells) = 2*sqrt(15) * 2^(r-1)
+// giving: cellRadius(r) = BASE / 2^(r-1) — halves at each resolution level.
 lazy_static::lazy_static! {
     static ref CELL_RADIUS: Vec<f64> = {
-        (0..31)
-            .map(|r| CELL_RADIUS_SAFETY_FACTOR * (cell_area(r) / std::f64::consts::PI).sqrt())
-            .collect()
+        let base = CELL_RADIUS_SAFETY_FACTOR * AUTHALIC_RADIUS_EARTH / 15_f64.sqrt();
+        let mut radii = Vec::with_capacity(31);
+        radii.push(CELL_RADIUS_SAFETY_FACTOR * AUTHALIC_RADIUS_EARTH / 3_f64.sqrt());
+        for r in 1..31 {
+            radii.push(base / (1_u64 << (r - 1)) as f64);
+        }
+        radii
     };
 }
 
