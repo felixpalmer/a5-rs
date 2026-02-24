@@ -42,3 +42,9 @@ pub const R_MIDEDGE: f64 = 1.1755705045849463; // sqrt(3 - φ)
 
 /// Radius of the circumscribed sphere for dodecahedron
 pub const R_CIRCUMSCRIBED: f64 = 1.2584085723648188; // sqrt(3) * R_MIDEDGE / φ
+
+/// Authalic radius of Earth (meters)
+pub const AUTHALIC_RADIUS_EARTH: f64 = 6371007.2;
+
+/// Authalic surface area of Earth (square meters)
+pub const AUTHALIC_AREA_EARTH: f64 = 510065624779439.1; // m^2 - matches JavaScript Math.PI precision

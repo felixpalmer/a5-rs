@@ -146,6 +146,14 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
     Ok(pentagon_shape)
 }
 
+/// Convert A5 cell ID to spherical coordinates of cell center
+pub fn cell_to_spherical(cell: u64) -> Result<crate::coordinate_systems::Spherical, String> {
+    let cell_data = deserialize(cell)?;
+    let pentagon = get_pentagon(&cell_data)?;
+    let dodecahedron = DodecahedronProjection::get_thread_local();
+    dodecahedron.inverse(pentagon.get_center(), cell_data.origin_id)
+}
+
 /// Convert A5 cell ID to lon/lat coordinates of cell center
 pub fn cell_to_lonlat(cell: u64) -> Result<LonLat, String> {
     // WORLD_CELL represents the entire world, return (0, 0) as a reasonable default
@@ -153,11 +161,7 @@ pub fn cell_to_lonlat(cell: u64) -> Result<LonLat, String> {
         return Ok(LonLat::new(0.0, 0.0));
     }
 
-    let cell_data = deserialize(cell)?;
-    let pentagon = get_pentagon(&cell_data)?;
-    let dodecahedron = DodecahedronProjection::get_thread_local();
-    let point = dodecahedron.inverse(pentagon.get_center(), cell_data.origin_id)?;
-    Ok(to_lon_lat(point))
+    Ok(to_lon_lat(cell_to_spherical(cell)?))
 }
 
 /// Options for cell boundary generation

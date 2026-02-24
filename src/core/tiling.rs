@@ -95,7 +95,7 @@ pub fn get_pentagon_vertices(resolution: i32, quintant: usize, anchor: &Anchor) 
         pentagon_shape.rotate180();
     }
 
-    let k = anchor.k;
+    let k = anchor.q;
     let f = anchor.flips[0] + anchor.flips[1];
 
     if
@@ -189,4 +189,32 @@ pub fn get_face_vertices() -> PentagonShape {
 pub fn get_quintant_polar(polar: Polar) -> usize {
     let gamma = polar.gamma().0; // Extract f64 from Radians
     ((gamma / (TWO_PI_OVER_5).0).round() as i32 + 5) as usize % 5
+}
+
+/// Pentagon flavor type (0-7)
+pub type PentagonFlavor = u8;
+
+/// Get the flavor (0-7) of a pentagon from its anchor.
+pub fn get_pentagon_flavor(anchor: &Anchor) -> PentagonFlavor {
+    let mut f: u8 = 0;
+    if anchor.flips[1] == YES {
+        f += 2;
+    }
+
+    let q = anchor.q;
+    let sum = anchor.flips[0] + anchor.flips[1];
+    if
+    // Orient last two pentagons when both or neither flips are YES
+    ((sum == -2 || sum == 2) && q > 1) ||
+        // Orient first & last pentagons when only one of flips is YES
+        (sum == 0 && (q == 0 || q == 3))
+    {
+        f += 1;
+    }
+
+    if sum == -2 || sum == 2 {
+        f += 4;
+    }
+
+    f
 }
