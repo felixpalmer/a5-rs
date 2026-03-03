@@ -37,5 +37,12 @@ Update version on Cargo.toml
 rm -rf target/*
 cargo build
 cargo test
+
+Update CHANGELOG
+git add ...
+git commit -m "x.y.z release"
 cargo publish
+
+git tag vx.y.z
+git push && git push --tags
 ``` 
