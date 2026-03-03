@@ -125,10 +125,11 @@ fn test_estimate_cell_radius() {
     let fixtures = load_fixtures();
     for f in &fixtures.helpers.estimate_cell_radius {
         let result = estimate_cell_radius(f.resolution);
-        assert_eq!(
-            result, f.expected_meters,
-            "estimate_cell_radius({})",
-            f.resolution
+        // Allow tiny tolerance: Rust's f64 math may round differently from JS
+        assert!(
+            (result - f.expected_meters).abs() < 1e-6,
+            "estimate_cell_radius({}): {} != {}",
+            f.resolution, result, f.expected_meters
         );
     }
 }
