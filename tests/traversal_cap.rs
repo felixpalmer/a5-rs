@@ -129,7 +129,9 @@ fn test_estimate_cell_radius() {
         assert!(
             (result - f.expected_meters).abs() < 1e-6,
             "estimate_cell_radius({}): {} != {}",
-            f.resolution, result, f.expected_meters
+            f.resolution,
+            result,
+            f.expected_meters
         );
     }
 }
