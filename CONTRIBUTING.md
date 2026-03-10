@@ -39,7 +39,7 @@ cargo build
 cargo test
 
 Update CHANGELOG
-git add ...
+git add Cargo.* CHANGELOG.md
 git commit -m "x.y.z release"
 cargo publish
 

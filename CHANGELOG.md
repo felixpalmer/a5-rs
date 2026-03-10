@@ -19,6 +19,10 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## a5-rs
 
+#### a5-rs [v0.7.1] - Mar 10 2026
+
+- Feature: Support (de)serialization of resolution 30 cells (#40)
+
 #### a5-rs [v0.7.0] - Mar 3 2026
 
 - Feature: gridDisk & sphericalCap (#38)
