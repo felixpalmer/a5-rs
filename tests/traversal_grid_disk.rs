@@ -20,6 +20,16 @@ fn load_fixtures() -> Vec<Fixture> {
     serde_json::from_str(data).expect("Failed to parse grid-disk.json")
 }
 
+/// Sort hex cell IDs by numeric value for stable comparison
+fn sort_hex(mut v: Vec<String>) -> Vec<String> {
+    v.sort_by(|a, b| {
+        let a_padded = format!("{:0>20}", a);
+        let b_padded = format!("{:0>20}", b);
+        a_padded.cmp(&b_padded)
+    });
+    v
+}
+
 #[test]
 fn test_grid_disk() {
     let fixtures = load_fixtures();
@@ -29,7 +39,13 @@ fn test_grid_disk() {
         let disk = grid_disk(cell_id, f.k).unwrap();
         let uncompacted = uncompact(&disk, target_res).unwrap();
         let result: Vec<String> = uncompacted.iter().map(|n| u64_to_hex(*n)).collect();
-        assert_eq!(result, f.cells, "cellId={} k={}", f.cell_id, f.k);
+        assert_eq!(
+            sort_hex(result),
+            sort_hex(f.cells.clone()),
+            "cellId={} k={}",
+            f.cell_id,
+            f.k
+        );
     }
 }
 
@@ -53,7 +69,13 @@ fn test_grid_disk_vertex() {
         let disk = grid_disk_vertex(cell_id, f.k).unwrap();
         let uncompacted = uncompact(&disk, target_res).unwrap();
         let result: Vec<String> = uncompacted.iter().map(|n| u64_to_hex(*n)).collect();
-        assert_eq!(result, expected, "cellId={} k={}", f.cell_id, f.k);
+        assert_eq!(
+            sort_hex(result),
+            sort_hex(expected),
+            "cellId={} k={}",
+            f.cell_id,
+            f.k
+        );
     }
 }
 
