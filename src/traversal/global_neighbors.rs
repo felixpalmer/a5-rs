@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use crate::core::face_adjacency::FACE_ADJACENCY;
 use crate::core::origin::{get_origins, quintant_to_segment, segment_to_quintant};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
-use crate::core::utils::Origin;
+use crate::core::utils::{A5Cell, Origin};
 use crate::lattice::{
     anchor_to_triple, s_to_anchor, triple_in_bounds, triple_parity, triple_to_anchor, triple_to_s,
     Orientation, Triple,
@@ -128,6 +128,91 @@ fn add_delta_neighbors(
     }
 }
 
+/// Serialize a res 1 cell from origin and quintant.
+fn serialize_res1(origin: &Origin, quintant: usize) -> u64 {
+    let (segment, _) = quintant_to_segment(quintant, origin);
+    serialize(&A5Cell {
+        origin_id: origin.id,
+        segment,
+        s: 0,
+        resolution: 1,
+    })
+    .unwrap()
+}
+
+/// Get neighbors of a resolution 0 cell (dodecahedron face).
+fn get_res0_neighbors(origin: &Origin) -> Vec<u64> {
+    let origins = get_origins();
+    let mut neighbor_set = BTreeSet::new();
+    for q in 0..5 {
+        let (adjacent_face_id, _) = FACE_ADJACENCY[origin.id as usize][q];
+        let adjacent_origin = &origins[adjacent_face_id as usize];
+        if let Ok(cell_id) = serialize(&A5Cell {
+            origin_id: adjacent_origin.id,
+            segment: 0,
+            s: 0,
+            resolution: 0,
+        }) {
+            neighbor_set.insert(cell_id);
+        }
+    }
+    neighbor_set.into_iter().collect()
+}
+
+/// Get neighbors of a resolution 1 cell (quintant).
+fn get_res1_neighbors(origin: &Origin, segment: usize, edge_only: bool) -> Vec<u64> {
+    let origins = get_origins();
+    let (quintant, _) = segment_to_quintant(segment, origin);
+    let mut neighbor_set = BTreeSet::new();
+
+    // Left and right quintant on the same face (A, B)
+    let left_q = (quintant + 4) % 5;
+    let right_q = (quintant + 1) % 5;
+    neighbor_set.insert(serialize_res1(origin, left_q));
+    neighbor_set.insert(serialize_res1(origin, right_q));
+
+    // Adjacent quintant on adjacent face (C)
+    let (adjacent_face_id, adjacent_quintant) = FACE_ADJACENCY[origin.id as usize][quintant];
+    let adjacent_origin = &origins[adjacent_face_id as usize];
+    neighbor_set.insert(serialize_res1(adjacent_origin, adjacent_quintant));
+
+    if edge_only {
+        return neighbor_set.into_iter().collect();
+    }
+
+    // Remaining neighbors on face
+    neighbor_set.insert(serialize_res1(origin, (quintant + 3) % 5));
+    neighbor_set.insert(serialize_res1(origin, (quintant + 2) % 5));
+
+    // Left & right quintant neighbors of C
+    neighbor_set.insert(serialize_res1(adjacent_origin, (adjacent_quintant + 4) % 5));
+    neighbor_set.insert(serialize_res1(adjacent_origin, (adjacent_quintant + 1) % 5));
+
+    // Two neighbors each from adjacent faces of A & B
+    let (left_adjacent_face_id, left_adjacent_quintant) =
+        FACE_ADJACENCY[origin.id as usize][left_q];
+    let left_adjacent_origin = &origins[left_adjacent_face_id as usize];
+    neighbor_set.insert(serialize_res1(left_adjacent_origin, left_adjacent_quintant));
+    neighbor_set.insert(serialize_res1(
+        left_adjacent_origin,
+        (left_adjacent_quintant + 4) % 5,
+    ));
+
+    let (right_adjacent_face_id, right_adjacent_quintant) =
+        FACE_ADJACENCY[origin.id as usize][right_q];
+    let right_adjacent_origin = &origins[right_adjacent_face_id as usize];
+    neighbor_set.insert(serialize_res1(
+        right_adjacent_origin,
+        right_adjacent_quintant,
+    ));
+    neighbor_set.insert(serialize_res1(
+        right_adjacent_origin,
+        (right_adjacent_quintant + 1) % 5,
+    ));
+
+    neighbor_set.into_iter().collect()
+}
+
 /// Get all neighbors of a cell across quintant and face boundaries.
 pub fn get_global_cell_neighbors(cell_id: u64, edge_only: bool) -> Vec<u64> {
     let cell = match deserialize(cell_id) {
@@ -138,8 +223,11 @@ pub fn get_global_cell_neighbors(cell_id: u64, edge_only: bool) -> Vec<u64> {
     let origin = &origins[cell.origin_id as usize];
     let resolution = cell.resolution;
 
-    if resolution < FIRST_HILBERT_RESOLUTION {
-        return Vec::new(); // No neighbors for res 0-1
+    if resolution == 0 {
+        return get_res0_neighbors(origin);
+    }
+    if resolution == 1 {
+        return get_res1_neighbors(origin, cell.segment, edge_only);
     }
 
     let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
