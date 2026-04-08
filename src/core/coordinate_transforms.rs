@@ -139,20 +139,24 @@ pub fn from_lon_lat(lonlat: LonLat) -> Spherical {
     Spherical::new(theta, phi)
 }
 
+/// Normalize a longitude value to the range [-180, 180)
+pub fn normalize_longitude(lon: f64) -> f64 {
+    ((lon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+}
+
 /// Convert spherical coordinates to longitude/latitude
 pub fn to_lon_lat(spherical: Spherical) -> LonLat {
     let theta = spherical.theta();
     let phi = spherical.phi();
 
-    let longitude = rad_to_deg(theta);
-    let longitude = Degrees::new_unchecked(longitude.get() - LONGITUDE_OFFSET);
+    let longitude = normalize_longitude(rad_to_deg(theta).get() - LONGITUDE_OFFSET);
 
     let authalic_lat = Radians::new_unchecked(std::f64::consts::FRAC_PI_2 - phi.get());
     let authalic = AuthalicProjection;
     let geodetic_lat = authalic.inverse(authalic_lat);
     let latitude = rad_to_deg(geodetic_lat);
 
-    LonLat::new(longitude.get(), latitude.get())
+    LonLat::new(longitude, latitude.get())
 }
 
 /// Normalizes longitude values in a contour to handle antimeridian crossing
@@ -196,8 +200,7 @@ pub fn normalize_longitudes(contour: Contour) -> Contour {
         center_lon = contour[0].longitude();
     }
 
-    // Normalize center longitude to be in the range -180 to 180
-    center_lon = ((center_lon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0;
+    center_lon = normalize_longitude(center_lon);
 
     // Normalize each point relative to center
     contour
