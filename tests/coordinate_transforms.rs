@@ -218,9 +218,15 @@ fn test_lonlat_spherical_conversions() {
         let spherical = from_lon_lat(lonlat);
         let result = to_lon_lat(spherical);
 
+        // 180 and -180 are equivalent longitudes (antimeridian)
+        let expected_lon = if lonlat.longitude() == 180.0 {
+            -180.0
+        } else {
+            lonlat.longitude()
+        };
         assert_relative_eq!(
             result.longitude(),
-            lonlat.longitude(),
+            expected_lon,
             epsilon = 1e-6 // Slightly higher tolerance due to simplified conversion
         );
         assert_relative_eq!(

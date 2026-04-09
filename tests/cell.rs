@@ -4,6 +4,7 @@ use a5::core::cell::{
 };
 use a5::core::hex::hex_to_u64;
 use a5::core::serialization::{deserialize, MAX_RESOLUTION};
+use approx::assert_relative_eq;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -211,5 +212,72 @@ fn test_cell_boundary_contains_original_point() {
             }
         }
         panic!("{}", failure_message);
+    }
+}
+
+#[derive(Deserialize)]
+struct CellToLonLatFixture {
+    #[allow(dead_code)]
+    input_lonlat: [f64; 2],
+    #[allow(dead_code)]
+    resolution: i32,
+    cell_id: String,
+    center_lonlat: [f64; 2],
+}
+
+fn load_cell_to_lonlat_fixtures() -> Vec<CellToLonLatFixture> {
+    let data = include_str!("fixtures/cell-to-lonlat.json");
+    serde_json::from_str(data).expect("Failed to parse cell-to-lonlat fixtures")
+}
+
+#[test]
+fn test_cell_to_lonlat_longitude_in_valid_range() {
+    let fixtures = load_cell_to_lonlat_fixtures();
+
+    for fixture in &fixtures {
+        let cell = hex_to_u64(&fixture.cell_id).expect("Failed to parse hex");
+        let lonlat = cell_to_lonlat(cell).expect("Failed to get lonlat");
+
+        assert!(
+            lonlat.longitude() >= -180.0,
+            "lon {} < -180 for cell {}",
+            lonlat.longitude(),
+            fixture.cell_id
+        );
+        assert!(
+            lonlat.longitude() <= 180.0,
+            "lon {} > 180 for cell {}",
+            lonlat.longitude(),
+            fixture.cell_id
+        );
+        assert!(
+            lonlat.latitude() >= -90.0,
+            "lat {} < -90 for cell {}",
+            lonlat.latitude(),
+            fixture.cell_id
+        );
+        assert!(
+            lonlat.latitude() <= 90.0,
+            "lat {} > 90 for cell {}",
+            lonlat.latitude(),
+            fixture.cell_id
+        );
+    }
+}
+
+#[test]
+fn test_cell_to_lonlat_matches_fixture_values() {
+    let fixtures = load_cell_to_lonlat_fixtures();
+
+    for fixture in &fixtures {
+        let cell = hex_to_u64(&fixture.cell_id).expect("Failed to parse hex");
+        let lonlat = cell_to_lonlat(cell).expect("Failed to get lonlat");
+
+        assert_relative_eq!(
+            lonlat.longitude(),
+            fixture.center_lonlat[0],
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(lonlat.latitude(), fixture.center_lonlat[1], epsilon = 1e-10);
     }
 }
