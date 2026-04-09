@@ -278,10 +278,6 @@ fn test_cell_to_lonlat_matches_fixture_values() {
             fixture.center_lonlat[0],
             epsilon = 1e-10
         );
-        assert_relative_eq!(
-            lonlat.latitude(),
-            fixture.center_lonlat[1],
-            epsilon = 1e-10
-        );
+        assert_relative_eq!(lonlat.latitude(), fixture.center_lonlat[1], epsilon = 1e-10);
     }
 }
