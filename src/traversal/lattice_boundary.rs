@@ -123,13 +123,7 @@ fn push_deltas(
 ///
 /// The result may contain duplicates and the order is not stable; callers
 /// deduplicate (via Set) or accept duplicates if their downstream pipeline tolerates them.
-///
-/// `skip_corners` skips the `[-max_row, max_row, 0]` corner case.
-pub fn get_boundary_neighbors(
-    ctx: &BoundaryContext,
-    edge_only: bool,
-    skip_corners: bool,
-) -> Vec<u64> {
+pub fn get_boundary_neighbors(ctx: &BoundaryContext, edge_only: bool) -> Vec<u64> {
     let mut out: Vec<u64> = Vec::new();
     let triple = ctx.triple;
     let parity = ctx.parity;
@@ -212,7 +206,7 @@ pub fn get_boundary_neighbors(
     // Base-left corner [-max_row, max_row, 0]: 3 dodecahedron faces meet at this vertex.
     // The symmetric base-right corner is implicitly covered: its cross-quintant and
     // cross-face paths land on the [-max_row, max_row, 0] cell of neighboring quintants.
-    if !skip_corners && triple.x == -max_row && triple.y == max_row && triple.z == 0 {
+    if triple.x == -max_row && triple.y == max_row && triple.z == 0 {
         // Vertex neighbor 1: across the previous quintant's base edge
         let prev_quintant = (source_quintant + 4) % 5;
         let (prev_adj_face_id, prev_adj_quintant) =

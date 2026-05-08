@@ -317,3 +317,22 @@ pub fn a5cell_contains_point(cell: &A5Cell, point: LonLat) -> Result<f64, String
 
     Ok(containment_result)
 }
+
+/// Tests whether the segment between two LonLat points intersects a cell.
+///
+/// The test runs entirely in the cell's Face coordinate system: both endpoints
+/// are projected via the dodecahedron projection, then checked against the
+/// pentagon's straight 2D edges. The segment is treated as a 2D straight line
+/// in Face coords — accurate when the segment is short relative to the face
+/// (DSEA distortion is negligible at sub-cell scales).
+pub fn cell_intersects_segment(cell_id: u64, a: LonLat, b: LonLat) -> Result<bool, String> {
+    if cell_id == WORLD_CELL {
+        return Ok(true);
+    }
+    let cell = deserialize(cell_id)?;
+    let pentagon = get_pentagon(&cell)?;
+    let dodecahedron = DodecahedronProjection::get_thread_local();
+    let a_face = dodecahedron.forward(from_lon_lat(a), cell.origin_id)?;
+    let b_face = dodecahedron.forward(from_lon_lat(b), cell.origin_id)?;
+    Ok(pentagon.intersects_segment(a_face, b_face))
+}

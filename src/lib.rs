@@ -35,6 +35,7 @@ pub use core::compact::{compact, uncompact};
 // Traversal
 pub use traversal::cap::spherical_cap;
 pub use traversal::grid_disk::{grid_disk, grid_disk_vertex};
+pub use traversal::line::line_string_to_cells;
 
 // Types
 pub use coordinate_systems::{Degrees, LonLat, Radians};
