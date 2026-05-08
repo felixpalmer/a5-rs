@@ -13,10 +13,42 @@ use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTIO
 use crate::core::tiling::{
     get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices,
 };
-use crate::core::utils::A5Cell;
+use crate::core::utils::{A5Cell, OriginId};
 use crate::geometry::pentagon::PentagonShape;
 use crate::projections::dodecahedron::DodecahedronProjection;
+use std::cell::RefCell;
 use std::collections::HashSet;
+
+// Single-entry cache of the most recent successful lookup. Speeds up
+// dense-sample workloads (polygon boundary tracing, line tracing) where
+// consecutive calls often land in the same cell. The cache stores the
+// pre-computed pentagon + origin so the hit-test is just one projection
+// + one pentagon containment check.
+struct LastResult {
+    cell_id: u64,
+    pentagon: PentagonShape,
+    origin_id: OriginId,
+    resolution: i32,
+}
+
+thread_local! {
+    static LAST_RESULT: RefCell<Option<LastResult>> = const { RefCell::new(None) };
+}
+
+/// Update the single-entry cache with a successful (cell, cell_id) pair.
+fn cache_result(cell: &A5Cell, cell_id: u64, resolution: i32) -> Result<u64, String> {
+    let pentagon = get_pentagon(cell)?;
+    let origin_id = cell.origin_id;
+    LAST_RESULT.with(|c| {
+        *c.borrow_mut() = Some(LastResult {
+            cell_id,
+            pentagon,
+            origin_id,
+            resolution,
+        });
+    });
+    Ok(cell_id)
+}
 
 /// Convert lon/lat coordinates to A5 cell ID
 pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
@@ -31,45 +63,72 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
         return serialize(&estimate);
     }
 
+    // Try the cached pentagon first — skips the full estimate pipeline when
+    // consecutive calls land in the same cell (common in dense-sample loops).
+    let cached_hit = LAST_RESULT.with(|c| -> Result<Option<u64>, String> {
+        let last_ref = c.borrow();
+        let last = match last_ref.as_ref() {
+            Some(l) if l.resolution == resolution => l,
+            _ => return Ok(None),
+        };
+        let spherical = from_lon_lat(lonlat);
+        let dodecahedron = DodecahedronProjection::get_thread_local();
+        let projected = dodecahedron.forward(spherical, last.origin_id)?;
+        if last.pentagon.contains_point(projected) > 0.0 {
+            Ok(Some(last.cell_id))
+        } else {
+            Ok(None)
+        }
+    })?;
+    if let Some(cell_id) = cached_hit {
+        return Ok(cell_id);
+    }
+
+    // Try the original point's projection-based estimate. Common case for
+    // non-boundary points.
+    let first_estimate = lonlat_to_estimate(lonlat, resolution)?;
+    let first_key = serialize(&first_estimate)?;
+    let first_distance = a5cell_contains_point(&first_estimate, lonlat)?;
+    if first_distance > 0.0 {
+        return cache_result(&first_estimate, first_key, resolution);
+    }
+
+    // Spiral search: perturb lonLat to find nearby estimate cells (the projection
+    // approximation can land in a neighbor at pentagon boundaries). Samples are
+    // generated lazily — if the first sample hits we skip 25 trig+alloc ops.
     let hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION;
-    let mut samples = vec![lonlat];
     let n = 25;
     let scale = 50.0 / 2.0_f64.powi(hilbert_resolution);
+    let mut estimate_set: HashSet<u64> = HashSet::new();
+    estimate_set.insert(first_key);
+    let mut cells: Vec<(A5Cell, f64)> = vec![(first_estimate, first_distance)];
 
-    for i in 0..n {
+    // i=0 yields R=0 → same as the original sample, so start at i=1.
+    for i in 1..n {
         let r = (i as f64 / n as f64) * scale;
-        let coordinate = LonLat::new(
+        let sample = LonLat::new(
             lonlat.longitude() + (i as f64).cos() * r,
             lonlat.latitude() + (i as f64).sin() * r,
         );
-        samples.push(coordinate);
-    }
-
-    // Deduplicate estimates
-    let mut estimate_set = HashSet::new();
-    let mut unique_estimates = Vec::new();
-    let mut cells = Vec::new();
-
-    for sample in samples {
         let estimate = lonlat_to_estimate(sample, resolution)?;
         let estimate_key = serialize(&estimate)?;
-        if !estimate_set.contains(&estimate_key) {
-            estimate_set.insert(estimate_key);
-            unique_estimates.push(estimate.clone());
-
-            // Check if we have a hit, storing distance if not
-            let distance = a5cell_contains_point(&estimate, lonlat)?;
-            if distance > 0.0 {
-                return serialize(&estimate);
-            } else {
-                cells.push((estimate, distance));
-            }
+        if estimate_set.contains(&estimate_key) {
+            continue;
         }
+        estimate_set.insert(estimate_key);
+        let distance = a5cell_contains_point(&estimate, lonlat)?;
+        if distance > 0.0 {
+            return cache_result(&estimate, estimate_key, resolution);
+        }
+        cells.push((estimate, distance));
     }
 
-    // As fallback, sort cells by distance and use the closest one
+    // Fallback: pick the closest estimate. Cache it so subsequent dense-sample
+    // calls still benefit even though this lookup was approximate.
     cells.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    serialize(&cells[0].0)
+    let (fallback, _) = &cells[0];
+    let fallback_key = serialize(fallback)?;
+    cache_result(fallback, fallback_key, resolution)
 }
 
 /// The ij_to_s function uses the triangular lattice which only approximates the pentagon lattice
