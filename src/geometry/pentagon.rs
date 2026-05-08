@@ -7,6 +7,25 @@ use crate::coordinate_systems::Face;
 pub type Pentagon = [Face; 5];
 pub type Triangle = [Face; 3];
 
+/// 2D segment-vs-segment intersection test.
+/// Returns true iff the closed segments p1→p2 and p3→p4 share at least one point.
+fn segments_2d_intersect(p1: Face, p2: Face, p3: Face, p4: Face) -> bool {
+    let d1x = p2.x() - p1.x();
+    let d1y = p2.y() - p1.y();
+    let d2x = p4.x() - p3.x();
+    let d2y = p4.y() - p3.y();
+    let denom = d1x * d2y - d1y * d2x;
+    if denom.abs() < 1e-12 {
+        return false;
+    }
+
+    let dx = p3.x() - p1.x();
+    let dy = p3.y() - p1.y();
+    let t = (dx * d2y - dy * d2x) / denom;
+    let u = (dx * d1y - dy * d1x) / denom;
+    (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u)
+}
+
 #[derive(Debug, Clone)]
 pub struct PentagonShape {
     vertices: Vec<Face>,
@@ -149,6 +168,26 @@ impl PentagonShape {
         }
 
         d_max
+    }
+
+    /// Tests whether a 2D segment intersects this pentagon.
+    /// True if either endpoint is inside, or any pentagon edge crosses the segment.
+    /// Operates entirely in Face coordinates — pentagon edges are exact straight lines
+    /// here, so the test has no projection-induced approximation.
+    pub fn intersects_segment(&self, a: Face, b: Face) -> bool {
+        if self.contains_point(a) > 0.0 || self.contains_point(b) > 0.0 {
+            return true;
+        }
+
+        let n = self.vertices.len();
+        for i in 0..n {
+            let v1 = self.vertices[i];
+            let v2 = self.vertices[(i + 1) % n];
+            if segments_2d_intersect(a, b, v1, v2) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Splits each edge of the pentagon into the specified number of segments

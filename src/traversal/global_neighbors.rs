@@ -165,7 +165,7 @@ pub fn get_global_cell_neighbors(cell_id: u64, edge_only: bool) -> Vec<u64> {
         max_row: (1i32 << hilbert_res) - 1,
         resolution,
     };
-    for cell_id in get_boundary_neighbors(&ctx, edge_only, false) {
+    for cell_id in get_boundary_neighbors(&ctx, edge_only) {
         neighbor_set.insert(cell_id);
     }
 
