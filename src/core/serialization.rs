@@ -283,49 +283,92 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
     Ok(children)
 }
 
+/// Cheap predicate that mirrors the first three checks in `get_resolution`:
+/// res-30 cells are exactly those whose low bits match one of the three
+/// variable-width quintant marker patterns.
+fn is_max_resolution(index: u64) -> bool {
+    (index & 1) != 0 || (index & 0b111) == 0b100 || (index & 0b11111) == 0b10000
+}
+
+/// Re-pack a res-30 cell into the standard res-29 bit layout (6-bit quintant
+/// in [63..58], 56-bit S in [57..2], marker at bit 1). The 58-bit res-30 S is
+/// truncated by 2 bits, exactly as `cell_to_parent(_, 29)` would.
+fn normalize_res30(index: u64) -> u64 {
+    let (q_shift, q_offset, marker_bits): (u32, u64, u32) = if (index & 1) != 0 {
+        (59, 0, 1)
+    } else if (index & 0b100) != 0 {
+        (61, 32, 3)
+    } else {
+        (63, 40, 5)
+    };
+    let quintant = (index >> q_shift) + q_offset;
+    let s58 = (index >> marker_bits) & ((1u64 << 58) - 1);
+    (quintant << 58) | ((s58 >> 2) << 2) | (1u64 << 1)
+}
+
+/// Walk a cell up the hierarchy to a coarser resolution.
+///
+/// Implemented as pure bit ops over the encoded index — no deserialize /
+/// serialize round-trip. The three encoding regimes (non-Hilbert res 0/1,
+/// Hilbert res 2..29, variable-width res 30) all reduce to the same shape
+/// after a small amount of normalization.
 pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64, String> {
-    let cell = deserialize(index)?;
-    let A5Cell {
-        origin_id,
-        segment,
-        s,
-        resolution: current_resolution,
-    } = cell;
-    let new_resolution = parent_resolution.unwrap_or(current_resolution - 1);
+    let parent_resolution = parent_resolution.unwrap_or_else(|| get_resolution(index) - 1);
 
     // Special case: parent of resolution 0 cells is the world cell
-    if new_resolution == -1 {
+    if parent_resolution == -1 {
         return Ok(WORLD_CELL);
     }
-
-    if new_resolution < 0 {
+    if !(-1..=MAX_RESOLUTION).contains(&parent_resolution) {
         return Err(format!(
-            "Target resolution ({}) cannot be negative",
-            new_resolution
+            "Target resolution ({}) is out of range",
+            parent_resolution
+        ));
+    }
+    if index == WORLD_CELL {
+        return Err(format!(
+            "Target resolution ({}) must be equal to or less than current resolution (-1)",
+            parent_resolution
         ));
     }
 
-    if new_resolution > current_resolution {
-        return Err(format!(
-            "Target resolution ({}) must be equal to or less than current resolution ({})",
-            new_resolution, current_resolution
-        ));
+    // Normalize res-30 children to the standard res-29 layout. After this,
+    // the fast paths below treat the cell as a Hilbert-range cell.
+    let mut c = index;
+    if is_max_resolution(index) {
+        if parent_resolution == MAX_RESOLUTION {
+            return Ok(index); // identity (already res 30)
+        }
+        c = normalize_res30(index);
+        if parent_resolution == MAX_RESOLUTION - 1 {
+            return Ok(c);
+        }
     }
 
-    if new_resolution == current_resolution {
-        return Ok(index);
+    if parent_resolution >= FIRST_HILBERT_RESOLUTION {
+        // Hilbert-range parent: clear bits below the parent marker, set the marker.
+        // Identity (parent res === child res) falls out for free: the marker lands
+        // in the same position and bits below the keep cut are already zero.
+        let keep_shift = (60 - 2 * parent_resolution) as u32;
+        return Ok(
+            ((c >> keep_shift) << keep_shift) | (1u64 << (59 - 2 * parent_resolution) as u32)
+        );
     }
 
-    let resolution_diff = current_resolution - new_resolution;
-    let shifted_s = s >> (2 * resolution_diff);
-    let new_cell = A5Cell {
-        origin_id,
-        segment,
-        s: shifted_s,
-        resolution: new_resolution,
-    };
+    if parent_resolution == 1 {
+        // Top 6 bits already encode 5*originId + segmentN; only the marker moves.
+        // Identity (cell already at res 1) is preserved.
+        return Ok(((c >> 58) << 58) | (1u64 << 56));
+    }
 
-    serialize(&new_cell)
+    // parent_resolution == 0: top 6 bits change from quintant (0-59) to originId (0-11).
+    // Identity (cell already at res 0) needs an explicit guard since dividing
+    // an originId by 5 would corrupt it. A res-0 cell has bit 57 set with all
+    // lower bits zero — equivalently, all bottom 57 bits are zero.
+    if (c & ((1u64 << 57) - 1)) == 0 {
+        return Ok(c);
+    }
+    Ok((((c >> 58) / 5) << 58) | (1u64 << 57))
 }
 
 /// Returns resolution 0 cells of the A5 system, which serve as a starting point
@@ -363,6 +406,23 @@ pub fn is_first_child(index: u64, resolution: Option<i32>) -> bool {
     let s_position = 2 * (MAX_RESOLUTION - resolution) as u32;
     let s_mask = 3u64 << s_position; // Mask for the 2 LSBs of S
     (index & s_mask) == 0
+}
+
+/// Bit-level descendant test: is `child` the same cell as `parent`, or one of
+/// its descendants at any deeper resolution? Compares the high (quintant +
+/// parent's Hilbert) bits in a single shift, no deserialize needed.
+///
+/// Restricted to the Hilbert range: `parent_resolution` must be in
+/// [FIRST_HILBERT_RESOLUTION .. MAX_RESOLUTION - 1], and `child` must not be
+/// a resolution-30 cell (whose encoding uses a variable quintant shift).
+/// Callers handling those cases should fall back to `cell_to_parent` equality.
+pub fn is_child_of(child: u64, parent: u64, parent_resolution: i32) -> bool {
+    // Parent's identifying bits occupy positions 63..(60-2P): 6 quintant bits
+    // + 2(P-1) Hilbert bits. Bit (59-2P) is the marker, below that is zero.
+    // Shifting both right by (60-2P) keeps exactly those identifying bits and
+    // discards the marker, so a descendant matches iff the high bits match.
+    let shift = (60 - 2 * parent_resolution) as u32;
+    (child >> shift) == (parent >> shift)
 }
 
 /// Difference between two neighbouring sibling cells at a given resolution
