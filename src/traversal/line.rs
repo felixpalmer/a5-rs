@@ -6,11 +6,10 @@ use std::collections::HashSet;
 
 use crate::coordinate_systems::LonLat;
 use crate::core::cell::{cell_intersects_segment, lonlat_to_cell};
-use crate::core::constants::AUTHALIC_RADIUS_EARTH;
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_lon_lat, to_spherical};
 use crate::traversal::cap::estimate_cell_radius;
 use crate::traversal::lattice_neighbors::get_lattice_neighbors;
-use crate::utils::vector::slerp;
+use crate::utils::great_circle::sample_great_circle_arc;
 
 /// Trace cells along a polyline defined by a sequence of waypoints.
 ///
@@ -47,23 +46,15 @@ pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec
         let end = waypoints[i + 1];
         let start_vec = to_cartesian(from_lon_lat(start));
         let end_vec = to_cartesian(from_lon_lat(end));
-        let dot = (start_vec.x() * end_vec.x()
-            + start_vec.y() * end_vec.y()
-            + start_vec.z() * end_vec.z())
-        .clamp(-1.0, 1.0);
-        let dist = dot.acos() * AUTHALIC_RADIUS_EARTH;
 
-        // Sample the great-circle at half-cell-radius spacing. The endpoints are
-        // always included; num_subsegments >= 1 (so we always get the start→end pair
-        // even for short waypoint-to-waypoint hops).
-        let num_subsegments = ((dist / sample_interval).ceil() as usize).max(1);
+        // Sample the great-circle at half-cell-radius spacing. Endpoints are
+        // always included; even for short hops we get the start→end pair.
+        let interior = sample_great_circle_arc(start_vec, end_vec, sample_interval);
+        let num_subsegments = interior.len() + 1;
         let mut samples: Vec<LonLat> = vec![start; num_subsegments + 1];
         samples[num_subsegments] = end;
-        if num_subsegments > 1 {
-            for (j, sample) in samples.iter_mut().enumerate().take(num_subsegments).skip(1) {
-                let interp = slerp(start_vec, end_vec, j as f64 / num_subsegments as f64);
-                *sample = to_lon_lat(to_spherical(interp));
-            }
+        for (j, v) in interior.iter().enumerate() {
+            samples[j + 1] = to_lon_lat(to_spherical(*v));
         }
         let mut sample_cells: Vec<u64> = Vec::with_capacity(samples.len());
         for s in &samples {

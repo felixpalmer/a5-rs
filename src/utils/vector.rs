@@ -84,7 +84,26 @@ pub fn quadruple_product(a: Cartesian, b: Cartesian, c: Cartesian, d: Cartesian)
     subtract(scaled_b, scaled_a)
 }
 
-/// Spherical linear interpolation between two vectors
+/// Cached `gamma` and `sin(gamma)` for a fixed (A, B) pair, so loops that
+/// slerp many times along the same arc don't re-run `angle` and `sin`.
+/// Build with `precompute_slerp(a, b)` and pass to `slerp_ctx` as the optional context.
+#[derive(Debug, Clone, Copy)]
+pub struct SlerpContext {
+    pub gamma: f64,
+    pub sin_gamma: f64,
+}
+
+/// Precompute the angle and its sine for a pair of vectors so that subsequent
+/// slerp calls along the same arc avoid recomputing them.
+pub fn precompute_slerp(a: Cartesian, b: Cartesian) -> SlerpContext {
+    let gamma = angle(a, b);
+    SlerpContext {
+        gamma,
+        sin_gamma: gamma.sin(),
+    }
+}
+
+/// Spherical linear interpolation between two vectors.
 ///
 /// # Arguments
 ///
@@ -96,15 +115,25 @@ pub fn quadruple_product(a: Cartesian, b: Cartesian, c: Cartesian, d: Cartesian)
 ///
 /// The interpolated vector
 pub fn slerp(a: Cartesian, b: Cartesian, t: f64) -> Cartesian {
-    let gamma = angle(a, b);
+    slerp_ctx(a, b, t, None)
+}
+
+/// Spherical linear interpolation between two vectors, with an optional
+/// precomputed `{gamma, sin_gamma}` context. Supply when slerping many `t`
+/// values along the same arc to avoid recomputing them.
+pub fn slerp_ctx(a: Cartesian, b: Cartesian, t: f64, ctx: Option<SlerpContext>) -> Cartesian {
+    let gamma = ctx.map(|c| c.gamma).unwrap_or_else(|| angle(a, b));
     if gamma < 1e-12 {
         return lerp(a, b, t);
     }
-    let weight_a = ((1.0 - t) * gamma).sin() / gamma.sin();
-    let weight_b = (t * gamma).sin() / gamma.sin();
-    let scaled_a = scale(a, weight_a);
-    let scaled_b = scale(b, weight_b);
-    add(scaled_a, scaled_b)
+    let sin_gamma = ctx.map(|c| c.sin_gamma).unwrap_or_else(|| gamma.sin());
+    let weight_a = ((1.0 - t) * gamma).sin() / sin_gamma;
+    let weight_b = (t * gamma).sin() / sin_gamma;
+    Cartesian::new(
+        weight_a * a.x() + weight_b * b.x(),
+        weight_a * a.y() + weight_b * b.y(),
+        weight_a * a.z() + weight_b * b.z(),
+    )
 }
 
 // Helper functions for 3D vector operations
@@ -159,11 +188,6 @@ fn subtract(a: Cartesian, b: Cartesian) -> Cartesian {
 /// Distance between two 3D vectors
 pub fn vec3_distance(a: &Cartesian, b: &Cartesian) -> f64 {
     length(subtract(*a, *b))
-}
-
-/// Add two vectors
-fn add(a: Cartesian, b: Cartesian) -> Cartesian {
-    Cartesian::new(a.x() + b.x(), a.y() + b.y(), a.z() + b.z())
 }
 
 /// Scale a vector by a scalar
