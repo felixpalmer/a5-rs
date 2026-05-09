@@ -145,8 +145,7 @@ fn test_cell_boundary_contains_original_point() {
 
         // Test resolutions from 1 to MAX_RESOLUTION-1
         for resolution in 1..MAX_RESOLUTION {
-            // Issues in polar regions, TODO fix
-            if resolution == MAX_RESOLUTION || test_lonlat.latitude().abs() > 77.0 {
+            if resolution == MAX_RESOLUTION {
                 continue;
             }
 

@@ -51,6 +51,17 @@ impl DodecahedronProjection {
 
     /// Projects spherical coordinates to face coordinates using dodecahedron projection
     pub fn forward(&mut self, spherical: Spherical, origin_id: OriginId) -> Result<Face, String> {
+        self.forward_cartesian(to_cartesian(spherical), origin_id)
+    }
+
+    /// Same as `forward` but takes a Cartesian unit vector — skips the
+    /// `to_cartesian` round-trip when the caller already has the Cartesian
+    /// form (e.g. in the spiral-search path inside `spherical_to_cell`).
+    pub fn forward_cartesian(
+        &mut self,
+        unprojected: Cartesian,
+        origin_id: OriginId,
+    ) -> Result<Face, String> {
         let origins = get_origins();
         if (origin_id as usize) >= origins.len() {
             return Err("Invalid origin ID".to_string());
@@ -58,7 +69,6 @@ impl DodecahedronProjection {
         let origin = &origins[origin_id as usize];
 
         // Transform back origin space
-        let unprojected = to_cartesian(spherical);
         let out = transform_quat(unprojected, origin.inverse_quat);
 
         // Unproject gnomonically to polar coordinates in origin space

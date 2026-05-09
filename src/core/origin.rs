@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coordinate_systems::{Radians, Spherical};
+use crate::coordinate_systems::{Cartesian, Radians, Spherical};
 use crate::core::constants::{INTERHEDRAL_ANGLE, PI_OVER_5, TWO_PI_OVER_5};
+use crate::core::coordinate_transforms::to_cartesian;
 use crate::core::dodecahedron_quaternions::QUATERNIONS;
 use crate::core::hilbert::Orientation;
 use crate::core::utils::{Origin, OriginId, Quat};
@@ -86,6 +87,7 @@ fn generate_origins() -> Vec<Origin> {
         let origin = Origin {
             id: origin_id,
             axis,
+            axis_cartesian: to_cartesian(axis),
             quat: quaternion,
             inverse_quat,
             angle,
@@ -198,6 +200,26 @@ pub fn find_nearest_origin(point: Spherical) -> &'static Origin {
 
     for origin in origins {
         let distance = haversine(point, origin.axis);
+        if distance < min_distance {
+            min_distance = distance;
+            nearest = origin;
+        }
+    }
+
+    nearest
+}
+
+/// Same as `find_nearest_origin` but takes a Cartesian unit vector. The
+/// argmin of `1 − a·b` matches the argmin of haversine, so this returns
+/// the same origin without any spherical-trig conversions.
+pub fn find_nearest_origin_cartesian(c: Cartesian) -> &'static Origin {
+    let origins = get_origins();
+    let mut min_distance = f64::INFINITY;
+    let mut nearest = &origins[0];
+
+    for origin in origins {
+        let ax = origin.axis_cartesian;
+        let distance = 1.0 - (c.x() * ax.x() + c.y() * ax.y() + c.z() * ax.z());
         if distance < min_distance {
             min_distance = distance;
             nearest = origin;
