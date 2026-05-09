@@ -2,20 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coordinate_systems::{Face, LonLat, Radians, Spherical};
+use crate::coordinate_systems::{Cartesian, Face, LonLat, Spherical};
 use crate::core::constants::PI_OVER_5;
 use crate::core::coordinate_transforms::{
     face_to_ij, from_lon_lat, normalize_longitudes, to_lon_lat, to_polar,
 };
 use crate::core::hilbert::{ij_to_s, s_to_anchor};
-use crate::core::origin::{find_nearest_origin, quintant_to_segment, segment_to_quintant};
+use crate::core::origin::{
+    find_nearest_origin, find_nearest_origin_cartesian, quintant_to_segment, segment_to_quintant,
+};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL};
 use crate::core::tiling::{
     get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices,
 };
-use crate::core::utils::{A5Cell, OriginId};
+use crate::core::utils::{A5Cell, Origin, OriginId};
 use crate::geometry::pentagon::PentagonShape;
 use crate::projections::dodecahedron::DodecahedronProjection;
+use crate::traversal::global_neighbors::get_global_cell_neighbors;
+use crate::utils::spiral::{Spiral, SPIRAL_SAMPLE_COUNT};
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -101,25 +105,17 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
         return cache_result(&first_estimate, first_key, resolution);
     }
 
-    // Spiral search: perturb the point to find nearby estimate cells (the
-    // projection approximation can land in a neighbor at pentagon boundaries).
-    // Samples are generated lazily — if the first sample hits we skip 25 trig+alloc ops.
+    // Spiral search: perturb the point in the tangent plane to find nearby
+    // estimate cells (see src/utils/spiral.rs).
     let hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION;
-    let n = 25;
-    // 50 degrees / 2^hilbertResolution, expressed as radians for spherical-space perturbation.
-    let scale = (50.0 * std::f64::consts::PI / 180.0) / 2.0_f64.powi(hilbert_resolution);
+    let scale = SPIRAL_SCALE_RAD / 2.0_f64.powi(hilbert_resolution);
     let mut estimate_set: HashSet<u64> = HashSet::new();
     estimate_set.insert(first_key);
-    let mut cells: Vec<(A5Cell, f64)> = vec![(first_estimate, first_distance)];
+    let mut cells: Vec<(u64, f64)> = vec![(first_key, first_distance)];
 
-    // i=0 yields R=0 → same as the original sample, so start at i=1.
-    for i in 1..n {
-        let r = (i as f64 / n as f64) * scale;
-        let sample = Spherical::new(
-            Radians::new_unchecked(spherical.theta().get() + (i as f64).cos() * r),
-            Radians::new_unchecked(spherical.phi().get() + (i as f64).sin() * r),
-        );
-        let estimate = spherical_to_estimate(sample, resolution)?;
+    let spiral = Spiral::new(spherical, scale);
+    for i in 0..SPIRAL_SAMPLE_COUNT {
+        let estimate = cartesian_to_estimate(spiral.sample(i), resolution)?;
         let estimate_key = serialize(&estimate)?;
         if estimate_set.contains(&estimate_key) {
             continue;
@@ -129,25 +125,66 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
         if distance > 0.0 {
             return cache_result(&estimate, estimate_key, resolution);
         }
-        cells.push((estimate, distance));
+        cells.push((estimate_key, distance));
     }
 
-    // Fallback: pick the closest estimate. Cache it so subsequent dense-sample
-    // calls still benefit even though this lookup was approximate.
+    // Spiral exhausted without finding a strict container. This is reachable
+    // for points right at the polar singularity at very high resolutions,
+    // where re-projecting any tangent sample snaps back to a small set of
+    // cells while the geometrically-containing cell is offset by one
+    // adjacency step. Fall back to direct neighbours of the closest spiral
+    // candidate, which always finds it.
     cells.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    let (fallback, _) = &cells[0];
-    let fallback_key = serialize(fallback)?;
-    cache_result(fallback, fallback_key, resolution)
+    let k = std::cmp::min(3, cells.len());
+    for j in 0..k {
+        let neighbors = get_global_cell_neighbors(cells[j].0, false);
+        for neighbor_key in neighbors {
+            if estimate_set.contains(&neighbor_key) {
+                continue;
+            }
+            estimate_set.insert(neighbor_key);
+            let neighbor_cell = deserialize(neighbor_key)?;
+            let distance = a5cell_contains_point(&neighbor_cell, spherical)?;
+            if distance > 0.0 {
+                return cache_result(&neighbor_cell, neighbor_key, resolution);
+            }
+            cells.push((neighbor_key, distance));
+        }
+    }
+
+    // True fallback: closest cell wins, even if technically just outside.
+    cells.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let fallback_key = cells[0].0;
+    let fallback = deserialize(fallback_key)?;
+    cache_result(&fallback, fallback_key, resolution)
 }
 
+// Spiral perturbation radius at hilbertResolution=1 (in radians of tangent
+// offset). For higher resolutions we scale by 1/2^hilbertResolution.
+const SPIRAL_SCALE_RAD: f64 = 70.0 * std::f64::consts::PI / 180.0;
+
 /// The ij_to_s function uses the triangular lattice which only approximates the pentagon lattice
-/// Thus this function only returns a cell nearby, and we need to search the neighbourhood to find the correct cell
+/// Thus these functions only return a cell nearby, and we need to search the neighbourhood to find the correct cell
 /// TODO: Implement a more accurate function
 fn spherical_to_estimate(spherical: Spherical, resolution: i32) -> Result<A5Cell, String> {
     let origin = find_nearest_origin(spherical);
-
     let dodecahedron = DodecahedronProjection::get_thread_local();
-    let mut dodec_point = dodecahedron.forward(spherical, origin.id)?;
+    let dodec_point = dodecahedron.forward(spherical, origin.id)?;
+    face_to_estimate(dodec_point, origin, resolution)
+}
+
+fn cartesian_to_estimate(cartesian: Cartesian, resolution: i32) -> Result<A5Cell, String> {
+    let origin = find_nearest_origin_cartesian(cartesian);
+    let dodecahedron = DodecahedronProjection::get_thread_local();
+    let dodec_point = dodecahedron.forward_cartesian(cartesian, origin.id)?;
+    face_to_estimate(dodec_point, origin, resolution)
+}
+
+fn face_to_estimate(
+    mut dodec_point: Face,
+    origin: &Origin,
+    resolution: i32,
+) -> Result<A5Cell, String> {
     let polar = to_polar(dodec_point);
     let quintant = get_quintant_polar(polar);
     let (segment, orientation) = quintant_to_segment(quintant, origin);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coordinate_systems::{Radians, Spherical};
+use crate::coordinate_systems::{Cartesian, Radians, Spherical};
 use crate::core::hilbert::Orientation;
 
 /// Origin identifier type (0-11)
@@ -18,6 +18,8 @@ pub struct Origin {
     pub id: OriginId,
     /// Axis in spherical coordinates
     pub axis: Spherical,
+    /// Precomputed unit vector form of `axis`
+    pub axis_cartesian: Cartesian,
     /// Quaternion for rotation
     pub quat: Quat,
     /// Inverse quaternion for reverse rotation
