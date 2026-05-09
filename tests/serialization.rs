@@ -1,7 +1,7 @@
 use a5::core::origin::get_origins;
 use a5::core::serialization::{
     cell_to_children, cell_to_parent, deserialize, get_res0_cells, get_resolution, get_stride,
-    is_first_child, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
+    is_child_of, is_first_child, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
 };
 use a5::core::utils::A5Cell;
 use serde_json::Value;
@@ -921,4 +921,104 @@ fn test_res30_locations_in_bounds_encode_at_res30() {
         let cell = u64::from_str_radix(hex, 16).unwrap();
         assert_eq!(get_resolution(cell), 30);
     }
+}
+
+// =============================================================================
+// is_child_of tests
+// =============================================================================
+
+#[test]
+fn test_is_child_of_returns_true_for_self_at_same_resolution_hilbert_range() {
+    let origins = get_origins();
+    let origin0 = origins[0].clone();
+    for res in FIRST_HILBERT_RESOLUTION..MAX_RESOLUTION {
+        let cell = serialize(&A5Cell {
+            origin_id: origin0.id,
+            segment: 0,
+            s: 0,
+            resolution: res,
+        })
+        .unwrap();
+        assert!(is_child_of(cell, cell, res), "self failed at res {}", res);
+    }
+}
+
+#[test]
+fn test_is_child_of_returns_true_for_direct_children() {
+    let origins = get_origins();
+    let origin0 = origins[0].clone();
+    for res in FIRST_HILBERT_RESOLUTION..(MAX_RESOLUTION - 1) {
+        let parent = serialize(&A5Cell {
+            origin_id: origin0.id,
+            segment: 0,
+            s: 0,
+            resolution: res,
+        })
+        .unwrap();
+        let children = cell_to_children(parent, None).unwrap();
+        for child in children {
+            assert!(is_child_of(child, parent, res));
+        }
+    }
+}
+
+#[test]
+fn test_is_child_of_returns_true_for_deep_descendants() {
+    let origins = get_origins();
+    let origin0 = origins[0].clone();
+    let parent = serialize(&A5Cell {
+        origin_id: origin0.id,
+        segment: 0,
+        s: 0,
+        resolution: 5,
+    })
+    .unwrap();
+    let mut descendants = vec![parent];
+    for _ in 6..10 {
+        let mut next: Vec<u64> = Vec::new();
+        for c in &descendants {
+            next.extend(cell_to_children(*c, None).unwrap());
+        }
+        descendants = next;
+    }
+    for d in descendants {
+        assert!(is_child_of(d, parent, 5));
+    }
+}
+
+#[test]
+fn test_is_child_of_returns_false_for_siblings() {
+    let origins = get_origins();
+    let origin0 = origins[0].clone();
+    let parent = serialize(&A5Cell {
+        origin_id: origin0.id,
+        segment: 0,
+        s: 0,
+        resolution: 4,
+    })
+    .unwrap();
+    let children = cell_to_children(parent, None).unwrap();
+    for i in 0..children.len() {
+        for j in 0..children.len() {
+            if i == j {
+                continue;
+            }
+            assert!(!is_child_of(children[i], children[j], 5));
+        }
+    }
+}
+
+#[test]
+fn test_is_child_of_returns_false_when_child_is_shallower_than_parent() {
+    let origins = get_origins();
+    let origin0 = origins[0].clone();
+    let grandparent = serialize(&A5Cell {
+        origin_id: origin0.id,
+        segment: 0,
+        s: 0,
+        resolution: 4,
+    })
+    .unwrap();
+    let parent = cell_to_children(grandparent, None).unwrap()[0]; // res 5
+    assert!(!is_child_of(grandparent, parent, 5));
 }

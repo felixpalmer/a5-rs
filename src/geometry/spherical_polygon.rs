@@ -9,6 +9,80 @@ use crate::utils::vector::{slerp, triple_product};
 /// Using [x, y, z] gives equal precision in all directions, unlike spherical coordinates
 pub type SphericalPolygon = Vec<Cartesian>;
 
+/// Spherical point-in-polygon via signed-angle summation. Works for concave
+/// polygons (unlike `SphericalPolygonShape::contains_point`, which assumes
+/// convex "necessary strike"). The math is fully inlined as it's called
+/// per-cell in polygon-fill hot paths.
+pub fn point_in_spherical_polygon(point: Cartesian, vertices: &[Cartesian]) -> bool {
+    let mut angle_sum = 0.0;
+    let n = vertices.len();
+    for i in 0..n {
+        let av = vertices[i];
+        let bv = vertices[(i + 1) % n];
+        let dot_pa = point.x() * av.x() + point.y() * av.y() + point.z() * av.z();
+        let dot_pb = point.x() * bv.x() + point.y() * bv.y() + point.z() * bv.z();
+        let apx = av.x() - dot_pa * point.x();
+        let apy = av.y() - dot_pa * point.y();
+        let apz = av.z() - dot_pa * point.z();
+        let bpx = bv.x() - dot_pb * point.x();
+        let bpy = bv.y() - dot_pb * point.y();
+        let bpz = bv.z() - dot_pb * point.z();
+        let cx = apy * bpz - apz * bpy;
+        let cy = apz * bpx - apx * bpz;
+        let cz = apx * bpy - apy * bpx;
+        angle_sum += (cx * point.x() + cy * point.y() + cz * point.z())
+            .atan2(apx * bpx + apy * bpy + apz * bpz);
+    }
+    angle_sum.abs() > std::f64::consts::PI
+}
+
+/// Ring winding direction: +1 for CCW (interior to the left of edge direction), -1 for CW.
+/// Sums (v_i × v_{i+1}) · centroid across the ring.
+pub fn ring_winding_sign(ring_vecs: &[Cartesian]) -> i32 {
+    let mut cx = 0.0;
+    let mut cy = 0.0;
+    let mut cz = 0.0;
+    for v in ring_vecs {
+        cx += v.x();
+        cy += v.y();
+        cz += v.z();
+    }
+    let len = (cx * cx + cy * cy + cz * cz).sqrt();
+    if len > 0.0 {
+        cx /= len;
+        cy /= len;
+        cz /= len;
+    }
+    let centroid = Cartesian::new(cx, cy, cz);
+
+    let mut sum = 0.0;
+    let n = ring_vecs.len();
+    for i in 0..n {
+        sum += triple_product(centroid, ring_vecs[i], ring_vecs[(i + 1) % n]);
+    }
+    if sum > 0.0 {
+        1
+    } else {
+        -1
+    }
+}
+
+/// Great-circle plane normals for every segment of the ring.
+pub fn ring_segment_normals(ring_vecs: &[Cartesian]) -> Vec<Cartesian> {
+    let n = ring_vecs.len();
+    let mut out: Vec<Cartesian> = Vec::with_capacity(n);
+    for i in 0..n {
+        let a = ring_vecs[i];
+        let b = ring_vecs[(i + 1) % n];
+        out.push(Cartesian::new(
+            a.y() * b.z() - a.z() * b.y(),
+            a.z() * b.x() - a.x() * b.z(),
+            a.x() * b.y() - a.y() * b.x(),
+        ));
+    }
+    out
+}
+
 #[derive(Debug)]
 pub struct SphericalPolygonShape {
     vertices: SphericalPolygon,

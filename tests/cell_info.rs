@@ -1,4 +1,5 @@
 use a5::core::cell_info::{cell_area, get_num_cells};
+use approx::assert_relative_eq;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -46,12 +47,14 @@ fn test_get_num_cells() {
 fn test_cell_area() {
     let fixtures = load_cell_info_fixtures();
 
+    // Use relative-epsilon equality: f64 arithmetic order can drift the result
+    // by 1 ULP between Rust and JS, which would fail assert_eq even when the
+    // computation is correct. Epsilon still catches genuine formula changes.
     for fixture in fixtures.cell_area {
-        assert_eq!(
+        assert_relative_eq!(
             cell_area(fixture.resolution),
             fixture.area_m2,
-            "cell_area failed for resolution {}",
-            fixture.resolution
+            max_relative = 1e-12
         );
     }
 }

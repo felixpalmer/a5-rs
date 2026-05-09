@@ -6,6 +6,7 @@ pub mod cap;
 pub mod global_neighbors;
 pub mod grid_disk;
 pub mod lattice_boundary;
+pub mod lattice_flood_fill;
 pub mod lattice_neighbors;
 pub mod line;
 pub mod neighbors;

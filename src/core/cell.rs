@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coordinate_systems::{Face, LonLat};
+use crate::coordinate_systems::{Face, LonLat, Radians, Spherical};
 use crate::core::constants::PI_OVER_5;
 use crate::core::coordinate_transforms::{
     face_to_ij, from_lon_lat, normalize_longitudes, to_lon_lat, to_polar,
@@ -52,6 +52,15 @@ fn cache_result(cell: &A5Cell, cell_id: u64, resolution: i32) -> Result<u64, Str
 
 /// Convert lon/lat coordinates to A5 cell ID
 pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
+    spherical_to_cell(from_lon_lat(lonlat), resolution)
+}
+
+/// Like `lonlat_to_cell`, but accepts a point already in A5's internal
+/// spherical representation (rotated authalic frame, as produced by
+/// `from_lon_lat` or `to_spherical(authalic_cartesian)`). Skips the redundant
+/// authalic inverse/forward round-trip in dense-sample loops where the input
+/// already comes from authalic Cartesian space (e.g. polygon-fill boundary slerp).
+pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, String> {
     // Resolution -1 represents WORLD_CELL, which covers the entire world
     if resolution == -1 {
         return Ok(WORLD_CELL);
@@ -59,7 +68,7 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
 
     if resolution < FIRST_HILBERT_RESOLUTION {
         // For low resolutions there is no Hilbert curve, so we can just return as the result is exact
-        let estimate = lonlat_to_estimate(lonlat, resolution)?;
+        let estimate = spherical_to_estimate(spherical, resolution)?;
         return serialize(&estimate);
     }
 
@@ -71,7 +80,6 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
             Some(l) if l.resolution == resolution => l,
             _ => return Ok(None),
         };
-        let spherical = from_lon_lat(lonlat);
         let dodecahedron = DodecahedronProjection::get_thread_local();
         let projected = dodecahedron.forward(spherical, last.origin_id)?;
         if last.pentagon.contains_point(projected) > 0.0 {
@@ -86,19 +94,20 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
 
     // Try the original point's projection-based estimate. Common case for
     // non-boundary points.
-    let first_estimate = lonlat_to_estimate(lonlat, resolution)?;
+    let first_estimate = spherical_to_estimate(spherical, resolution)?;
     let first_key = serialize(&first_estimate)?;
-    let first_distance = a5cell_contains_point(&first_estimate, lonlat)?;
+    let first_distance = a5cell_contains_point(&first_estimate, spherical)?;
     if first_distance > 0.0 {
         return cache_result(&first_estimate, first_key, resolution);
     }
 
-    // Spiral search: perturb lonLat to find nearby estimate cells (the projection
-    // approximation can land in a neighbor at pentagon boundaries). Samples are
-    // generated lazily — if the first sample hits we skip 25 trig+alloc ops.
+    // Spiral search: perturb the point to find nearby estimate cells (the
+    // projection approximation can land in a neighbor at pentagon boundaries).
+    // Samples are generated lazily — if the first sample hits we skip 25 trig+alloc ops.
     let hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION;
     let n = 25;
-    let scale = 50.0 / 2.0_f64.powi(hilbert_resolution);
+    // 50 degrees / 2^hilbertResolution, expressed as radians for spherical-space perturbation.
+    let scale = (50.0 * std::f64::consts::PI / 180.0) / 2.0_f64.powi(hilbert_resolution);
     let mut estimate_set: HashSet<u64> = HashSet::new();
     estimate_set.insert(first_key);
     let mut cells: Vec<(A5Cell, f64)> = vec![(first_estimate, first_distance)];
@@ -106,17 +115,17 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
     // i=0 yields R=0 → same as the original sample, so start at i=1.
     for i in 1..n {
         let r = (i as f64 / n as f64) * scale;
-        let sample = LonLat::new(
-            lonlat.longitude() + (i as f64).cos() * r,
-            lonlat.latitude() + (i as f64).sin() * r,
+        let sample = Spherical::new(
+            Radians::new_unchecked(spherical.theta().get() + (i as f64).cos() * r),
+            Radians::new_unchecked(spherical.phi().get() + (i as f64).sin() * r),
         );
-        let estimate = lonlat_to_estimate(sample, resolution)?;
+        let estimate = spherical_to_estimate(sample, resolution)?;
         let estimate_key = serialize(&estimate)?;
         if estimate_set.contains(&estimate_key) {
             continue;
         }
         estimate_set.insert(estimate_key);
-        let distance = a5cell_contains_point(&estimate, lonlat)?;
+        let distance = a5cell_contains_point(&estimate, spherical)?;
         if distance > 0.0 {
             return cache_result(&estimate, estimate_key, resolution);
         }
@@ -134,8 +143,7 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
 /// The ij_to_s function uses the triangular lattice which only approximates the pentagon lattice
 /// Thus this function only returns a cell nearby, and we need to search the neighbourhood to find the correct cell
 /// TODO: Implement a more accurate function
-fn lonlat_to_estimate(lonlat: LonLat, resolution: i32) -> Result<A5Cell, String> {
-    let spherical = from_lon_lat(lonlat);
+fn spherical_to_estimate(spherical: Spherical, resolution: i32) -> Result<A5Cell, String> {
     let origin = find_nearest_origin(spherical);
 
     let dodecahedron = DodecahedronProjection::get_thread_local();
@@ -291,11 +299,10 @@ pub fn cell_to_boundary(
     Ok(normalized_boundary)
 }
 
-/// Test if an A5 cell contains a given point
-pub fn a5cell_contains_point(cell: &A5Cell, point: LonLat) -> Result<f64, String> {
+/// Test if an A5 cell contains a given point (in A5's internal spherical frame).
+pub fn a5cell_contains_point(cell: &A5Cell, spherical: Spherical) -> Result<f64, String> {
     use crate::core::tiling::{get_face_vertices, get_quintant_vertices};
 
-    let spherical = from_lon_lat(point);
     let dodecahedron = DodecahedronProjection::get_thread_local();
     let projected_point = dodecahedron.forward(spherical, cell.origin_id)?;
 

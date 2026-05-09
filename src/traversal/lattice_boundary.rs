@@ -117,13 +117,21 @@ fn push_deltas(
 }
 
 /// Return every neighbor that lies outside the source cell's quintant: cross-quintant
-/// lateral edges, cross-face base edge, apex (face center), and the [-max_row, max_row, 0]
-/// vertex corner. The within-quintant ±1 candidates are NOT covered here — callers
-/// generate those directly.
+/// lateral edges, cross-face base edge, apex (face center), and (when not `skip_corners`)
+/// the `[-max_row, max_row, 0]` vertex corner. The within-quintant ±1 candidates are NOT
+/// covered here — callers generate those directly.
 ///
 /// The result may contain duplicates and the order is not stable; callers
 /// deduplicate (via Set) or accept duplicates if their downstream pipeline tolerates them.
-pub fn get_boundary_neighbors(ctx: &BoundaryContext, edge_only: bool) -> Vec<u64> {
+///
+/// `edge_only` drops apex non-adjacent quintants and other vertex-only neighbors.
+/// `skip_corners` drops the `[-max_row, max_row, 0]` corner — used when the caller's
+/// connectivity (e.g. lattice ±1 moves) doesn't traverse that vertex.
+pub fn get_boundary_neighbors(
+    ctx: &BoundaryContext,
+    edge_only: bool,
+    skip_corners: bool,
+) -> Vec<u64> {
     let mut out: Vec<u64> = Vec::new();
     let triple = ctx.triple;
     let parity = ctx.parity;
@@ -206,7 +214,7 @@ pub fn get_boundary_neighbors(ctx: &BoundaryContext, edge_only: bool) -> Vec<u64
     // Base-left corner [-max_row, max_row, 0]: 3 dodecahedron faces meet at this vertex.
     // The symmetric base-right corner is implicitly covered: its cross-quintant and
     // cross-face paths land on the [-max_row, max_row, 0] cell of neighboring quintants.
-    if triple.x == -max_row && triple.y == max_row && triple.z == 0 {
+    if !skip_corners && triple.x == -max_row && triple.y == max_row && triple.z == 0 {
         // Vertex neighbor 1: across the previous quintant's base edge
         let prev_quintant = (source_quintant + 4) % 5;
         let (prev_adj_face_id, prev_adj_quintant) =

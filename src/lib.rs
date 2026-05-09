@@ -14,13 +14,17 @@ pub mod lattice;
 #[cfg_attr(not(test), allow(unused))]
 pub mod projections;
 #[cfg_attr(not(test), allow(unused))]
+pub mod regions;
+#[cfg_attr(not(test), allow(unused))]
 pub mod traversal;
 #[cfg_attr(not(test), allow(unused))]
 pub mod utils;
 
 // PUBLIC API
 // Indexing
-pub use core::cell::{cell_to_boundary, cell_to_lonlat, cell_to_spherical, lonlat_to_cell};
+pub use core::cell::{
+    cell_to_boundary, cell_to_lonlat, cell_to_spherical, lonlat_to_cell, spherical_to_cell,
+};
 pub use core::hex::{hex_to_u64, u64_to_hex};
 
 // Hierarchy
@@ -36,6 +40,9 @@ pub use core::compact::{compact, uncompact};
 pub use traversal::cap::spherical_cap;
 pub use traversal::grid_disk::{grid_disk, grid_disk_vertex};
 pub use traversal::line::line_string_to_cells;
+
+// Regions
+pub use regions::polygon::polygon_to_cells;
 
 // Types
 pub use coordinate_systems::{Degrees, LonLat, Radians};
