@@ -35,7 +35,7 @@
 
 use crate::coordinate_systems::{Barycentric, Cartesian, Face, FaceTriangle, SphericalTriangle};
 use crate::core::coordinate_transforms::{barycentric_to_face, face_to_barycentric};
-use crate::geometry::spherical_triangle::SphericalTriangleShape;
+use crate::geometry::spherical_polygon::spherical_triangle_area;
 use crate::utils::vector::{quadruple_product, slerp, vector_difference};
 
 /// Polyhedral projection implementing IVEA (Icosahedral Vertex Equal Area) projection
@@ -67,8 +67,6 @@ impl PolyhedralProjection {
         let a = spherical_triangle.a;
         let b = spherical_triangle.b;
         let c = spherical_triangle.c;
-        let mut triangle_shape = SphericalTriangleShape::new(vec![a, b, c])
-            .expect("Failed to create spherical triangle");
 
         // When v is close to A, the quadruple product is unstable.
         // As we just need the intersection of two great circles we can use difference
@@ -77,20 +75,12 @@ impl PolyhedralProjection {
         let p = normalize(quadruple_product(a, z, b, c));
 
         let h = vector_difference(a, v) / vector_difference(a, p);
-        let area_abc = triangle_shape.get_area().get();
+        let area_abc = spherical_triangle_area(a, b, c).get();
         let scaled_area = h / area_abc;
         let b_coords = Barycentric::new(
             1.0 - h,
-            scaled_area
-                * SphericalTriangleShape::new(vec![a, p, c])
-                    .expect("Failed to create spherical triangle")
-                    .get_area()
-                    .get(),
-            scaled_area
-                * SphericalTriangleShape::new(vec![a, b, p])
-                    .expect("Failed to create spherical triangle")
-                    .get_area()
-                    .get(),
+            scaled_area * spherical_triangle_area(a, p, c).get(),
+            scaled_area * spherical_triangle_area(a, b, p).get(),
         );
         barycentric_to_face(b_coords, face_triangle)
     }
@@ -115,8 +105,6 @@ impl PolyhedralProjection {
         let a = spherical_triangle.a;
         let b = spherical_triangle.b;
         let c = spherical_triangle.c;
-        let mut triangle_shape = SphericalTriangleShape::new(vec![a, b, c])
-            .expect("Failed to create spherical triangle");
         let b_coords = face_to_barycentric(face_point, face_triangle);
 
         let threshold = 1.0 - 1e-14;
@@ -131,7 +119,7 @@ impl PolyhedralProjection {
         }
 
         let c1 = cross(b, c);
-        let area_abc = triangle_shape.get_area().get();
+        let area_abc = spherical_triangle_area(a, b, c).get();
         let h = 1.0 - b_coords.u;
         let r = b_coords.w / h;
         let alpha = r * area_abc;

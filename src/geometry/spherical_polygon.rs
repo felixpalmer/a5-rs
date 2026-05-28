@@ -9,6 +9,29 @@ use crate::utils::vector::{slerp, triple_product};
 /// Using [x, y, z] gives equal precision in all directions, unlike spherical coordinates
 pub type SphericalPolygon = Vec<Cartesian>;
 
+/// Area of the spherical triangle (v1, v2, v3) on the unit sphere, in radians.
+///
+/// Free-function form avoids the `Vec` heap allocation of
+/// `SphericalTriangleShape::new(vec![v1, v2, v3])?.get_area()` on the
+/// lon_lat_to_cell hot path.
+pub fn spherical_triangle_area(v1: Cartesian, v2: Cartesian, v3: Cartesian) -> Radians {
+    let mid_a = normalize(lerp(v2, v3, 0.5));
+    let mid_b = normalize(lerp(v3, v1, 0.5));
+    let mid_c = normalize(lerp(v1, v2, 0.5));
+
+    let s = triple_product(mid_a, mid_b, mid_c);
+    let clamped = s.clamp(-1.0, 1.0);
+
+    // sin(x) ≈ x for small x — keep precision on tiny triangles.
+    let area = if clamped.abs() < 1e-8 {
+        2.0 * clamped
+    } else {
+        clamped.asin() * 2.0
+    };
+
+    Radians::new_unchecked(area)
+}
+
 /// Spherical point-in-polygon via signed-angle summation. Works for concave
 /// polygons (unlike `SphericalPolygonShape::contains_point`, which assumes
 /// convex "necessary strike"). The math is fully inlined as it's called
@@ -178,27 +201,6 @@ impl SphericalPolygonShape {
         theta_delta_min
     }
 
-    /// Calculate the area of a spherical triangle given three vertices
-    fn get_triangle_area(&self, v1: Cartesian, v2: Cartesian, v3: Cartesian) -> Radians {
-        // Calculate midpoints
-        let mid_a = normalize(lerp(v2, v3, 0.5));
-        let mid_b = normalize(lerp(v3, v1, 0.5));
-        let mid_c = normalize(lerp(v1, v2, 0.5));
-
-        // Calculate area using asin of dot product, clamped to valid range
-        let s = triple_product(mid_a, mid_b, mid_c);
-        let clamped = s.clamp(-1.0, 1.0);
-
-        // sin(x) = x for x < 1e-8
-        let area = if clamped.abs() < 1e-8 {
-            2.0 * clamped
-        } else {
-            clamped.asin() * 2.0
-        };
-
-        Radians::new_unchecked(area)
-    }
-
     /// Calculate the area of the spherical polygon by decomposing it into a fan of triangles
     pub fn get_area(&mut self) -> Radians {
         // Memoize the result since vertices are immutable
@@ -217,7 +219,7 @@ impl SphericalPolygonShape {
         }
 
         if self.vertices.len() == 3 {
-            return self.get_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2]);
+            return spherical_triangle_area(self.vertices[0], self.vertices[1], self.vertices[2]);
         }
 
         // Calculate center of polygon
@@ -232,7 +234,7 @@ impl SphericalPolygonShape {
         for i in 0..self.vertices.len() {
             let v1 = self.vertices[i];
             let v2 = self.vertices[(i + 1) % self.vertices.len()];
-            let tri_area = self.get_triangle_area(center, v1, v2);
+            let tri_area = spherical_triangle_area(center, v1, v2);
             if !tri_area.get().is_nan() {
                 area += tri_area.get();
             }
