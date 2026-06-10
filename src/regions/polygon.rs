@@ -20,6 +20,7 @@ use crate::traversal::lattice_neighbors::get_lattice_neighbors;
 use crate::utils::great_circle::sample_great_circle_arc;
 
 /// Maps each boundary cell to the indices of the ring segments that produced it.
+/// Segment indices are global across rings (outer ring first, then holes).
 /// Used by `filter_boundary_cells` to short-circuit PIP via segment-side dot products.
 type SegmentMap = HashMap<u64, Vec<usize>>;
 
@@ -29,11 +30,25 @@ struct DenseSampleResult {
     segment_map: SegmentMap,
 }
 
-/// Dense-sample boundary cells along the closed polygon ring at
+/// Point-in-polygon for a polygon with holes: inside the outer ring and
+/// outside every hole ring.
+fn point_in_polygon_rings(point: Cartesian, ring_vecs_list: &[Vec<Cartesian>]) -> bool {
+    if !point_in_spherical_polygon(point, &ring_vecs_list[0]) {
+        return false;
+    }
+    for ring_vecs in &ring_vecs_list[1..] {
+        if point_in_spherical_polygon(point, ring_vecs) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Dense-sample boundary cells along every closed ring (outer + holes) at
 /// `cell_radius * 0.4` spacing, calling `spherical_to_cell` per sample.
 fn dense_sample_boundary(
-    ring: &[LonLat],
-    ring_vecs: &[Cartesian],
+    rings: &[&[LonLat]],
+    ring_vecs_list: &[Vec<Cartesian>],
     resolution: i32,
 ) -> Result<DenseSampleResult, String> {
     let mut boundary_cells: Vec<u64> = Vec::new();
@@ -56,41 +71,47 @@ fn dense_sample_boundary(
         }
     };
 
-    let n = ring.len();
-    let mut vertex_cells: Vec<u64> = Vec::with_capacity(n);
-    for v in ring {
-        vertex_cells.push(lonlat_to_cell(*v, resolution)?);
-    }
+    let mut seg_offset = 0;
+    for (r, ring) in rings.iter().enumerate() {
+        let ring_vecs = &ring_vecs_list[r];
+        let n = ring.len();
 
-    for i in 0..n {
-        let next_i = (i + 1) % n;
-        record_cell(
-            vertex_cells[i],
-            i,
-            &mut boundary_cells,
-            &mut boundary_set,
-            &mut segment_map,
-        );
+        let mut vertex_cells: Vec<u64> = Vec::with_capacity(n);
+        for v in ring.iter() {
+            vertex_cells.push(lonlat_to_cell(*v, resolution)?);
+        }
 
-        // Skip the lonLat round-trip: samples are authalic-Cartesian already.
-        let samples = sample_great_circle_arc(ring_vecs[i], ring_vecs[next_i], sample_interval);
-        for s in samples {
-            let cell = spherical_to_cell(to_spherical(s), resolution)?;
+        for i in 0..n {
+            let next_i = (i + 1) % n;
             record_cell(
-                cell,
-                i,
+                vertex_cells[i],
+                seg_offset + i,
+                &mut boundary_cells,
+                &mut boundary_set,
+                &mut segment_map,
+            );
+
+            // Skip the lonLat round-trip: samples are authalic-Cartesian already.
+            let samples = sample_great_circle_arc(ring_vecs[i], ring_vecs[next_i], sample_interval);
+            for s in samples {
+                let cell = spherical_to_cell(to_spherical(s), resolution)?;
+                record_cell(
+                    cell,
+                    seg_offset + i,
+                    &mut boundary_cells,
+                    &mut boundary_set,
+                    &mut segment_map,
+                );
+            }
+            record_cell(
+                vertex_cells[next_i],
+                seg_offset + i,
                 &mut boundary_cells,
                 &mut boundary_set,
                 &mut segment_map,
             );
         }
-        record_cell(
-            vertex_cells[next_i],
-            i,
-            &mut boundary_cells,
-            &mut boundary_set,
-            &mut segment_map,
-        );
+        seg_offset += n;
     }
 
     Ok(DenseSampleResult {
@@ -110,8 +131,8 @@ fn filter_boundary_cells(
     boundary_cells: &[u64],
     segment_map: &SegmentMap,
     seg_normals: &[Cartesian],
-    ring_vecs: &[Cartesian],
-    interior_sign: i32,
+    seg_signs: &[f64],
+    ring_vecs_list: &[Vec<Cartesian>],
 ) -> Result<Vec<u64>, String> {
     let mut out: Vec<u64> = Vec::new();
     for &cell in boundary_cells {
@@ -119,7 +140,7 @@ fn filter_boundary_cells(
         let segments = match segment_map.get(&cell) {
             Some(s) => s,
             None => {
-                if point_in_spherical_polygon(cv, ring_vecs) {
+                if point_in_polygon_rings(cv, ring_vecs_list) {
                     out.push(cell);
                 }
                 continue;
@@ -135,14 +156,14 @@ fn filter_boundary_cells(
                 ambiguous = true;
                 break;
             }
-            if dot * (interior_sign as f64) > 0.0 {
+            if dot * seg_signs[seg_idx] > 0.0 {
                 any_inside = true;
             } else {
                 all_inside = false;
             }
         }
         if ambiguous || (any_inside && !all_inside) {
-            if point_in_spherical_polygon(cv, ring_vecs) {
+            if point_in_polygon_rings(cv, ring_vecs_list) {
                 out.push(cell);
             }
         } else if all_inside {
@@ -308,38 +329,75 @@ fn flood_interior(
 }
 
 /// Find all cells within a polygon using center-point containment: a cell is
-/// included iff its center lies inside the ring. The result is compacted — use
-/// `uncompact` to expand to the input resolution.
+/// included iff its center lies inside the polygon. The result is compacted —
+/// use `uncompact` to expand to the input resolution.
 ///
-/// `ring` Polygon vertices `[longitude, latitude]` (unclosed — closed automatically).
+/// `polygon` is GeoJSON-style rings `[outer, ...holes]` of `[longitude, latitude]`
+/// vertices; cells inside a hole are excluded. Rings may be open or closed
+/// (GeoJSON-style, first vertex repeated at the end) — closure is automatic
+/// either way. Holes with fewer than 3 distinct vertices are ignored.
 /// Returns sorted, compacted cell IDs whose centers lie inside the polygon.
-pub fn polygon_to_cells(ring: &[LonLat], resolution: i32) -> Result<Vec<u64>, String> {
-    if ring.len() < 3 {
+pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<u64>, String> {
+    // GeoJSON rings repeat the first vertex at the end — drop the duplicate.
+    fn strip_closing(ring: &[LonLat]) -> &[LonLat] {
+        if ring.len() > 1 && ring[0] == ring[ring.len() - 1] {
+            &ring[..ring.len() - 1]
+        } else {
+            ring
+        }
+    }
+
+    if polygon.is_empty() {
         return Ok(Vec::new());
+    }
+    let outer = strip_closing(&polygon[0]);
+    if outer.len() < 3 {
+        return Ok(Vec::new());
+    }
+    let mut rings: Vec<&[LonLat]> = vec![outer];
+    for hole in &polygon[1..] {
+        let hole = strip_closing(hole);
+        if hole.len() >= 3 {
+            rings.push(hole);
+        }
     }
 
     // Authalic-sphere ring vectors — A5's internal sphere, so cell centers
     // compare directly with no geodetic↔authalic round-trip.
-    let mut ring_vecs: Vec<Cartesian> = Vec::with_capacity(ring.len());
-    for v in ring {
-        ring_vecs.push(to_cartesian(from_lon_lat(*v)));
+    let mut ring_vecs_list: Vec<Vec<Cartesian>> = Vec::with_capacity(rings.len());
+    for ring in &rings {
+        let mut ring_vecs: Vec<Cartesian> = Vec::with_capacity(ring.len());
+        for v in *ring {
+            ring_vecs.push(to_cartesian(from_lon_lat(*v)));
+        }
+        ring_vecs_list.push(ring_vecs);
     }
 
     let DenseSampleResult {
         boundary_cells,
         boundary_set,
         segment_map,
-    } = dense_sample_boundary(ring, &ring_vecs, resolution)?;
+    } = dense_sample_boundary(&rings, &ring_vecs_list, resolution)?;
 
-    let interior_sign = ring_winding_sign(&ring_vecs);
-    let seg_normals = ring_segment_normals(&ring_vecs);
+    // Flattened per-segment normals and interior-side signs, indexed like the
+    // segment map. The polygon interior lies on the *outside* of a hole ring,
+    // so hole segments get the opposite sign.
+    let mut seg_normals: Vec<Cartesian> = Vec::new();
+    let mut seg_signs: Vec<f64> = Vec::new();
+    for (r, ring_vecs) in ring_vecs_list.iter().enumerate() {
+        let sign = (if r == 0 { 1 } else { -1 }) * ring_winding_sign(ring_vecs);
+        for normal in ring_segment_normals(ring_vecs) {
+            seg_normals.push(normal);
+            seg_signs.push(sign as f64);
+        }
+    }
 
     let filtered_boundary = filter_boundary_cells(
         &boundary_cells,
         &segment_map,
         &seg_normals,
-        &ring_vecs,
-        interior_sign,
+        &seg_signs,
+        &ring_vecs_list,
     )?;
 
     // Dense sampling can leave gaps; the shell catches them, classifying each cell.
@@ -352,10 +410,10 @@ pub fn polygon_to_cells(ring: &[LonLat], resolution: i32) -> Result<Vec<u64>, St
     let mut visited: HashSet<u64> = boundary_set.clone();
     for cell in shell_cells {
         let cv = to_cartesian(cell_to_spherical(cell)?);
-        if point_in_spherical_polygon(cv, &ring_vecs) {
+        if point_in_polygon_rings(cv, &ring_vecs_list) {
             interior_seeds.push(cell);
         } else {
-            visited.insert(cell); // exterior shell joins the firewall
+            visited.insert(cell); // exterior shell (and hole interiors) join the firewall
         }
     }
     if interior_seeds.is_empty() {
