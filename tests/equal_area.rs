@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use a5::coordinate_systems::{Cartesian, Face, FaceTriangle, SphericalTriangle};
-use a5::projections::polyhedral::PolyhedralProjection;
+use a5::projections::equal_area::EqualAreaProjection;
 use a5::utils::vector::{vec3_distance, vec3_length};
 use approx::assert_relative_eq;
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,7 @@ struct TestData {
 const TOLERANCE: f64 = 1e-10;
 
 fn load_test_data() -> TestData {
-    let test_data_json = include_str!("fixtures/polyhedral.json");
+    let test_data_json = include_str!("fixtures/equal-area.json");
     serde_json::from_str(test_data_json).expect("Failed to parse test data")
 }
 
@@ -77,19 +77,18 @@ fn vec3_angle(a: &Cartesian, b: &Cartesian) -> f64 {
 }
 
 #[test]
-fn test_polyhedral_forward_projections() {
+fn test_equal_area_forward_projections() {
     let test_data = load_test_data();
-    let polyhedral = PolyhedralProjection::new();
-
     let spherical_triangle =
         arrays_to_spherical_triangle(test_data.static_data.test_spherical_triangle);
     let face_triangle = arrays_to_face_triangle(test_data.static_data.test_face_triangle);
+    let equal_area = EqualAreaProjection::new(spherical_triangle);
 
     for test_case in test_data.forward {
         let input = array_to_cartesian(test_case.input);
         let expected = array_to_face(test_case.expected);
 
-        let result = polyhedral.forward(input, spherical_triangle, face_triangle);
+        let result = equal_area.forward(input, spherical_triangle, face_triangle);
 
         assert_relative_eq!(result.x(), expected.x(), epsilon = TOLERANCE);
         assert_relative_eq!(result.y(), expected.y(), epsilon = TOLERANCE);
@@ -97,20 +96,19 @@ fn test_polyhedral_forward_projections() {
 }
 
 #[test]
-fn test_polyhedral_round_trip_forward() {
+fn test_equal_area_round_trip_forward() {
     let test_data = load_test_data();
-    let polyhedral = PolyhedralProjection::new();
-
     let spherical_triangle =
         arrays_to_spherical_triangle(test_data.static_data.test_spherical_triangle);
     let face_triangle = arrays_to_face_triangle(test_data.static_data.test_face_triangle);
+    let equal_area = EqualAreaProjection::new(spherical_triangle);
 
     let mut largest_error: f64 = 0.0;
 
     for test_case in test_data.forward {
         let spherical = array_to_cartesian(test_case.input);
-        let polar = polyhedral.forward(spherical, spherical_triangle, face_triangle);
-        let result = polyhedral.inverse(polar, face_triangle, spherical_triangle);
+        let polar = equal_area.forward(spherical, spherical_triangle, face_triangle);
+        let result = equal_area.inverse(polar, face_triangle, spherical_triangle);
 
         let error = vec3_distance(&result, &spherical);
         largest_error = largest_error.max(error);
@@ -137,19 +135,18 @@ fn test_polyhedral_round_trip_forward() {
 }
 
 #[test]
-fn test_polyhedral_inverse_projections() {
+fn test_equal_area_inverse_projections() {
     let test_data = load_test_data();
-    let polyhedral = PolyhedralProjection::new();
-
     let spherical_triangle =
         arrays_to_spherical_triangle(test_data.static_data.test_spherical_triangle);
     let face_triangle = arrays_to_face_triangle(test_data.static_data.test_face_triangle);
+    let equal_area = EqualAreaProjection::new(spherical_triangle);
 
     for test_case in test_data.inverse {
         let input = array_to_face(test_case.input);
         let expected = array_to_cartesian(test_case.expected);
 
-        let result = polyhedral.inverse(input, face_triangle, spherical_triangle);
+        let result = equal_area.inverse(input, face_triangle, spherical_triangle);
 
         assert_relative_eq!(result.x(), expected.x(), epsilon = TOLERANCE);
         assert_relative_eq!(result.y(), expected.y(), epsilon = TOLERANCE);
@@ -158,18 +155,17 @@ fn test_polyhedral_inverse_projections() {
 }
 
 #[test]
-fn test_polyhedral_round_trip_inverse() {
+fn test_equal_area_round_trip_inverse() {
     let test_data = load_test_data();
-    let polyhedral = PolyhedralProjection::new();
-
     let spherical_triangle =
         arrays_to_spherical_triangle(test_data.static_data.test_spherical_triangle);
     let face_triangle = arrays_to_face_triangle(test_data.static_data.test_face_triangle);
+    let equal_area = EqualAreaProjection::new(spherical_triangle);
 
     for test_case in test_data.inverse {
         let face_point = array_to_face(test_case.input);
-        let spherical = polyhedral.inverse(face_point, face_triangle, spherical_triangle);
-        let result = polyhedral.forward(spherical, spherical_triangle, face_triangle);
+        let spherical = equal_area.inverse(face_point, face_triangle, spherical_triangle);
+        let result = equal_area.forward(spherical, spherical_triangle, face_triangle);
 
         assert_relative_eq!(result.x(), face_point.x(), epsilon = TOLERANCE);
         assert_relative_eq!(result.y(), face_point.y(), epsilon = TOLERANCE);
