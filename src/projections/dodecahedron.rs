@@ -35,26 +35,15 @@ pub struct DodecahedronProjection {
 
 impl DodecahedronProjection {
     pub fn new() -> Result<Self, String> {
-        let mut me = DodecahedronProjection {
+        let crs = CRS::new()?;
+        let equal_area = EqualAreaProjection::new(crs.get_canonical_triangle());
+        Ok(DodecahedronProjection {
             face_triangles: vec![None; 30], // 10 base + 10 reflected + 10 squashed
             spherical_triangles: vec![None; 240], // 120 base + 120 reflected
-            // Placeholder constants; replaced below from the canonical triangle
-            // before the projection is ever used.
-            equal_area: EqualAreaProjection::new(SphericalTriangle::new(
-                Cartesian::new(1.0, 0.0, 0.0),
-                Cartesian::new(0.0, 1.0, 0.0),
-                Cartesian::new(0.0, 0.0, 1.0),
-            )),
+            equal_area,
             gnomonic: GnomonicProjection,
-            crs: CRS::new()?,
-        };
-        // All face triangles are congruent, so the equal-area projection derives
-        // its shape constants once from a canonical triangle. Using a fixed
-        // triangle (face 0, origin 0, unreflected) keeps results bit-identical
-        // regardless of which face is projected first.
-        let canonical = me.get_spherical_triangle(0, 0 as OriginId, false)?;
-        me.equal_area = EqualAreaProjection::new(canonical);
-        Ok(me)
+            crs,
+        })
     }
 
     /// Get a reference to the thread local dodecahedron projection instance
@@ -346,9 +335,8 @@ mod tests {
     #[test]
     fn test_triangle_constants_agree_across_all_triangles() {
         let mut dodecahedron = DodecahedronProjection::new().unwrap();
-        let canonical = EqualAreaProjection::compute_constants(
-            dodecahedron.get_spherical_triangle(0, 0, false).unwrap(),
-        );
+        let canonical =
+            EqualAreaProjection::compute_constants(dodecahedron.crs.get_canonical_triangle());
 
         const RELATIVE_TOLERANCE: f64 = 1e-13;
         for origin_id in 0..12u8 {
