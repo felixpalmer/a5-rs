@@ -11,8 +11,8 @@ use crate::core::origin::get_origins;
 use crate::core::tiling::get_quintant_vertices;
 use crate::core::utils::OriginId;
 use crate::projections::crs::CRS;
+use crate::projections::equal_area::EqualAreaProjection;
 use crate::projections::gnomonic::GnomonicProjection;
-use crate::projections::polyhedral::PolyhedralProjection;
 use std::thread_local;
 
 type FaceTriangleIndex = usize; // 0-9
@@ -28,19 +28,21 @@ thread_local! {
 pub struct DodecahedronProjection {
     face_triangles: Vec<Option<FaceTriangle>>,
     spherical_triangles: Vec<Option<SphericalTriangle>>,
-    polyhedral: PolyhedralProjection,
+    equal_area: EqualAreaProjection,
     gnomonic: GnomonicProjection,
     crs: CRS,
 }
 
 impl DodecahedronProjection {
     pub fn new() -> Result<Self, String> {
+        let crs = CRS::new()?;
+        let equal_area = EqualAreaProjection::new(crs.get_canonical_triangle());
         Ok(DodecahedronProjection {
             face_triangles: vec![None; 30], // 10 base + 10 reflected + 10 squashed
             spherical_triangles: vec![None; 240], // 120 base + 120 reflected
-            polyhedral: PolyhedralProjection::new(),
+            equal_area,
             gnomonic: GnomonicProjection,
-            crs: CRS::new()?,
+            crs,
         })
     }
 
@@ -88,7 +90,7 @@ impl DodecahedronProjection {
             self.get_spherical_triangle(face_triangle_index, origin_id, reflect)?;
 
         Ok(self
-            .polyhedral
+            .equal_area
             .forward(unprojected, spherical_triangle, face_triangle))
     }
 
@@ -102,7 +104,7 @@ impl DodecahedronProjection {
         let spherical_triangle =
             self.get_spherical_triangle(face_triangle_index, origin_id, reflect)?;
         let unprojected = self
-            .polyhedral
+            .equal_area
             .inverse(face, face_triangle, spherical_triangle);
         Ok(to_spherical(unprojected))
     }
@@ -319,4 +321,45 @@ fn transform_quat(v: Cartesian, q: [f64; 4]) -> Cartesian {
     let result_z = t1_w * qconj_z + t1_z * qconj_w + t1_x * qconj_y - t1_y * qconj_x;
 
     Cartesian::new(result_x, result_y, result_z)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The equal-area projection caches shape constants from one canonical
+    /// triangle, which is only valid if every spherical triangle the
+    /// dodecahedron can supply is congruent AND consistently wound (the sign
+    /// of `v` is chirality-sensitive). This enforces the invariant documented
+    /// in `equal_area.rs`.
+    #[test]
+    fn test_triangle_constants_agree_across_all_triangles() {
+        let mut dodecahedron = DodecahedronProjection::new().unwrap();
+        let canonical =
+            EqualAreaProjection::compute_constants(dodecahedron.crs.get_canonical_triangle());
+
+        const RELATIVE_TOLERANCE: f64 = 1e-13;
+        for origin_id in 0..12u8 {
+            for face_triangle_index in 0..10usize {
+                for reflected in [false, true] {
+                    let triangle = dodecahedron
+                        .get_spherical_triangle(face_triangle_index, origin_id, reflected)
+                        .unwrap();
+                    let constants = EqualAreaProjection::compute_constants(triangle);
+                    for (name, actual, expected) in [
+                        ("v", constants.v, canonical.v),
+                        ("c12", constants.c12, canonical.c12),
+                        ("s12", constants.s12, canonical.s12),
+                        ("k_q", constants.k_q, canonical.k_q),
+                        ("area_abc", constants.area_abc, canonical.area_abc),
+                    ] {
+                        assert!(
+                            (actual - expected).abs() < expected.abs() * RELATIVE_TOLERANCE,
+                            "{name} mismatch at face {face_triangle_index}, origin {origin_id}, reflected {reflected}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

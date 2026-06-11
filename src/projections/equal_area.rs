@@ -38,13 +38,67 @@ use crate::core::coordinate_transforms::{barycentric_to_face, face_to_barycentri
 use crate::geometry::spherical_polygon::spherical_triangle_area;
 use crate::utils::vector::{quadruple_product, slerp, vector_difference};
 
-/// Polyhedral projection implementing IVEA (Icosahedral Vertex Equal Area) projection
-pub struct PolyhedralProjection;
+/// Shape-only invariants of the spherical triangle.
+///
+/// NOTE: A · B and C · A are deliberately NOT cached — even/odd face triangles
+/// swap the roles of the B and C vertices, so those dot products differ by
+/// ~0.056 between triangles and must be computed per call.
+#[derive(Debug, Clone, Copy)]
+pub struct TriangleConstants {
+    /// A · (B × C) — signed triple product
+    pub v: f64,
+    /// B · C
+    pub c12: f64,
+    /// |B × C|
+    pub s12: f64,
+    /// 2 / acos(c12)
+    pub k_q: f64,
+    /// Spherical triangle area
+    pub area_abc: f64,
+}
 
-impl PolyhedralProjection {
-    /// Creates a new polyhedral projection instance
-    pub fn new() -> Self {
-        Self
+/// Equal area projection using Slice & Dice algorithm
+pub struct EqualAreaProjection {
+    /// Shape-only invariants of the spherical triangle. A5 only ever projects
+    /// the congruent face-triangles of a single dodecahedron, so these depend
+    /// only on the triangle's shape, not its position — they are computed once
+    /// from the CRS's canonical triangle and reused for every projection.
+    /// Deriving them from a fixed triangle (rather than lazily from whichever
+    /// triangle is projected first) keeps results
+    /// independent of call order: congruent triangles agree only to ~1 ulp, so
+    /// a lazy cache would make outputs depend on process history.
+    ///
+    /// NOTE: `v` is a *signed* triple product, so this caching is only valid
+    /// while every triangle shares the same winding (chirality).
+    /// DodecahedronProjection guarantees this by ordering vertices consistently
+    /// across normal and reflected faces; this invariant is enforced by the
+    /// constants-agreement test in `dodecahedron.rs`.
+    constants: TriangleConstants,
+}
+
+impl EqualAreaProjection {
+    /// Creates a new equal-area projection with shape constants derived from
+    /// the canonical triangle
+    pub fn new(canonical_triangle: SphericalTriangle) -> Self {
+        Self {
+            constants: Self::compute_constants(canonical_triangle),
+        }
+    }
+
+    /// Computes the shape-only invariants of a spherical triangle
+    pub fn compute_constants(spherical_triangle: SphericalTriangle) -> TriangleConstants {
+        let a = spherical_triangle.a;
+        let b = spherical_triangle.b;
+        let c = spherical_triangle.c;
+        let c1 = cross(b, c);
+        let c12 = dot(b, c);
+        TriangleConstants {
+            v: dot(a, c1),
+            c12,
+            s12: length(c1),
+            k_q: 2.0 / c12.acos(),
+            area_abc: spherical_triangle_area(a, b, c).get(),
+        }
     }
 
     /// Forward projection: converts a spherical point to face coordinates
@@ -75,8 +129,7 @@ impl PolyhedralProjection {
         let p = normalize(quadruple_product(a, z, b, c));
 
         let h = vector_difference(a, v) / vector_difference(a, p);
-        let area_abc = spherical_triangle_area(a, b, c).get();
-        let scaled_area = h / area_abc;
+        let scaled_area = h / self.constants.area_abc;
         let b_coords = Barycentric::new(
             1.0 - h,
             scaled_area * spherical_triangle_area(a, p, c).get(),
@@ -118,8 +171,14 @@ impl PolyhedralProjection {
             return c;
         }
 
-        let c1 = cross(b, c);
-        let area_abc = spherical_triangle_area(a, b, c).get();
+        let TriangleConstants {
+            v,
+            c12,
+            s12,
+            k_q,
+            area_abc,
+        } = self.constants;
+
         let h = 1.0 - b_coords.u;
         let r = b_coords.w / h;
         let alpha = r * area_abc;
@@ -127,15 +186,14 @@ impl PolyhedralProjection {
         let half_c = (alpha / 2.0).sin();
         let cc = 2.0 * half_c * half_c; // Half angle formula
 
+        // Per-triangle: A·B and C·A swap between even/odd face triangles (see
+        // TriangleConstants note), so they cannot come from the cached constants.
         let c01 = dot(a, b);
-        let c12 = dot(b, c);
         let c20 = dot(c, a);
-        let s12 = length(c1);
 
-        let v = dot(a, c1); // Triple product of A, B, C. Constant??
         let f = s * v + cc * (c01 * c12 - c20);
         let g = cc * s12 * (1.0 + c01);
-        let q = (2.0 / c12.acos()) * g.atan2(f);
+        let q = k_q * g.atan2(f);
         let p = slerp(b, c, q);
         let k = vector_difference(a, p);
         let t = self.safe_acos(h * k) / self.safe_acos(k);
@@ -157,12 +215,6 @@ impl PolyhedralProjection {
         } else {
             (1.0 - 2.0 * x * x).acos()
         }
-    }
-}
-
-impl Default for PolyhedralProjection {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

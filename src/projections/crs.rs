@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coordinate_systems::{Cartesian, Radians, Spherical};
+use crate::coordinate_systems::{Cartesian, Radians, Spherical, SphericalTriangle};
 use crate::core::constants::{DISTANCE_TO_EDGE, DISTANCE_TO_VERTEX};
 use crate::core::coordinate_transforms::to_cartesian;
 use crate::core::origin::get_origins;
@@ -42,6 +42,23 @@ impl CRS {
         }
 
         Ok(crs)
+    }
+
+    /// A canonical spherical face triangle (face center, edge midpoint, vertex)
+    /// of the dodecahedron, taken from origin 0's CRS vertices. All face
+    /// triangles used by `DodecahedronProjection` are congruent and
+    /// consistently wound with this one, so it serves as the fixed source of
+    /// the `EqualAreaProjection` shape constants — independent of projection
+    /// call order.
+    ///
+    /// The indices rely on the construction order above: `vertices[0]` is
+    /// origin 0's face center, `vertices[12]` its first corner (after the 12
+    /// centers) and `vertices[32]` its first edge midpoint (after the 20
+    /// corners). The corner and midpoint are adjacent (π/5 apart), forming a
+    /// genuine face triangle — the constants-agreement test verifies this
+    /// against every face triangle.
+    pub fn get_canonical_triangle(&self) -> SphericalTriangle {
+        SphericalTriangle::new(self.vertices[0], self.vertices[32], self.vertices[12])
     }
 
     pub fn get_vertex(&mut self, point: Cartesian) -> Result<Cartesian, String> {
