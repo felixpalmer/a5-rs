@@ -21,6 +21,14 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 #### a5-rs [v0.8.0] - May 12 2026
 
+- **BREAKING**: spherical_to_cell removed and add doc(hidden) to clarify public API
+- chore: Align API (#51)
+- feat: Support holes in polygons (#50)
+- Feat: refactor to use EqualAreaProjection (#49)
+- feat: Faster polyhedral projection (#48)
+
+#### a5-rs [v0.8.0] - May 12 2026
+
 - fix(cell): Spiral unstable in polar regions (#47)
 - feat(regions): Implement polygonToCells (#46)
 - feat(traversal): lineStringToCells (#45)
