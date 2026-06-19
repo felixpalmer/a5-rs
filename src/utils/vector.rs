@@ -4,49 +4,6 @@
 
 use crate::coordinate_systems::Cartesian;
 
-/// Returns a difference measure between two vectors, a - b
-/// D = sqrt(1 - dot(a,b)) / sqrt(2)
-/// D = 1: a and b are perpendicular
-/// D = 0: a and b are the same
-/// D = NaN: a and b are opposite (shouldn't happen in IVEA as we're using normalized vectors in the same hemisphere)
-///
-/// D is a measure of the angle between the two vectors. sqrt(2) can be ignored when comparing ratios.
-///
-/// # Arguments
-///
-/// * `a` - The first vector
-/// * `b` - The second vector
-///
-/// # Returns
-///
-/// The difference between the two vectors
-pub fn vector_difference(a: Cartesian, b: Cartesian) -> f64 {
-    // Original implementation is unstable for small angles as dot(A, B) approaches 1
-    // return (1.0 - dot(a, b)).sqrt();
-
-    // dot(A, B) = cos(x) as A and B are normalized
-    // Using double angle formula for cos(2x) = 1 - 2sin(x)^2, can rewrite as:
-    // 1 - cos(x) = 2 * sin(x/2)^2)
-    //            = 2 * sin(x/2)^2
-    // ⇒ sqrt(1 - cos(x)) = sqrt(2) * sin(x/2)
-    // Angle x/2 can be obtained as the angle between A and the normalized midpoint of A and B
-    // ⇒ sin(x/2) = |cross(A, midpointAB)|
-
-    let midpoint_ab = lerp(a, b, 0.5);
-    let midpoint_ab = normalize(midpoint_ab);
-    let cross_result = cross(a, midpoint_ab);
-    let d = length(cross_result);
-
-    // Math.sin(x) = x for x < 1e-8
-    if d < 1e-8 {
-        // When A and B are close or equal sin(x/2) ≈ x/2, just take the half-distance between A and B
-        let ab = subtract(a, b);
-        let half_distance = 0.5 * length(ab);
-        return half_distance;
-    }
-    d
-}
-
 /// Computes the triple product of three vectors
 ///
 /// # Arguments
@@ -61,27 +18,6 @@ pub fn vector_difference(a: Cartesian, b: Cartesian) -> f64 {
 pub fn triple_product(a: Cartesian, b: Cartesian, c: Cartesian) -> f64 {
     let cross_bc = cross(b, c);
     dot(a, cross_bc)
-}
-
-/// Computes the quadruple product of four vectors
-///
-/// # Arguments
-///
-/// * `a` - The first vector
-/// * `b` - The second vector
-/// * `c` - The third vector
-/// * `d` - The fourth vector
-///
-/// # Returns
-///
-/// The result vector
-pub fn quadruple_product(a: Cartesian, b: Cartesian, c: Cartesian, d: Cartesian) -> Cartesian {
-    let cross_cd = cross(c, d);
-    let triple_product_acd = dot(a, cross_cd);
-    let triple_product_bcd = dot(b, cross_cd);
-    let scaled_a = scale(a, triple_product_bcd);
-    let scaled_b = scale(b, triple_product_acd);
-    subtract(scaled_b, scaled_a)
 }
 
 /// Cached `gamma` and `sin(gamma)` for a fixed (A, B) pair, so loops that
@@ -162,15 +98,6 @@ pub fn vec3_length(v: &Cartesian) -> f64 {
     length(*v)
 }
 
-/// Normalize a vector
-fn normalize(v: Cartesian) -> Cartesian {
-    let len = length(v);
-    if len == 0.0 {
-        return v;
-    }
-    Cartesian::new(v.x() / len, v.y() / len, v.z() / len)
-}
-
 /// Linear interpolation between two vectors
 fn lerp(a: Cartesian, b: Cartesian, t: f64) -> Cartesian {
     Cartesian::new(
@@ -188,11 +115,6 @@ fn subtract(a: Cartesian, b: Cartesian) -> Cartesian {
 /// Distance between two 3D vectors
 pub fn vec3_distance(a: &Cartesian, b: &Cartesian) -> f64 {
     length(subtract(*a, *b))
-}
-
-/// Scale a vector by a scalar
-fn scale(v: Cartesian, s: f64) -> Cartesian {
-    Cartesian::new(v.x() * s, v.y() * s, v.z() * s)
 }
 
 /// Compute angle between two vectors

@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use a5::coordinate_systems::Cartesian;
-use a5::utils::vector::{quadruple_product, slerp, vector_difference};
+use a5::utils::vector::slerp;
 
 const TOLERANCE: f64 = 1e-6;
 
@@ -15,67 +15,6 @@ fn close_to_array(a: Cartesian, b: [f64; 3], tolerance: f64) -> bool {
     close_to(a.x(), b[0], tolerance)
         && close_to(a.y(), b[1], tolerance)
         && close_to(a.z(), b[2], tolerance)
-}
-
-fn normalize_vector(v: Cartesian) -> Cartesian {
-    let len = (v.x() * v.x() + v.y() * v.y() + v.z() * v.z()).sqrt();
-    if len == 0.0 {
-        return v;
-    }
-    Cartesian::new(v.x() / len, v.y() / len, v.z() / len)
-}
-
-#[test]
-fn test_vector_difference_identical_vectors() {
-    let a = Cartesian::new(1.0, 0.0, 0.0);
-    let b = Cartesian::new(1.0, 0.0, 0.0);
-    let result = vector_difference(a, b);
-    assert!(close_to(result, 0.0, TOLERANCE));
-}
-
-#[test]
-fn test_vector_difference_perpendicular_vectors() {
-    let a = Cartesian::new(1.0, 0.0, 0.0);
-    let b = Cartesian::new(0.0, 1.0, 0.0);
-    let result = vector_difference(a, b);
-    assert!(close_to(result, (0.5_f64).sqrt(), TOLERANCE));
-}
-
-#[test]
-fn test_vector_difference_small_angles() {
-    let a = Cartesian::new(1.0, 0.0, 0.0);
-    let b = normalize_vector(Cartesian::new(0.999, 0.001, 0.0));
-    let result = vector_difference(a, b);
-    assert!(result > 0.0);
-    assert!(result < 0.1);
-}
-
-#[test]
-fn test_quadruple_product_basic() {
-    let a = Cartesian::new(1.0, 0.0, 0.0);
-    let b = Cartesian::new(0.0, 1.0, 0.0);
-    let c = Cartesian::new(0.0, 0.0, 1.0);
-    let d = normalize_vector(Cartesian::new(1.0, 1.0, 1.0));
-
-    let result = quadruple_product(a, b, c, d);
-
-    // Result should be a 3D vector
-    assert!(result.x().is_finite());
-    assert!(result.y().is_finite());
-    assert!(result.z().is_finite());
-}
-
-#[test]
-fn test_quadruple_product_orthogonal() {
-    let a = Cartesian::new(1.0, 0.0, 0.0);
-    let b = Cartesian::new(0.0, 1.0, 0.0);
-    let c = Cartesian::new(0.0, 0.0, 1.0);
-    let d = Cartesian::new(1.0, 0.0, 0.0);
-
-    let result = quadruple_product(a, b, c, d);
-
-    // The quadruple product of these vectors should be non-zero
-    assert!(result.x() != 0.0 || result.y() != 0.0 || result.z() != 0.0);
 }
 
 #[test]

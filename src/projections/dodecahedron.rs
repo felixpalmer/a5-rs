@@ -327,36 +327,57 @@ fn transform_quat(v: Cartesian, q: [f64; 4]) -> Cartesian {
 mod tests {
     use super::*;
 
-    /// The equal-area projection caches shape constants from one canonical
-    /// triangle, which is only valid if every spherical triangle the
-    /// dodecahedron can supply is congruent AND consistently wound (the sign
-    /// of `v` is chirality-sensitive). This enforces the invariant documented
-    /// in `equal_area.rs`.
+    /// The equal-area projection caches constants from one canonical triangle
+    /// and reuses them for every face. That is valid because all dodecahedron
+    /// face triangles are congruent and consistently wound:
+    ///   - `volume_abc` and `area_abc` are identical on every face;
+    ///   - A·B / A·C only ever take the two canonical values — equal for "even"
+    ///     faces and swapped for the mirror-image "odd" faces, which `inverse()`
+    ///     handles by swapping B↔C — so on even faces `alpha_transform` matches.
     #[test]
     fn test_triangle_constants_agree_across_all_triangles() {
         let mut dodecahedron = DodecahedronProjection::new().unwrap();
         let canonical =
             EqualAreaProjection::compute_constants(dodecahedron.crs.get_canonical_triangle());
 
-        const RELATIVE_TOLERANCE: f64 = 1e-13;
+        let rel = |actual: f64, expected: f64| (actual - expected).abs() <= expected.abs() * 1e-12;
+
         for origin_id in 0..12u8 {
             for face_triangle_index in 0..10usize {
                 for reflected in [false, true] {
                     let triangle = dodecahedron
                         .get_spherical_triangle(face_triangle_index, origin_id, reflected)
                         .unwrap();
-                    let constants = EqualAreaProjection::compute_constants(triangle);
-                    for (name, actual, expected) in [
-                        ("v", constants.v, canonical.v),
-                        ("c12", constants.c12, canonical.c12),
-                        ("s12", constants.s12, canonical.s12),
-                        ("k_q", constants.k_q, canonical.k_q),
-                        ("area_abc", constants.area_abc, canonical.area_abc),
-                    ] {
-                        assert!(
-                            (actual - expected).abs() < expected.abs() * RELATIVE_TOLERANCE,
-                            "{name} mismatch at face {face_triangle_index}, origin {origin_id}, reflected {reflected}"
-                        );
+                    let c = EqualAreaProjection::compute_constants(triangle);
+                    let loc = format!(
+                        "face {face_triangle_index}, origin {origin_id}, reflected {reflected}"
+                    );
+
+                    // Invariant on every face.
+                    assert!(
+                        rel(c.volume_abc, canonical.volume_abc),
+                        "volume_abc at {loc}"
+                    );
+                    assert!(rel(c.area_abc, canonical.area_abc), "area_abc at {loc}");
+
+                    // A·B / A·C take the two canonical values; orientation is
+                    // whichever canonical value A·B is nearer to (as inverse uses).
+                    let even = (c.a_dot_b - canonical.a_dot_b).abs()
+                        < (c.a_dot_b - canonical.a_dot_c).abs();
+                    if even {
+                        assert!(rel(c.a_dot_b, canonical.a_dot_b), "a_dot_b at {loc}");
+                        assert!(rel(c.a_dot_c, canonical.a_dot_c), "a_dot_c at {loc}");
+                        // The cached coefficient matrix matches exactly on even faces.
+                        for i in 0..6 {
+                            assert!(
+                                (c.alpha_transform[i] - canonical.alpha_transform[i]).abs() < 1e-13,
+                                "alpha_transform[{i}] at {loc}"
+                            );
+                        }
+                    } else {
+                        // Mirror-image face: A·B and A·C swapped.
+                        assert!(rel(c.a_dot_b, canonical.a_dot_c), "a_dot_b at {loc}");
+                        assert!(rel(c.a_dot_c, canonical.a_dot_b), "a_dot_c at {loc}");
                     }
                 }
             }
