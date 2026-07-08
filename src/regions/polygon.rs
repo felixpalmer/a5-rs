@@ -11,9 +11,10 @@ use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_spherica
 use crate::core::serialization::{
     cell_to_children, cell_to_parent, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
 };
-use crate::geometry::spherical_polygon::{
-    point_in_spherical_polygon, ring_segment_normals, ring_winding_sign,
+use crate::geometry::prepared_polygon::{
+    point_in_prepared_polygon, prepare_polygon, PreparedPolygon,
 };
+use crate::geometry::spherical_polygon::ring_winding_sign;
 use crate::traversal::cap::estimate_cell_radius;
 use crate::traversal::lattice_flood_fill::{triple_space_flood_fill, FloodInput};
 use crate::traversal::lattice_neighbors::get_lattice_neighbors;
@@ -28,20 +29,6 @@ struct DenseSampleResult {
     boundary_cells: Vec<u64>,
     boundary_set: HashSet<u64>,
     segment_map: SegmentMap,
-}
-
-/// Point-in-polygon for a polygon with holes: inside the outer ring and
-/// outside every hole ring.
-fn point_in_polygon_rings(point: Cartesian, ring_vecs_list: &[Vec<Cartesian>]) -> bool {
-    if !point_in_spherical_polygon(point, &ring_vecs_list[0]) {
-        return false;
-    }
-    for ring_vecs in &ring_vecs_list[1..] {
-        if point_in_spherical_polygon(point, ring_vecs) {
-            return false;
-        }
-    }
-    true
 }
 
 /// Dense-sample boundary cells along every closed ring (outer + holes) at
@@ -132,7 +119,7 @@ fn filter_boundary_cells(
     segment_map: &SegmentMap,
     seg_normals: &[Cartesian],
     seg_signs: &[f64],
-    ring_vecs_list: &[Vec<Cartesian>],
+    prep: &PreparedPolygon,
 ) -> Result<Vec<u64>, String> {
     let mut out: Vec<u64> = Vec::new();
     for &cell in boundary_cells {
@@ -140,7 +127,7 @@ fn filter_boundary_cells(
         let segments = match segment_map.get(&cell) {
             Some(s) => s,
             None => {
-                if point_in_polygon_rings(cv, ring_vecs_list) {
+                if point_in_prepared_polygon(cv, prep) {
                     out.push(cell);
                 }
                 continue;
@@ -163,7 +150,7 @@ fn filter_boundary_cells(
             }
         }
         if ambiguous || (any_inside && !all_inside) {
-            if point_in_polygon_rings(cv, ring_vecs_list) {
+            if point_in_prepared_polygon(cv, prep) {
                 out.push(cell);
             }
         } else if all_inside {
@@ -373,6 +360,8 @@ pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<
         ring_vecs_list.push(ring_vecs);
     }
 
+    let prep = prepare_polygon(ring_vecs_list.clone());
+
     let DenseSampleResult {
         boundary_cells,
         boundary_set,
@@ -386,8 +375,8 @@ pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<
     let mut seg_signs: Vec<f64> = Vec::new();
     for (r, ring_vecs) in ring_vecs_list.iter().enumerate() {
         let sign = (if r == 0 { 1 } else { -1 }) * ring_winding_sign(ring_vecs);
-        for normal in ring_segment_normals(ring_vecs) {
-            seg_normals.push(normal);
+        for normal in &prep.ring_normals[r] {
+            seg_normals.push(*normal);
             seg_signs.push(sign as f64);
         }
     }
@@ -397,7 +386,7 @@ pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<
         &segment_map,
         &seg_normals,
         &seg_signs,
-        &ring_vecs_list,
+        &prep,
     )?;
 
     // Dense sampling can leave gaps; the shell catches them, classifying each cell.
@@ -410,7 +399,7 @@ pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<
     let mut visited: HashSet<u64> = boundary_set.clone();
     for cell in shell_cells {
         let cv = to_cartesian(cell_to_spherical(cell)?);
-        if point_in_polygon_rings(cv, &ring_vecs_list) {
+        if point_in_prepared_polygon(cv, &prep) {
             interior_seeds.push(cell);
         } else {
             visited.insert(cell); // exterior shell (and hole interiors) join the firewall

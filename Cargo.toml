@@ -60,7 +60,7 @@ name = "hierarchy"
 harness = false
 
 [[bench]]
-name = "hilbert"
+name = "curve"
 harness = false
 
 [[bench]]

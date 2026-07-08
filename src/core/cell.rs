@@ -7,16 +7,17 @@ use crate::core::constants::PI_OVER_5;
 use crate::core::coordinate_transforms::{
     face_to_ij, from_lon_lat, normalize_longitudes, to_lon_lat, to_polar,
 };
-use crate::core::hilbert::{ij_to_s, s_to_anchor};
 use crate::core::origin::{
     find_nearest_origin, find_nearest_origin_cartesian, quintant_to_segment, segment_to_quintant,
 };
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL};
 use crate::core::tiling::{
-    get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices,
+    get_face_vertices, get_pentagon_center, get_pentagon_vertices, get_quintant_polar,
+    get_quintant_vertices,
 };
 use crate::core::utils::{A5Cell, Origin, OriginId};
 use crate::geometry::pentagon::PentagonShape;
+use crate::lattice::{ij_to_s, s_to_cell};
 use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::global_neighbors::get_global_cell_neighbors;
 use crate::utils::spiral::{Spiral, SPIRAL_SAMPLE_COUNT};
@@ -240,21 +241,35 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
     }
 
     let hilbert_resolution = cell.resolution - FIRST_HILBERT_RESOLUTION + 1;
-    let s_u64 = cell
-        .s
-        .to_string()
-        .parse::<u64>()
-        .map_err(|_| "Failed to convert BigInt to u64")?;
-    let anchor = s_to_anchor(s_u64, hilbert_resolution as usize, orientation);
-    let pentagon_shape = get_pentagon_vertices(hilbert_resolution, quintant, &anchor);
+    let cell_geom = s_to_cell(cell.s, hilbert_resolution as usize, orientation);
+    let pentagon_shape = get_pentagon_vertices(
+        hilbert_resolution,
+        quintant,
+        &cell_geom.triple,
+        cell_geom.flavor,
+    );
     Ok(pentagon_shape)
 }
 
 /// Convert A5 cell ID to spherical coordinates of cell center
 pub fn cell_to_spherical(cell: u64) -> Result<crate::coordinate_systems::Spherical, String> {
     let cell_data = deserialize(cell)?;
-    let pentagon = get_pentagon(&cell_data)?;
     let dodecahedron = DodecahedronProjection::get_thread_local();
+    if cell_data.resolution >= FIRST_HILBERT_RESOLUTION {
+        // Fast path: the pentagon center is O(1) from (triple, flavor) — no need
+        // to construct the pentagon itself.
+        let (quintant, orientation) = segment_to_quintant(cell_data.segment, cell_data.origin());
+        let hilbert_resolution = cell_data.resolution - FIRST_HILBERT_RESOLUTION + 1;
+        let cell_geom = s_to_cell(cell_data.s, hilbert_resolution as usize, orientation);
+        let center = get_pentagon_center(
+            hilbert_resolution,
+            quintant,
+            &cell_geom.triple,
+            cell_geom.flavor,
+        );
+        return dodecahedron.inverse(center, cell_data.origin_id);
+    }
+    let pentagon = get_pentagon(&cell_data)?;
     dodecahedron.inverse(pentagon.get_center(), cell_data.origin_id)
 }
 
