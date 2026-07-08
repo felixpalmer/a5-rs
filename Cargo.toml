@@ -22,6 +22,7 @@ include = [
 
 [lib]
 path = "src/lib.rs"
+bench = false  # no #[bench] fns in the lib; lets plain `cargo bench` run the criterion benches without the libtest harness rejecting criterion's CLI flags
 
 [dependencies]
 lazy_static = "1.4"  # For static pattern arrays
