@@ -32,3 +32,44 @@ criterion = "0.5"  # For benchmarking
 serde_json = { version = "1.0", features = ["float_roundtrip"] }  # For reading test fixtures and examples
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3.0"  # For temporary files in tests
+
+# Benchmarks (criterion). Mirrors the TypeScript `/benchmarks` suite.
+[[bench]]
+name = "cap"
+harness = false
+
+[[bench]]
+name = "cell"
+harness = false
+
+[[bench]]
+name = "compact"
+harness = false
+
+[[bench]]
+name = "grid_disk"
+harness = false
+
+[[bench]]
+name = "hex"
+harness = false
+
+[[bench]]
+name = "hierarchy"
+harness = false
+
+[[bench]]
+name = "hilbert"
+harness = false
+
+[[bench]]
+name = "line"
+harness = false
+
+[[bench]]
+name = "polygon"
+harness = false
+
+[[bench]]
+name = "projections"
+harness = false
