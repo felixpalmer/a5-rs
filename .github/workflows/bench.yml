@@ -1,0 +1,45 @@
+name: bench
+
+# Compare benchmark performance of the PR against its merge-base with main.
+# Both runs execute on the same runner minutes apart, so machine variance
+# largely cancels out. The PR's benchmark files drive both runs; only the
+# library code in /src is switched to the baseline commit.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Keep each run bounded on CI while still collecting enough samples for a
+  # stable median. Passed to every criterion bench binary.
+  CRITERION_ARGS: --warm-up-time 0.5 --measurement-time 2.0 --noplot
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run benchmarks (PR)
+        run: cargo bench -- --save-baseline pr $CRITERION_ARGS
+
+      - name: Switch library code to baseline
+        run: |
+          BASE=$(git merge-base origin/main HEAD)
+          echo "Baseline commit: $BASE"
+          git checkout "$BASE" -- src
+
+      - name: Run benchmarks (baseline)
+        run: cargo bench -- --save-baseline base $CRITERION_ARGS
+
+      - name: Compare (fail on >15% regression)
+        shell: bash
+        run: python3 scripts/compare_benchmarks.py base pr 15 | tee -a "$GITHUB_STEP_SUMMARY"
