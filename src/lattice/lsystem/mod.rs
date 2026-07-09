@@ -36,7 +36,22 @@ use std::sync::LazyLock;
 use crate::lattice::types::{Orientation, Triple};
 
 use grammar::{draws, rules};
-use tables::{compile_grammar, CurveTables, POW2};
+use tables::{compile_grammar, CurveTables, BSP_EPS, POW2};
+
+/// Branchless child pick: 3 separator dot products form a 3-bit pattern that
+/// indexes the per-state lookup table. No data-dependent branches (the tree
+/// walk's mispredictions are what made the branchy form lose to the 4-hull scan
+/// in native code).
+#[inline]
+fn classify(t: &CurveTables, state: usize, rel_a: f64, rel_b: f64, scale: f64) -> usize {
+    let s = &t.class_sep;
+    let b = state * 9;
+    let thr = -BSP_EPS * scale;
+    let b0 = (s[b] * rel_a + s[b + 1] * rel_b + s[b + 2] * scale >= thr) as usize;
+    let b1 = (s[b + 3] * rel_a + s[b + 4] * rel_b + s[b + 5] * scale >= thr) as usize;
+    let b2 = (s[b + 6] * rel_a + s[b + 7] * rel_b + s[b + 8] * scale >= thr) as usize;
+    t.class_lut[state * 8 + (b0 | (b1 << 1) | (b2 << 2))] as usize
+}
 
 /// The compiled A5 grammar.
 static A5: LazyLock<CurveTables> = LazyLock::new(|| compile_grammar(&rules(), &draws()));
@@ -188,29 +203,46 @@ pub fn axiom_target_to_s(
     while level >= 2 {
         let scale = POW2[level - 2];
         let sign = if flip == 1 { -scale } else { scale };
-        let mut best_d = 0usize;
-        let mut best_score = f64::NEG_INFINITY;
-        for d in 0..4 {
-            let ci = motif * 4 + d;
-            let score = inside_score(
+        // Exact targets (real cell corner sums) are strictly interior at every
+        // level, so the branchless classifier is provably the containing child —
+        // and it beats the 4-hull scan in native code. Fractional targets can sit
+        // on a child boundary, where the classifier's tie-break can differ from
+        // the argmax; there the classifier + a verify costs more than just the
+        // scan, so keep the exact argmax scan for that (rarer, non-hot) path.
+        let best_d = if exact {
+            classify(
                 t,
-                t.child_token[ci] as usize,
-                flip ^ t.child_flip[ci],
-                level - 1,
-                pos_a + t.child_off_a[ci] * sign,
-                pos_b + t.child_off_b[ci] * sign,
-                ta,
-                tb,
-                best_score,
-            );
-            if score > best_score {
-                best_score = score;
-                best_d = d;
-                if score > 0.0 {
-                    break; // strictly inside: the unique containing child
+                motif * 2 + flip as usize,
+                ta - 3.0 * pos_a,
+                tb - 3.0 * pos_b,
+                scale,
+            )
+        } else {
+            let mut best_d = 0usize;
+            let mut best_score = f64::NEG_INFINITY;
+            for d in 0..4 {
+                let ci = motif * 4 + d;
+                let score = inside_score(
+                    t,
+                    t.child_token[ci] as usize,
+                    flip ^ t.child_flip[ci],
+                    level - 1,
+                    pos_a + t.child_off_a[ci] * sign,
+                    pos_b + t.child_off_b[ci] * sign,
+                    ta,
+                    tb,
+                    best_score,
+                );
+                if score > best_score {
+                    best_score = score;
+                    best_d = d;
+                    if score > 0.0 {
+                        break;
+                    }
                 }
             }
-        }
+            best_d
+        };
         let ci = motif * 4 + best_d;
         pos_a += t.child_off_a[ci] * sign;
         pos_b += t.child_off_b[ci] * sign;

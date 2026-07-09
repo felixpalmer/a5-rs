@@ -44,6 +44,20 @@ pub struct CurveTables {
     pub leaf_sum: Vec<f64>,
     pub leaf_tri: Vec<f64>,
     pub leaf_flavor: Vec<u8>,
+    // Branchless child classifier per state k = motif*2+flip: 3 separating lines
+    // (`class_sep[k*9 ..]` = [nx0,ny0,c0, nx1,ny1,c1, nx2,ny2,c2]) evaluated
+    // against the normalised target give a 3-bit pattern; `class_lut[k*8 + pat]`
+    // is the child digit. Replaces the 4-hull scan with 3 dot products + a LUT
+    // read and NO data-dependent branches (unused slots are 0 -> always bit 1).
+    pub class_sep: Vec<f64>,
+    pub class_lut: Vec<u8>,
+}
+
+/// A child-selection BSP built at compile time, later flattened to the
+/// branchless `class_sep` / `class_lut` tables.
+enum Bsp {
+    Leaf(usize),
+    Node(f64, f64, f64, Box<Bsp>, Box<Bsp>),
 }
 
 // The pentagon FLAVOR (0-3) of the cell a draw symbol hosts: which of the four
@@ -295,6 +309,37 @@ pub fn compile_grammar(
         }
     }
 
+    // ---------- branchless child classifier (3 line tests + LUT per state) ----------
+    let mut class_sep = vec![0.0f64; motif_count * 2 * 9];
+    let mut class_lut = vec![0u8; motif_count * 2 * 8];
+    for m in 0..motif_count {
+        for f in 0..2 {
+            let k = m * 2 + f;
+            let children = child_polys(
+                m,
+                f,
+                &child_token,
+                &child_flip,
+                &child_off_a,
+                &child_off_b,
+                &fp_edges,
+                &fp_offset,
+            );
+            let tree = build_bsp_rec(&children);
+            // distinct separators in DFS order (<= 3 for a 4-way split)
+            let mut seps: Vec<(f64, f64, f64)> = Vec::new();
+            collect_seps(&tree, &mut seps);
+            for (i, s) in seps.iter().enumerate() {
+                class_sep[k * 9 + i * 3] = s.0;
+                class_sep[k * 9 + i * 3 + 1] = s.1;
+                class_sep[k * 9 + i * 3 + 2] = s.2;
+            }
+            for p in 0..8u8 {
+                class_lut[k * 8 + p as usize] = walk_bsp(&tree, p, &seps) as u8;
+            }
+        }
+    }
+
     CurveTables {
         motif_idx,
         child_token,
@@ -306,6 +351,120 @@ pub fn compile_grammar(
         leaf_sum,
         leaf_tri,
         leaf_flavor,
+        class_sep,
+        class_lut,
+    }
+}
+
+pub const BSP_EPS: f64 = 1e-6;
+
+/// The 4 child footprint polygons for state (motif, pflip), in the NORMALISED
+/// target-relative-to-cursor frame (scale-invariant), as (digit, verts).
+#[allow(clippy::too_many_arguments)]
+fn child_polys(
+    motif: usize,
+    pflip: usize,
+    child_token: &[i32],
+    child_flip: &[u8],
+    child_off_a: &[f64],
+    child_off_b: &[f64],
+    fp_edges: &[f64],
+    fp_offset: &[usize],
+) -> Vec<(usize, Vec<(f64, f64)>)> {
+    let psign = if pflip == 1 { -1.0 } else { 1.0 };
+    let mut out = Vec::with_capacity(4);
+    for d in 0..4 {
+        let ci = motif * 4 + d;
+        let tok = child_token[ci] as usize;
+        let cfl = child_flip[ci] as usize;
+        let oa = child_off_a[ci];
+        let ob = child_off_b[ci];
+        let k = tok * 2 + (pflip ^ cfl);
+        let mut verts = Vec::new();
+        let mut e = fp_offset[k];
+        while e < fp_offset[k + 1] {
+            verts.push((
+                3.0 * oa * psign + fp_edges[e],
+                3.0 * ob * psign + fp_edges[e + 1],
+            ));
+            e += 4;
+        }
+        out.push((d, verts));
+    }
+    out
+}
+
+/// Build a child-selection BSP: at each step some polygon edge separates the
+/// (convex, tiling) children cleanly into two groups.
+fn build_bsp_rec(children: &[(usize, Vec<(f64, f64)>)]) -> Bsp {
+    if children.len() == 1 {
+        return Bsp::Leaf(children[0].0);
+    }
+    for (_, poly) in children {
+        let n = poly.len();
+        for i in 0..n {
+            let (x1, y1) = poly[i];
+            let (x2, y2) = poly[(i + 1) % n];
+            let nx = y2 - y1;
+            let ny = -(x2 - x1);
+            let c = -(nx * x1 + ny * y1);
+            let mut pos: Vec<(usize, Vec<(f64, f64)>)> = Vec::new();
+            let mut neg: Vec<(usize, Vec<(f64, f64)>)> = Vec::new();
+            let mut ok = true;
+            for (d, cp) in children {
+                let mut mn = f64::INFINITY;
+                let mut mx = f64::NEG_INFINITY;
+                for &(x, y) in cp {
+                    let val = nx * x + ny * y + c;
+                    mn = mn.min(val);
+                    mx = mx.max(val);
+                }
+                if mn >= -BSP_EPS {
+                    pos.push((*d, cp.clone()));
+                } else if mx <= BSP_EPS {
+                    neg.push((*d, cp.clone()));
+                } else {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok && !pos.is_empty() && !neg.is_empty() {
+                return Bsp::Node(
+                    nx,
+                    ny,
+                    c,
+                    Box::new(build_bsp_rec(&pos)),
+                    Box::new(build_bsp_rec(&neg)),
+                );
+            }
+        }
+    }
+    panic!("lsystem: no clean BSP split for child set");
+}
+
+fn collect_seps(tree: &Bsp, seps: &mut Vec<(f64, f64, f64)>) {
+    if let Bsp::Node(nx, ny, c, pos, neg) = tree {
+        let key = (*nx, *ny, *c);
+        if !seps.contains(&key) {
+            seps.push(key);
+        }
+        collect_seps(pos, seps);
+        collect_seps(neg, seps);
+    }
+}
+
+/// Walk the tree for a fixed sign pattern `p` (bit i = which side of separator i).
+fn walk_bsp(tree: &Bsp, p: u8, seps: &[(f64, f64, f64)]) -> usize {
+    match tree {
+        Bsp::Leaf(d) => *d,
+        Bsp::Node(nx, ny, c, pos, neg) => {
+            let idx = seps.iter().position(|s| *s == (*nx, *ny, *c)).unwrap();
+            if (p >> idx) & 1 == 1 {
+                walk_bsp(pos, p, seps)
+            } else {
+                walk_bsp(neg, p, seps)
+            }
+        }
     }
 }
 
