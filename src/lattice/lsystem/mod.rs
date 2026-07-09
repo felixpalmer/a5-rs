@@ -36,7 +36,7 @@ use std::sync::LazyLock;
 use crate::lattice::types::{Orientation, Triple};
 
 use grammar::{draws, rules};
-use tables::{compile_grammar, CurveTables, POW2, POW4};
+use tables::{compile_grammar, CurveTables, POW2};
 
 /// The compiled A5 grammar.
 static A5: LazyLock<CurveTables> = LazyLock::new(|| compile_grammar(&rules(), &draws()));
@@ -48,12 +48,9 @@ pub struct Cell {
     pub flavor: u8,
 }
 
-// s <-> quaternary digits, via two halves: `lo` holds digits 0-12 (26 bits),
-// `hi` the rest (up to 2^34 at resolution 30) — both exact, so the per-level
-// work is plain arithmetic.
-const LO_DIGITS: usize = 13;
-const LO_BITS: u32 = 26;
-const LO_MASK: u64 = 0x3ff_ffff;
+// The quaternary digits of `s` are read directly with native u64 bit ops
+// (digit L-1 is `(s >> (2*(L-1))) & 3`) — u64 covers all 60 bits at resolution
+// 30, so no BigInt/float split is needed (unlike the TypeScript port).
 
 // ---------- exact (a,b) corner-sum <-> A5 triple ----------
 // The turtle (a,b) lattice and A5's triple frame are two views of the same
@@ -105,8 +102,6 @@ pub struct LeafCell {
 // offset negated when flipped (180°); the child's own frame is
 // `flip XOR child.flip`. Internal; also used by compat.rs.
 pub fn axiom_leaf_cell(t: &CurveTables, s: u64, r: usize, axiom: usize) -> LeafCell {
-    let lo = (s & LO_MASK) as u32;
-    let hi = s >> LO_BITS;
     let mut motif = axiom;
     let mut flip: u8 = 0;
     let mut pos_a = 0.0f64;
@@ -114,11 +109,7 @@ pub fn axiom_leaf_cell(t: &CurveTables, s: u64, r: usize, axiom: usize) -> LeafC
     let mut level = r;
     while level >= 2 {
         let idx = level - 1;
-        let d = if idx < LO_DIGITS {
-            ((lo >> (idx * 2)) & 3) as usize
-        } else {
-            ((hi / 4u64.pow((idx - LO_DIGITS) as u32)) % 4) as usize
-        };
+        let d = ((s >> (idx * 2)) & 3) as usize;
         let ci = motif * 4 + d;
         let scale = if flip == 1 {
             -POW2[level - 2]
@@ -132,7 +123,7 @@ pub fn axiom_leaf_cell(t: &CurveTables, s: u64, r: usize, axiom: usize) -> LeafC
         level -= 1;
     }
     // level 1: leaf walk (from heading 0 or 3), take the d0-th host cell
-    let d0 = if r >= 1 { (lo & 3) as usize } else { 0 };
+    let d0 = if r >= 1 { (s & 3) as usize } else { 0 };
     let base = motif * 2 + flip as usize;
     LeafCell {
         a: 3.0 * pos_a + t.leaf_sum[base * 8 + d0 * 2],
@@ -155,12 +146,16 @@ fn inside_score(
     best: f64,
 ) -> f64 {
     let scale = POW2[lvl - 1];
-    let edges = &t.fp_edges[motif * 2 + flip as usize];
+    let k = motif * 2 + flip as usize;
+    let edges = &t.fp_edges[t.fp_offset[k]..t.fp_offset[k + 1]];
+    // pos is fixed across this hull; fold 3*pos into the target once.
+    let ra = ta - 3.0 * pos_a;
+    let rb = tb - 3.0 * pos_b;
     let mut min_cross = f64::INFINITY;
     let mut e = 0;
     while e < edges.len() {
-        let dta = ta - (3.0 * pos_a + edges[e] * scale);
-        let dtb = tb - (3.0 * pos_b + edges[e + 1] * scale);
+        let dta = ra - edges[e] * scale;
+        let dtb = rb - edges[e + 1] * scale;
         let cross = edges[e + 2] * dtb - edges[e + 3] * dta;
         if cross < min_cross {
             min_cross = cross;
@@ -183,13 +178,12 @@ pub fn axiom_target_to_s(
     r: usize,
     axiom: usize,
     exact: bool,
-) -> u64 {
+) -> (u64, u8) {
     let mut motif = axiom;
     let mut flip: u8 = 0;
     let mut pos_a = 0.0f64;
     let mut pos_b = 0.0f64;
-    let mut s_lo = 0.0f64;
-    let mut s_hi = 0.0f64;
+    let mut s_val: u64 = 0;
     let mut level = r;
     while level >= 2 {
         let scale = POW2[level - 2];
@@ -222,12 +216,7 @@ pub fn axiom_target_to_s(
         pos_b += t.child_off_b[ci] * sign;
         flip ^= t.child_flip[ci];
         motif = t.child_token[ci] as usize;
-        let idx = level - 1;
-        if idx < LO_DIGITS {
-            s_lo += best_d as f64 * POW4[idx];
-        } else {
-            s_hi += best_d as f64 * POW4[idx - LO_DIGITS];
-        }
+        s_val |= (best_d as u64) << (2 * (level - 1));
         level -= 1;
     }
     // level 1: pick the leaf cell, by exact corner-sum match or point-in-cell
@@ -251,13 +240,15 @@ pub fn axiom_target_to_s(
             );
         }
     } else {
+        let ra = ta - 3.0 * pos_a;
+        let rb = tb - 3.0 * pos_b;
         let mut best_score = f64::NEG_INFINITY;
         for d in 0..4 {
             let mut min_cross = f64::INFINITY;
             for e in 0..3 {
                 let o = base * 48 + d * 12 + e * 4;
-                let dta = ta - (3.0 * pos_a + t.leaf_tri[o]);
-                let dtb = tb - (3.0 * pos_b + t.leaf_tri[o + 1]);
+                let dta = ra - t.leaf_tri[o];
+                let dtb = rb - t.leaf_tri[o + 1];
                 let cross = t.leaf_tri[o + 2] * dtb - t.leaf_tri[o + 3] * dta;
                 if cross < min_cross {
                     min_cross = cross;
@@ -272,68 +263,82 @@ pub fn axiom_target_to_s(
             }
         }
     }
-    s_lo += d0 as f64;
-    if r > LO_DIGITS {
-        ((s_hi as u64) << LO_BITS) | (s_lo as u64)
-    } else {
-        s_lo as u64
-    }
+    (s_val | d0 as u64, t.leaf_flavor[base * 4 + d0])
 }
 
 // ---------- orientation = which triforce motif is the axiom ----------
 // Each orientation is one of the three triforce motifs used as the axiom
 // (uv->A, uw->C, wv->B), with the reverse orientations (vu, wu, vw) walking the
-// same curve backward (s -> N-1-s).
+// same curve backward (s -> N-1-s). The axiom motif index is resolved once at
+// init here (not per call) — motif_idx is a HashMap, so the per-call lookup was
+// pure overhead on this hot path.
 struct OrientRecipe {
-    axiom_char: char,
+    axiom: usize,
     reverse: bool,
     is_b: bool,
 }
 
-fn orient_recipe(o: Orientation) -> OrientRecipe {
+#[inline]
+fn orient_index(o: Orientation) -> usize {
     match o {
-        Orientation::UV => OrientRecipe {
-            axiom_char: 'A',
-            reverse: false,
-            is_b: false,
-        },
-        Orientation::VU => OrientRecipe {
-            axiom_char: 'A',
-            reverse: true,
-            is_b: false,
-        },
-        Orientation::UW => OrientRecipe {
-            axiom_char: 'C',
-            reverse: false,
-            is_b: false,
-        },
-        Orientation::WU => OrientRecipe {
-            axiom_char: 'C',
-            reverse: true,
-            is_b: false,
-        },
-        Orientation::VW => OrientRecipe {
-            axiom_char: 'B',
-            reverse: true,
-            is_b: true,
-        },
-        Orientation::WV => OrientRecipe {
-            axiom_char: 'B',
-            reverse: false,
-            is_b: true,
-        },
+        Orientation::UV => 0,
+        Orientation::VU => 1,
+        Orientation::UW => 2,
+        Orientation::WU => 3,
+        Orientation::VW => 4,
+        Orientation::WV => 5,
     }
 }
+
+static A5_ORIENT: LazyLock<[OrientRecipe; 6]> = LazyLock::new(|| {
+    let a = A5.motif_idx[&'A'];
+    let b = A5.motif_idx[&'B'];
+    let c = A5.motif_idx[&'C'];
+    [
+        OrientRecipe {
+            axiom: a,
+            reverse: false,
+            is_b: false,
+        }, // uv
+        OrientRecipe {
+            axiom: a,
+            reverse: true,
+            is_b: false,
+        }, // vu
+        OrientRecipe {
+            axiom: c,
+            reverse: false,
+            is_b: false,
+        }, // uw
+        OrientRecipe {
+            axiom: c,
+            reverse: true,
+            is_b: false,
+        }, // wu
+        OrientRecipe {
+            axiom: b,
+            reverse: true,
+            is_b: true,
+        }, // vw
+        OrientRecipe {
+            axiom: b,
+            reverse: false,
+            is_b: true,
+        }, // wv
+    ]
+});
 
 /// The A5 curve position `s` -> cell (triple coordinate + pentagon flavor), for
 /// a given resolution and orientation. The triple is bijective with
 /// `triple_to_s_lattice`.
 pub fn s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> Cell {
-    let n = 1u64 << (2 * resolution);
-    let rec = orient_recipe(orientation);
-    let axiom = A5.motif_idx[&rec.axiom_char];
-    let s_axiom = if rec.reverse { n - 1 - s } else { s };
-    let cell = axiom_leaf_cell(&A5, s_axiom, resolution, axiom);
+    let rec = &A5_ORIENT[orient_index(orientation)];
+    let s_axiom = if rec.reverse {
+        (1u64 << (2 * resolution)) - 1 - s
+    } else {
+        s
+    };
+    let cell = axiom_leaf_cell(&A5, s_axiom, resolution, rec.axiom);
     let base = ab_to_triple(cell.a, cell.b);
     if !rec.is_b {
         return Cell {
@@ -348,6 +353,16 @@ pub fn s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> Cell {
     }
 }
 
+/// The pentagon flavor of a cell given its triple, via a single A5 inverse
+/// descent (reads the leaf flavor directly). Used by compat.rs, whose forward
+/// (W/Z) descent cannot recover the flavor. One descent, versus the
+/// `triple_to_s_lattice` + `s_to_cell` round-trip it replaces.
+pub fn a5_triple_to_flavor(triple: &Triple, resolution: usize) -> u8 {
+    let axiom = A5_ORIENT[0].axiom; // uv: no reverse, no tau shift
+    let (ab_a, ab_b) = triple_to_ab(triple);
+    axiom_target_to_s(&A5, ab_a, ab_b, resolution, axiom, true).1
+}
+
 /// The A5 curve position `s` -> triple coordinate. Bijective with `triple_to_s_lattice`.
 pub fn s_to_triple(s: u64, resolution: usize, orientation: Orientation) -> Triple {
     s_to_cell(s, resolution, orientation).triple
@@ -355,18 +370,24 @@ pub fn s_to_triple(s: u64, resolution: usize, orientation: Orientation) -> Tripl
 
 /// Triple coordinate -> the A5 curve position `s`. Inverse of `s_to_triple`.
 pub fn triple_to_s_lattice(triple: &Triple, resolution: usize, orientation: Orientation) -> u64 {
-    let n = 1u64 << (2 * resolution);
-    let rec = orient_recipe(orientation);
-    let axiom = A5.motif_idx[&rec.axiom_char];
+    let rec = &A5_ORIENT[orient_index(orientation)];
     let (ab_a, ab_b) = triple_to_ab(triple);
     let tau_sum = if rec.is_b {
         12.0 * POW2[resolution]
     } else {
         0.0
     };
-    let s_axiom = axiom_target_to_s(&A5, ab_a - tau_sum, ab_b + tau_sum, resolution, axiom, true);
+    let s_axiom = axiom_target_to_s(
+        &A5,
+        ab_a - tau_sum,
+        ab_b + tau_sum,
+        resolution,
+        rec.axiom,
+        true,
+    )
+    .0;
     if rec.reverse {
-        n - 1 - s_axiom
+        (1u64 << (2 * resolution)) - 1 - s_axiom
     } else {
         s_axiom
     }
@@ -377,17 +398,23 @@ pub fn triple_to_s_lattice(triple: &Triple, resolution: usize, orientation: Orie
 /// point frame); callers map their coordinate system into it (for the IJ plane
 /// the exact affine map is target = (12*(i+j), -12*j), see curve.rs).
 pub fn sum_point_to_s(ta: f64, tb: f64, resolution: usize, orientation: Orientation) -> u64 {
-    let n = 1u64 << (2 * resolution);
-    let rec = orient_recipe(orientation);
-    let axiom = A5.motif_idx[&rec.axiom_char];
+    let rec = &A5_ORIENT[orient_index(orientation)];
     let tau_sum = if rec.is_b {
         12.0 * POW2[resolution]
     } else {
         0.0
     };
-    let s_axiom = axiom_target_to_s(&A5, ta - tau_sum, tb + tau_sum, resolution, axiom, false);
+    let s_axiom = axiom_target_to_s(
+        &A5,
+        ta - tau_sum,
+        tb + tau_sum,
+        resolution,
+        rec.axiom,
+        false,
+    )
+    .0;
     if rec.reverse {
-        n - 1 - s_axiom
+        (1u64 << (2 * resolution)) - 1 - s_axiom
     } else {
         s_axiom
     }

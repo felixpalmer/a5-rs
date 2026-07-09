@@ -29,8 +29,7 @@ use std::sync::LazyLock;
 use crate::coordinate_systems::IJ;
 use crate::lattice::lsystem::tables::{compile_grammar, CurveTables, POW2};
 use crate::lattice::lsystem::{
-    ab_to_triple, axiom_leaf_cell, axiom_target_to_s, s_to_cell, triple_to_ab, triple_to_s_lattice,
-    Cell,
+    a5_triple_to_flavor, ab_to_triple, axiom_leaf_cell, axiom_target_to_s, triple_to_ab, Cell,
 };
 use crate::lattice::types::{Orientation, Triple};
 
@@ -47,9 +46,8 @@ static ORIGINAL: LazyLock<CurveTables> = LazyLock::new(|| {
     compile_grammar(&rules, &draws)
 });
 
-fn axiom_w() -> usize {
-    ORIGINAL.motif_idx[&'W']
-}
+/// The W axiom motif index, resolved once (not per call).
+static AXIOM_W: LazyLock<usize> = LazyLock::new(|| ORIGINAL.motif_idx[&'W']);
 
 // ---------- shift_digits (ported verbatim from the original construction) ----------
 // Patterns used to rearrange the cells when shifting. This adjusts the layout
@@ -151,14 +149,18 @@ fn inverse_shift(digits: &mut [u8], invert_j: bool, flip_ij: bool) {
     }
 }
 
-fn digits_of(s: u64, resolution: usize) -> Vec<u8> {
-    let mut digits: Vec<u8> = Vec::new();
+// Quaternary digits of `s`, LSB-first, into a stack buffer (no heap alloc on
+// the hot path). At most 32 base-4 digits fit a u64; resolution stays <= 31.
+fn digits_of(s: u64, resolution: usize) -> ([u8; 33], usize) {
+    let mut digits = [0u8; 33];
     let mut v = s;
-    while v > 0 || digits.len() < resolution {
-        digits.push((v & 3) as u8);
+    let mut n = 0;
+    while v > 0 || n < resolution {
+        digits[n] = (v & 3) as u8;
         v >>= 2;
+        n += 1;
     }
-    digits
+    (digits, n)
 }
 
 fn pack_digits(digits: &[u8]) -> u64 {
@@ -211,14 +213,18 @@ fn compat_orient(o: Orientation) -> CompatRecipe {
     }
 }
 
-/// Old-curve position `s` -> cell (triple + pentagon flavor).
-pub fn compat_s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> Cell {
+/// Old-curve position `s` -> triple coordinate, via the ORIGINAL (W/Z) forward
+/// descent + shiftDigits recode. No flavor (that needs a second, A5, descent).
+pub fn compat_s_to_triple(s: u64, resolution: usize, orientation: Orientation) -> Triple {
     let rec = compat_orient(orientation);
-    let n = 1u64 << (2 * resolution);
-    let v = if rec.reverse { n - 1 - s } else { s };
-    let mut digits = digits_of(v, resolution);
-    forward_shift(&mut digits, rec.invert_j, rec.flip_ij);
-    let raw = axiom_leaf_cell(&ORIGINAL, pack_digits(&digits), resolution, axiom_w());
+    let v = if rec.reverse {
+        (1u64 << (2 * resolution)) - 1 - s
+    } else {
+        s
+    };
+    let (mut digits, len) = digits_of(v, resolution);
+    forward_shift(&mut digits[..len], rec.invert_j, rec.flip_ij);
+    let raw = axiom_leaf_cell(&ORIGINAL, pack_digits(&digits[..len]), resolution, *AXIOM_W);
     let mut triple = ab_to_triple(raw.a, raw.b);
     if rec.flip_ij {
         triple = Triple::new(triple.z, triple.y, triple.x);
@@ -227,23 +233,18 @@ pub fn compat_s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> 
         let n1 = POW2[resolution] as i32 - 1;
         triple = Triple::new(triple.y - n1, triple.x + n1, triple.z);
     }
+    triple
+}
+
+/// Old-curve position `s` -> cell (triple + pentagon flavor).
+pub fn compat_s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> Cell {
+    let triple = compat_s_to_triple(s, resolution, orientation);
     // The X/Y walk hosts every cell via a diagonal (E/e) segment, so its leaf
     // state cannot distinguish all four pentagon flavors — that missing bit is
     // exactly why the original engine carried its fractal flips field. The
     // flavor is a per-cell geometric property, so read it off the A5 descent.
-    let flavor = cell_flavor(&triple, resolution);
+    let flavor = a5_triple_to_flavor(&triple, resolution);
     Cell { triple, flavor }
-}
-
-/// The pentagon flavor of a cell — orientation-independent, via the A5 descent.
-fn cell_flavor(triple: &Triple, resolution: usize) -> u8 {
-    let s = triple_to_s_lattice(triple, resolution, Orientation::UV);
-    s_to_cell(s, resolution, Orientation::UV).flavor
-}
-
-/// Old-curve position `s` -> triple coordinate.
-pub fn compat_s_to_triple(s: u64, resolution: usize, orientation: Orientation) -> Triple {
-    compat_s_to_cell(s, resolution, orientation).triple
 }
 
 /// Triple -> old-curve position `s`, or None if the triple has invalid parity.
@@ -263,10 +264,10 @@ pub fn compat_triple_to_s(t: &Triple, resolution: usize, orientation: Orientatio
         raw = Triple::new(raw.z, raw.y, raw.x);
     }
     let (ab_a, ab_b) = triple_to_ab(&raw);
-    let s_geo = axiom_target_to_s(&ORIGINAL, ab_a, ab_b, resolution, axiom_w(), true);
-    let mut digits = digits_of(s_geo, resolution);
-    inverse_shift(&mut digits, rec.invert_j, rec.flip_ij);
-    let v = pack_digits(&digits);
+    let s_geo = axiom_target_to_s(&ORIGINAL, ab_a, ab_b, resolution, *AXIOM_W, true).0;
+    let (mut digits, len) = digits_of(s_geo, resolution);
+    inverse_shift(&mut digits[..len], rec.invert_j, rec.flip_ij);
+    let v = pack_digits(&digits[..len]);
     Some(if rec.reverse { n - 1 - v } else { v })
 }
 
@@ -287,12 +288,13 @@ pub fn compat_ij_to_s(ij: IJ, resolution: usize, orientation: Orientation) -> u6
         12.0 * (i + j),
         -12.0 * j,
         resolution,
-        axiom_w(),
+        *AXIOM_W,
         false,
-    );
-    let mut digits = digits_of(s_geo, resolution);
-    inverse_shift(&mut digits, rec.invert_j, rec.flip_ij);
-    let v = pack_digits(&digits);
+    )
+    .0;
+    let (mut digits, len) = digits_of(s_geo, resolution);
+    inverse_shift(&mut digits[..len], rec.invert_j, rec.flip_ij);
+    let v = pack_digits(&digits[..len]);
     if rec.reverse {
         n - 1 - v
     } else {

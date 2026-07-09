@@ -34,8 +34,11 @@ pub struct CurveTables {
     pub child_flip: Vec<u8>,
     pub child_off_a: Vec<f64>,
     pub child_off_b: Vec<f64>,
-    // footprint hulls per (motif, flip): edge list [3*c0.a, 3*c0.b, d.a, d.b]*E
-    pub fp_edges: Vec<Vec<f64>>,
+    // footprint hulls per (motif, flip): edge list [3*c0.a, 3*c0.b, d.a, d.b]*E,
+    // all flattened into one contiguous buffer; the edges for state
+    // k = motif*2+flip are fp_edges[fp_offset[k]..fp_offset[k + 1]].
+    pub fp_edges: Vec<f64>,
+    pub fp_offset: Vec<usize>,
     // leaf tables per (motif, flip): 4 host cells as corner sums, point-in-cell
     // triangle edges, and pentagon flavors
     pub leaf_sum: Vec<f64>,
@@ -215,7 +218,7 @@ pub fn compile_grammar(
     // cross products stay ~O(2^R) instead of O(2^2R) — exact integer at every
     // resolution. The flipped variant is the hull negated (180° = negate,
     // winding-preserving).
-    let mut fp_edges: Vec<Vec<f64>> = vec![Vec::new(); motif_count * 2];
+    let mut by_state: Vec<Vec<f64>> = vec![Vec::new(); motif_count * 2];
     for &m in &all_motifs {
         let mut corners: Vec<AB> = Vec::new();
         walk(
@@ -236,8 +239,16 @@ pub fn compile_grammar(
                 edges[i * 4 + 2] = sign * (c1.a - c0.a) as f64;
                 edges[i * 4 + 3] = sign * (c1.b - c0.b) as f64;
             }
-            fp_edges[motif_idx[&m] * 2 + flip] = edges;
+            by_state[motif_idx[&m] * 2 + flip] = edges;
         }
+    }
+    // Flatten the per-state hulls into one contiguous buffer + offset index, so
+    // the containment descent (inside_score) hits a single cache-friendly slice.
+    let mut fp_edges: Vec<f64> = Vec::new();
+    let mut fp_offset = vec![0usize; motif_count * 2 + 1];
+    for (k, edges) in by_state.iter().enumerate() {
+        fp_edges.extend_from_slice(edges);
+        fp_offset[k + 1] = fp_edges.len();
     }
 
     // ---------- leaf tables: per (motif, flip = heading 0|3) the 4 level-1 host cells ----------
@@ -291,24 +302,18 @@ pub fn compile_grammar(
         child_off_a,
         child_off_b,
         fp_edges,
+        fp_offset,
         leaf_sum,
         leaf_tri,
         leaf_flavor,
     }
 }
 
-// powers of 2 / 4 used by the descents (index by level / digit position)
+// powers of 2 used by the descents (index by level), the child-offset scale
 pub static POW2: LazyLock<[f64; 32]> = LazyLock::new(|| {
     let mut a = [0.0f64; 32];
     for (i, slot) in a.iter_mut().enumerate() {
         *slot = 2f64.powi(i as i32);
-    }
-    a
-});
-pub static POW4: LazyLock<[f64; 20]> = LazyLock::new(|| {
-    let mut a = [0.0f64; 20];
-    for (i, slot) in a.iter_mut().enumerate() {
-        *slot = 4f64.powi(i as i32);
     }
     a
 });
