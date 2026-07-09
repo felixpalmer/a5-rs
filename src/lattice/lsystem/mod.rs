@@ -385,16 +385,6 @@ pub fn s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> Cell {
     }
 }
 
-/// The pentagon flavor of a cell given its triple, via a single A5 inverse
-/// descent (reads the leaf flavor directly). Used by compat.rs, whose forward
-/// (W/Z) descent cannot recover the flavor. One descent, versus the
-/// `triple_to_s_lattice` + `s_to_cell` round-trip it replaces.
-pub fn a5_triple_to_flavor(triple: &Triple, resolution: usize) -> u8 {
-    let axiom = A5_ORIENT[0].axiom; // uv: no reverse, no tau shift
-    let (ab_a, ab_b) = triple_to_ab(triple);
-    axiom_target_to_s(&A5, ab_a, ab_b, resolution, axiom, true).1
-}
-
 /// The A5 curve position `s` -> triple coordinate. Bijective with `triple_to_s_lattice`.
 pub fn s_to_triple(s: u64, resolution: usize, orientation: Orientation) -> Triple {
     s_to_cell(s, resolution, orientation).triple

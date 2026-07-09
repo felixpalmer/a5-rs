@@ -29,7 +29,7 @@ use std::sync::LazyLock;
 use crate::coordinate_systems::IJ;
 use crate::lattice::lsystem::tables::{compile_grammar, CurveTables, POW2};
 use crate::lattice::lsystem::{
-    a5_triple_to_flavor, ab_to_triple, axiom_leaf_cell, axiom_target_to_s, triple_to_ab, Cell,
+    ab_to_triple, axiom_leaf_cell, axiom_target_to_s, triple_to_ab, Cell,
 };
 use crate::lattice::types::{Orientation, Triple};
 
@@ -120,13 +120,17 @@ fn apply_digit_flips(flips: &mut [i32; 2], d: u8) {
 }
 
 /// old s digits -> geometric (X/Y curve) digits, in place. LSB-first array.
-fn forward_shift(digits: &mut [u8], invert_j: bool, flip_ij: bool) {
+/// Returns the final flips product over the shifted digits — the old engine's
+/// anchor `flips` state, from which the pentagon flavor follows in closed form
+/// (see `compat_flavor`).
+fn forward_shift(digits: &mut [u8], invert_j: bool, flip_ij: bool) -> [i32; 2] {
     let pattern = if flip_ij { &PATTERN_FLIPPED } else { &PATTERN };
     let mut flips: [i32; 2] = [1, 1];
     for i in (0..digits.len()).rev() {
         shift_digits(digits, i, flips, invert_j, pattern);
         apply_digit_flips(&mut flips, digits[i]);
     }
+    flips
 }
 
 /// geometric (X/Y curve) digits -> old s digits, in place. LSB-first array.
@@ -213,17 +217,34 @@ fn compat_orient(o: Orientation) -> CompatRecipe {
     }
 }
 
-/// Old-curve position `s` -> triple coordinate, via the ORIGINAL (W/Z) forward
-/// descent + shiftDigits recode. No flavor (that needs a second, A5, descent).
-pub fn compat_s_to_triple(s: u64, resolution: usize, orientation: Orientation) -> Triple {
-    let rec = compat_orient(orientation);
+/// Pentagon flavor from the old engine's anchor state: the flips product over
+/// the (shifted) digits and the leaf digit `q`. Ported from the old
+/// `get_pentagon_vertices` orientation logic: flavor bit 0 (180° rotation)
+/// fired iff `flips[1] == YES`; bit 1 (Y reflection) on the `(f, q)` predicate
+/// below. This is why the compat decode needs no second (A5) descent — the
+/// old engine's own fractal flips field carries the missing flavor bit.
+fn compat_flavor(flips: [i32; 2], q: u8) -> u8 {
+    let rotate = flips[1] == -1;
+    let f = flips[0] + flips[1];
+    // Orient last two pentagons when both or neither flips are set,
+    // first & last pentagons when exactly one is.
+    let reflect = if f == 0 {
+        q == 0 || q == 3
+    } else {
+        q == 2 || q == 3
+    };
+    (rotate as u8) | ((reflect as u8) << 1)
+}
+
+/// Shared forward descent: old s digits -> (triple, anchor flips, leaf digit).
+fn compat_descend(s: u64, resolution: usize, rec: &CompatRecipe) -> (Triple, [i32; 2], u8) {
     let v = if rec.reverse {
         (1u64 << (2 * resolution)) - 1 - s
     } else {
         s
     };
     let (mut digits, len) = digits_of(v, resolution);
-    forward_shift(&mut digits[..len], rec.invert_j, rec.flip_ij);
+    let flips = forward_shift(&mut digits[..len], rec.invert_j, rec.flip_ij);
     let raw = axiom_leaf_cell(&ORIGINAL, pack_digits(&digits[..len]), resolution, *AXIOM_W);
     let mut triple = ab_to_triple(raw.a, raw.b);
     if rec.flip_ij {
@@ -233,18 +254,29 @@ pub fn compat_s_to_triple(s: u64, resolution: usize, orientation: Orientation) -
         let n1 = POW2[resolution] as i32 - 1;
         triple = Triple::new(triple.y - n1, triple.x + n1, triple.z);
     }
-    triple
+    (triple, flips, digits[0])
+}
+
+/// Old-curve position `s` -> triple coordinate, via the ORIGINAL (W/Z) forward
+/// descent + shiftDigits recode.
+pub fn compat_s_to_triple(s: u64, resolution: usize, orientation: Orientation) -> Triple {
+    let rec = compat_orient(orientation);
+    compat_descend(s, resolution, &rec).0
 }
 
 /// Old-curve position `s` -> cell (triple + pentagon flavor).
 pub fn compat_s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> Cell {
-    let triple = compat_s_to_triple(s, resolution, orientation);
-    // The X/Y walk hosts every cell via a diagonal (E/e) segment, so its leaf
-    // state cannot distinguish all four pentagon flavors — that missing bit is
-    // exactly why the original engine carried its fractal flips field. The
-    // flavor is a per-cell geometric property, so read it off the A5 descent.
-    let flavor = a5_triple_to_flavor(&triple, resolution);
-    Cell { triple, flavor }
+    let rec = compat_orient(orientation);
+    let (triple, mut flips, q) = compat_descend(s, resolution, &rec);
+    // As in the old engine's s_to_anchor: invertJ flips the first component
+    // (flipIJ leaves the flips untouched).
+    if rec.invert_j {
+        flips[0] = -flips[0];
+    }
+    Cell {
+        triple,
+        flavor: compat_flavor(flips, q),
+    }
 }
 
 /// Triple -> old-curve position `s`, or None if the triple has invalid parity.
@@ -271,6 +303,54 @@ pub fn compat_triple_to_s(t: &Triple, resolution: usize, orientation: Orientatio
     Some(if rec.reverse { n - 1 - v } else { v })
 }
 
+// ---------- fractional point-location (ported verbatim from the original engine) ----------
+// The old engine located a fractional point with a few sign tests per level
+// (ij_to_quaternary) — far cheaper than the L-system's per-level hull scan
+// (~10-15x less work), and bit-identical by construction including its boundary
+// tie-breaks. The resulting digit stream is the geometric (X/Y curve) digit
+// stream, so the same inverse_shift recode applies on top.
+
+/// Which of the 4 children contains the scaled offset, under the current flips
+/// (the old engine's `ij_to_quaternary`, verbatim).
+fn ij_to_quaternary(u: f64, v: f64, flips: [i32; 2]) -> u8 {
+    // Boundaries to compare against
+    let a = if flips[0] == -1 { -(u + v) } else { u + v };
+    let b = if flips[1] == -1 { -u } else { u };
+    let c = if flips[0] == -1 { -v } else { v };
+
+    if flips[0] + flips[1] == 0 {
+        // Only one flip
+        if c < 1.0 {
+            0
+        } else if b > 1.0 {
+            3
+        } else if a > 1.0 {
+            2
+        } else {
+            1
+        }
+    // No flips or both
+    } else if a < 1.0 {
+        0
+    } else if b > 1.0 {
+        3
+    } else if c > 1.0 {
+        2
+    } else {
+        1
+    }
+}
+
+/// Child anchor offsets in IJ units, indexed by [flip combination][digit]
+/// (= the old engine's kj_to_ij(quaternary_to_kj(digit, flips))).
+/// Flip index = (flips[0] == YES) | (flips[1] == YES) << 1.
+const CHILD_OFFSET_IJ: [[(f64, f64); 4]; 4] = [
+    [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)], // (NO, NO):  p = k, q = j
+    [(0.0, 0.0), (1.0, -1.0), (0.0, -1.0), (1.0, -2.0)], // (YES, NO): p = -j, q = -k
+    [(0.0, 0.0), (-1.0, 1.0), (0.0, 1.0), (-1.0, 2.0)], // (NO, YES): p = j, q = k
+    [(0.0, 0.0), (-1.0, 0.0), (0.0, -1.0), (-1.0, -1.0)], // (YES, YES): p = -k, q = -j
+];
+
 /// Fractional IJ point -> old-curve position `s` of the containing cell.
 pub fn compat_ij_to_s(ij: IJ, resolution: usize, orientation: Orientation) -> u64 {
     let rec = compat_orient(orientation);
@@ -283,18 +363,27 @@ pub fn compat_ij_to_s(ij: IJ, resolution: usize, orientation: Orientation) -> u6
     if rec.invert_j {
         j = POW2[resolution] - (i + j);
     }
-    let s_geo = axiom_target_to_s(
-        &ORIGINAL,
-        12.0 * (i + j),
-        -12.0 * j,
-        resolution,
-        *AXIOM_W,
-        false,
-    )
-    .0;
-    let (mut digits, len) = digits_of(s_geo, resolution);
-    inverse_shift(&mut digits[..len], rec.invert_j, rec.flip_ij);
-    let v = pack_digits(&digits[..len]);
+
+    // Geometric digits by direct point-location, most significant first.
+    let mut digits = [0u8; 33];
+    let mut flips: [i32; 2] = [1, 1];
+    let mut pivot_i = 0.0f64;
+    let mut pivot_j = 0.0f64;
+    for lvl in (0..resolution).rev() {
+        let scale = 1.0 / (1u64 << lvl) as f64;
+        let digit = ij_to_quaternary((i - pivot_i) * scale, (j - pivot_j) * scale, flips);
+        digits[lvl] = digit;
+
+        let fi = ((flips[0] == -1) as usize) | (((flips[1] == -1) as usize) << 1);
+        let (di, dj) = CHILD_OFFSET_IJ[fi][digit as usize];
+        let up = (1u64 << lvl) as f64;
+        pivot_i += di * up;
+        pivot_j += dj * up;
+        apply_digit_flips(&mut flips, digit);
+    }
+
+    inverse_shift(&mut digits[..resolution], rec.invert_j, rec.flip_ij);
+    let v = pack_digits(&digits[..resolution]);
     if rec.reverse {
         n - 1 - v
     } else {
