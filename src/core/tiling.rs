@@ -7,14 +7,16 @@ use crate::core::constants::TWO_PI_OVER_5;
 use crate::core::pentagon::{basis, pentagon, triangle, v, Mat2};
 use crate::geometry::PentagonShape;
 use crate::lattice::Triple;
+use std::sync::LazyLock;
 
 const TRIANGLE_MODE: bool = false;
 
 /// Center of the base PENTAGON under each flavor's orientation ops. The vertex
 /// mean is linear, so an oriented pentagon's center is the transformed base
 /// center — no need to construct the five vertices when only the center is
-/// wanted (see `get_pentagon_center`).
-fn flavor_centers() -> [Face; 4] {
+/// wanted (see `get_pentagon_center`). Computed once (mirrors the other ports'
+/// module-level FLAVOR_CENTERS) — this sits on the `cell_to_lonlat` hot path.
+static FLAVOR_CENTERS: LazyLock<[Face; 4]> = LazyLock::new(|| {
     let mut centers = [Face::new(0.0, 0.0); 4];
     for (flavor, center) in centers.iter_mut().enumerate() {
         let mut p = pentagon().clone();
@@ -27,10 +29,11 @@ fn flavor_centers() -> [Face; 4] {
         *center = p.get_center();
     }
     centers
-}
+});
 
-/// Generate quintant rotation matrices
-fn quintant_rotations() -> [Mat2; 5] {
+/// Quintant rotation matrices, computed once (mirrors the other ports'
+/// module-level QUINTANT_ROTATIONS).
+static QUINTANT_ROTATIONS: LazyLock<[Mat2; 5]> = LazyLock::new(|| {
     let mut rotations = [Mat2::new(1.0, 0.0, 0.0, 1.0); 5];
 
     for (quintant, rotation) in rotations.iter_mut().enumerate() {
@@ -41,7 +44,7 @@ fn quintant_rotations() -> [Mat2; 5] {
     }
 
     rotations
-}
+});
 
 /// Transform a pentagon shape using a 2x2 matrix
 fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
@@ -122,8 +125,7 @@ pub fn get_pentagon_vertices(
     pentagon_shape.translate(translation);
     pentagon_shape.scale(1.0 / (2.0_f64.powi(resolution)));
 
-    let rotations = quintant_rotations();
-    transform_pentagon(&mut pentagon_shape, &rotations[quintant]);
+    transform_pentagon(&mut pentagon_shape, &QUINTANT_ROTATIONS[quintant]);
 
     pentagon_shape
 }
@@ -132,7 +134,7 @@ pub fn get_pentagon_vertices(
 /// O(1) via the precomputed flavor centers. Equivalent to
 /// `get_pentagon_vertices(...).get_center()` (up to float associativity).
 pub fn get_pentagon_center(resolution: i32, quintant: usize, triple: &Triple, flavor: u8) -> Face {
-    let c = flavor_centers()[flavor as usize];
+    let c = FLAVOR_CENTERS[flavor as usize];
     let ref_ij = Face::new(
         (triple.x + triple.y) as f64,
         (-triple.x + (flavor & 1) as i32) as f64,
@@ -143,7 +145,7 @@ pub fn get_pentagon_center(resolution: i32, quintant: usize, triple: &Triple, fl
         (c.x() + translation.x()) / scale,
         (c.y() + translation.y()) / scale,
     );
-    quintant_rotations()[quintant].transform(out)
+    QUINTANT_ROTATIONS[quintant].transform(out)
 }
 
 /// Get quintant vertices
@@ -162,8 +164,7 @@ pub fn get_quintant_vertices(quintant: usize) -> crate::geometry::pentagon::Pent
 
     let mut pentagon_shape =
         crate::geometry::pentagon::PentagonShape::new_triangle(triangle_3_verts);
-    let rotations = quintant_rotations();
-    transform_pentagon(&mut pentagon_shape, &rotations[quintant]);
+    transform_pentagon(&mut pentagon_shape, &QUINTANT_ROTATIONS[quintant]);
     pentagon_shape
 }
 
@@ -175,9 +176,7 @@ pub fn get_quintant_vertices(quintant: usize) -> crate::geometry::pentagon::Pent
 pub fn get_face_vertices() -> PentagonShape {
     let mut vertices = Vec::new();
     let v_vertex = v();
-    let rotations = quintant_rotations();
-
-    for rotation in &rotations {
+    for rotation in QUINTANT_ROTATIONS.iter() {
         // Transform v vertex by rotation matrix
         let transformed_x = rotation.m00 * v_vertex.x() + rotation.m01 * v_vertex.y();
         let transformed_y = rotation.m10 * v_vertex.x() + rotation.m11 * v_vertex.y();
