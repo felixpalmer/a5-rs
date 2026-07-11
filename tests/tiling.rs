@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5::coordinate_systems::{Polar, Radians, IJ};
-use a5::core::hilbert::{Anchor, Flip};
+use a5::coordinate_systems::{Polar, Radians};
 use a5::core::tiling::{
     get_face_vertices, get_pentagon_vertices, get_quintant_polar, get_quintant_vertices,
 };
+use a5::lattice::Triple;
 use serde::Deserialize;
 use std::fs;
 
@@ -32,14 +32,15 @@ struct PentagonVerticesTestCase {
 struct PentagonVerticesInput {
     resolution: i32,
     quintant: usize,
-    anchor: AnchorData,
+    triple: TripleData,
+    flavor: u8,
 }
 
 #[derive(Deserialize)]
-struct AnchorData {
-    offset: [f64; 2],
-    flips: [i8; 2],
-    q: u8,
+struct TripleData {
+    x: i32,
+    y: i32,
+    z: i32,
 }
 
 #[derive(Deserialize)]
@@ -107,13 +108,9 @@ fn test_get_pentagon_vertices() {
         let input = &test_case.input;
         let output = &test_case.output;
 
-        let anchor = Anchor {
-            q: input.anchor.q,
-            offset: IJ::new(input.anchor.offset[0], input.anchor.offset[1]),
-            flips: [input.anchor.flips[0] as Flip, input.anchor.flips[1] as Flip],
-        };
+        let triple = Triple::new(input.triple.x, input.triple.y, input.triple.z);
 
-        let shape = get_pentagon_vertices(input.resolution, input.quintant, &anchor);
+        let shape = get_pentagon_vertices(input.resolution, input.quintant, &triple, input.flavor);
         let vertices = shape.get_vertices();
         let area = shape.get_area();
         let center = shape.get_center();

@@ -2,155 +2,49 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::core::tiling::get_pentagon_flavor;
-use crate::lattice::types::{Anchor, Flip};
+// The neighbors of a cell, in triple space, are a fixed function of its
+// pentagon flavor: pentagons tile edge-to-edge, so the arrangement around a
+// pentagon is forced. Every cell has exactly 5 edge-sharing and 2 vertex-only
+// neighbors, at the triple deltas below. No validation is needed — each delta
+// IS a neighbor (bounds permitting).
+//
+// Derived geometrically (shared pentagon vertices) and verified exhaustively
+// over all interior cells at res 4-5, all orientations, zero conflicts. The
+// flavor-1/3 lists are the flavor-0/2 lists negated (they are the 180°-rotated
+// shapes).
 
-// [di, dj, flip0, flip1]
-type NeighborPattern = (i32, i32, Flip, Flip);
+use crate::lattice::Triple;
 
-pub const NEIGHBORS: [&[NeighborPattern]; 8] = [
-    // Flavor 0
-    &[
-        (0, -2, -1, 1),
-        (0, -2, -1, -1),
-        (0, -1, 1, -1),
-        (0, -1, -1, -1),
-        (0, -1, 1, 1),
-        (1, -2, -1, -1),
-        (1, -1, -1, 1),
-        (1, -1, 1, -1),
-        (1, 0, 1, -1),
-        (2, -1, 1, -1),
-        (2, -2, -1, -1),
-    ],
-    // Flavor 1
-    &[
-        (-1, -1, -1, 1),
-        (0, -2, -1, -1),
-        (0, -1, -1, -1),
-        (0, -1, 1, -1),
-        (0, 0, -1, 1),
-        (0, 0, -1, -1),
-        (0, 1, 1, -1),
-        (0, 1, 1, 1),
-        (1, -2, -1, -1),
-        (1, -1, 1, -1),
-        (1, -1, -1, -1),
-        (1, 0, 1, -1),
-    ],
-    // Flavor 2
-    &[
-        (-2, 2, -1, -1),
-        (-2, 1, 1, -1),
-        (-1, 0, 1, -1),
-        (-1, 1, 1, -1),
-        (-1, 1, -1, 1),
-        (-1, 2, -1, -1),
-        (0, 1, -1, -1),
-        (0, 1, 1, -1),
-        (0, 1, 1, 1),
-        (0, 2, -1, -1),
-        (0, 2, -1, 1),
-    ],
-    // Flavor 3
-    &[
-        (-1, 0, 1, -1),
-        (-1, 1, 1, -1),
-        (-1, 1, -1, -1),
-        (-1, 2, -1, -1),
-        (0, -1, 1, -1),
-        (0, -1, 1, 1),
-        (0, 0, -1, -1),
-        (0, 0, -1, 1),
-        (0, 1, -1, -1),
-        (0, 1, 1, -1),
-        (0, 2, -1, -1),
-        (1, 1, -1, 1),
-    ],
-    // Flavor 4
-    &[
-        (0, -1, 1, -1),
-        (0, -1, 1, 1),
-        (0, 0, -1, -1),
-        (0, 0, -1, 1),
-        (0, 1, -1, -1),
-        (1, 0, -1, -1),
-        (1, 0, 1, -1),
-        (1, -1, 1, -1),
-        (1, 1, -1, 1),
-        (2, -1, 1, -1),
-        (2, 0, -1, -1),
-    ],
-    // Flavor 5
-    &[
-        (-1, 1, -1, 1),
-        (0, -1, 1, -1),
-        (0, 0, -1, -1),
-        (0, 1, -1, -1),
-        (0, 1, 1, -1),
-        (0, 1, 1, 1),
-        (0, 2, -1, -1),
-        (0, 2, -1, 1),
-        (1, -1, 1, -1),
-        (1, 0, -1, -1),
-        (1, 0, 1, -1),
-        (1, 1, -1, -1),
-    ],
-    // Flavor 6
-    &[
-        (-2, 0, -1, -1),
-        (-2, 1, 1, -1),
-        (-1, -1, -1, 1),
-        (-1, 0, -1, -1),
-        (-1, 0, 1, -1),
-        (-1, 1, 1, -1),
-        (0, -1, -1, -1),
-        (0, 0, -1, -1),
-        (0, 0, -1, 1),
-        (0, 1, 1, -1),
-        (0, 1, 1, 1),
-    ],
-    // Flavor 7
-    &[
-        (-1, -1, -1, -1),
-        (-1, 0, -1, -1),
-        (-1, 0, 1, -1),
-        (-1, 1, 1, -1),
-        (0, -2, -1, -1),
-        (0, -2, -1, 1),
-        (0, -1, -1, -1),
-        (0, -1, 1, -1),
-        (0, -1, 1, 1),
-        (0, 0, -1, -1),
-        (0, 1, 1, -1),
-        (1, -1, -1, 1),
-    ],
-];
-
-/// Check if two anchors are neighbors in uv/raw IJ space.
-pub fn is_neighbor(origin: &Anchor, candidate: &Anchor) -> bool {
-    let origin_flavor = get_pentagon_flavor(origin) as usize;
-    let candidate_flavor = get_pentagon_flavor(candidate) as usize;
-    if origin_flavor == candidate_flavor {
-        return false;
-    }
-    let neighbors = NEIGHBORS[origin_flavor];
-    let relative = (
-        (candidate.offset.x() - origin.offset.x()) as i32,
-        (candidate.offset.y() - origin.offset.y()) as i32,
-        candidate.flips[0] * origin.flips[0],
-        candidate.flips[1] * origin.flips[1],
-    );
-
-    for pattern in neighbors {
-        if relative.0 == pattern.0
-            && relative.1 == pattern.1
-            && relative.2 == pattern.2
-            && relative.3 == pattern.3
-        {
-            return true;
-        }
-    }
-
-    false
+pub struct NeighborDeltas {
+    pub edge: [Triple; 5],   // 5 edge-sharing neighbors
+    pub vertex: [Triple; 2], // 2 vertex-only neighbors
+    pub all: [Triple; 7],    // edge ++ vertex, spelled out so this stays a pure data table
 }
+
+const fn d(x: i32, y: i32, z: i32) -> Triple {
+    Triple { x, y, z }
+}
+
+#[rustfmt::skip]
+pub static NEIGHBOR_DELTAS: [NeighborDeltas; 4] = [
+    NeighborDeltas { // flavor 0
+        edge:   [d(0, 0, 1), d(0, 1, -1), d(0, 1, 0), d(1, -1, 0), d(1, 0, 0)],
+        vertex: [d(1, -1, 1), d(1, 1, -1)],
+        all:    [d(0, 0, 1), d(0, 1, -1), d(0, 1, 0), d(1, -1, 0), d(1, 0, 0), d(1, -1, 1), d(1, 1, -1)],
+    },
+    NeighborDeltas { // flavor 1 (= flavor 0 rotated 180°: deltas negated)
+        edge:   [d(0, 0, -1), d(0, -1, 1), d(0, -1, 0), d(-1, 1, 0), d(-1, 0, 0)],
+        vertex: [d(-1, 1, -1), d(-1, -1, 1)],
+        all:    [d(0, 0, -1), d(0, -1, 1), d(0, -1, 0), d(-1, 1, 0), d(-1, 0, 0), d(-1, 1, -1), d(-1, -1, 1)],
+    },
+    NeighborDeltas { // flavor 2
+        edge:   [d(-1, 1, 0), d(0, -1, 1), d(0, 0, 1), d(0, 1, 0), d(1, 0, 0)],
+        vertex: [d(-1, 1, 1), d(1, -1, 1)],
+        all:    [d(-1, 1, 0), d(0, -1, 1), d(0, 0, 1), d(0, 1, 0), d(1, 0, 0), d(-1, 1, 1), d(1, -1, 1)],
+    },
+    NeighborDeltas { // flavor 3 (= flavor 2 rotated 180°: deltas negated)
+        edge:   [d(1, -1, 0), d(0, 1, -1), d(0, 0, -1), d(0, -1, 0), d(-1, 0, 0)],
+        vertex: [d(1, -1, -1), d(-1, 1, -1)],
+        all:    [d(1, -1, 0), d(0, 1, -1), d(0, 0, -1), d(0, -1, 0), d(-1, 0, 0), d(1, -1, -1), d(-1, 1, -1)],
+    },
+];

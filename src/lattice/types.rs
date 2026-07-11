@@ -2,25 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coordinate_systems::IJ;
-
-pub type Quaternary = u8; // 0, 1, 2, 3
-
-pub const YES: i8 = -1;
-pub const NO: i8 = 1;
-pub type Flip = i8;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Anchor {
-    pub q: Quaternary,
-    pub offset: IJ,
-    pub flips: [Flip; 2],
-}
-
-/// Orientation of the Hilbert curve. The curve fills a space defined by the triangle with vertices
-/// u, v & w. The orientation describes which corner the curve starts and ends at, e.g. wv is a
-/// curve that starts at w and ends at v.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Orientation of the space-filling curve. The curve fills a space defined by the triangle with
+/// vertices u, v & w. The orientation describes which corner the curve starts and ends at, e.g. wv
+/// is a curve that starts at w and ends at v.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Orientation {
     UV,
     VU,
@@ -43,5 +28,23 @@ impl std::str::FromStr for Orientation {
             "wv" => Ok(Self::WV),
             _ => Err(format!("Unknown orientation: {}", s)),
         }
+    }
+}
+
+/// Triple coordinates for the triangular grid underlying the pentagonal A5 grid.
+///
+/// Neighbors differ by ±1 in exactly one coordinate while the other two stay constant.
+/// Triple coordinates are orientation-independent — the same geometric cell always has
+/// the same triple coords regardless of curve orientation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Triple {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+impl Triple {
+    pub fn new(x: i32, y: i32, z: i32) -> Self {
+        Self { x, y, z }
     }
 }

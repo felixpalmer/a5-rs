@@ -6,8 +6,7 @@ use crate::core::origin::{get_origins, segment_to_quintant};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::{A5Cell, Origin};
 use crate::lattice::{
-    anchor_to_triple, s_to_anchor, triple_in_bounds, triple_parity, triple_to_s, Orientation,
-    Triple,
+    s_to_triple, triple_in_bounds, triple_parity, triple_to_s, Orientation, Triple,
 };
 use crate::traversal::global_neighbors::get_global_cell_neighbors;
 use crate::traversal::lattice_boundary::{get_boundary_neighbors, BoundaryContext};
@@ -35,8 +34,7 @@ fn decode_source(cell_id: u64) -> Option<LatticeSource<'static>> {
     let origin = &get_origins()[cell.origin_id as usize];
     let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
     let (quintant, orientation) = segment_to_quintant(cell.segment, origin);
-    let anchor = s_to_anchor(cell.s, hilbert_res, orientation);
-    let triple = anchor_to_triple(&anchor);
+    let triple = s_to_triple(cell.s, hilbert_res, orientation);
 
     Some(LatticeSource {
         origin,

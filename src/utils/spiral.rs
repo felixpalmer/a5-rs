@@ -6,11 +6,11 @@ use crate::coordinate_systems::{Cartesian, Spherical};
 use crate::core::coordinate_transforms::to_cartesian;
 use crate::core::utils::Quat;
 
-/// Number of perturbed sample points the spiral can produce. Tuned via
-/// debug-scripts/tune-spiral.ts so that on a corpus of ~3500 spherical
-/// points × 8 resolutions, the spiral hits a strictly-containing cell
-/// within these many iterations for all but a handful of points right at
-/// the polar singularity at very high resolutions.
+/// Number of perturbed sample points the spiral can produce. Tuned on a
+/// corpus of ~3500 spherical points × 8 resolutions, such that the spiral
+/// hits a strictly-containing cell within these many iterations for all
+/// but a handful of points right at the polar singularity at very high
+/// resolutions.
 pub const SPIRAL_SAMPLE_COUNT: usize = 24;
 
 /// Azimuthal step between consecutive samples in the rotated tangent plane.

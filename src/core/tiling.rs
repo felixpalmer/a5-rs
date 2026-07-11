@@ -4,25 +4,36 @@
 
 use crate::coordinate_systems::{Face, Polar};
 use crate::core::constants::TWO_PI_OVER_5;
-use crate::core::hilbert::{Anchor, NO, YES};
-use crate::core::pentagon::{basis, pentagon, triangle, v, w, Mat2};
+use crate::core::pentagon::{basis, pentagon, triangle, v, Mat2};
 use crate::geometry::PentagonShape;
+use crate::lattice::Triple;
+use std::sync::LazyLock;
 
 const TRIANGLE_MODE: bool = false;
 
-/// Shift right vector (clone of w)
-fn shift_right() -> Face {
-    w()
-}
+/// Center of the base PENTAGON under each flavor's orientation ops. The vertex
+/// mean is linear, so an oriented pentagon's center is the transformed base
+/// center — no need to construct the five vertices when only the center is
+/// wanted (see `get_pentagon_center`). Computed once (mirrors the other ports'
+/// module-level FLAVOR_CENTERS) — this sits on the `cell_to_lonlat` hot path.
+static FLAVOR_CENTERS: LazyLock<[Face; 4]> = LazyLock::new(|| {
+    let mut centers = [Face::new(0.0, 0.0); 4];
+    for (flavor, center) in centers.iter_mut().enumerate() {
+        let mut p = pentagon().clone();
+        if flavor & 1 == 1 {
+            p.rotate180();
+        }
+        if flavor & 2 == 2 {
+            p.reflect_y();
+        }
+        *center = p.get_center();
+    }
+    centers
+});
 
-/// Shift left vector (negative w)
-fn shift_left() -> Face {
-    let w_vec = w();
-    Face::new(-w_vec.x(), -w_vec.y())
-}
-
-/// Generate quintant rotation matrices
-fn quintant_rotations() -> [Mat2; 5] {
+/// Quintant rotation matrices, computed once (mirrors the other ports'
+/// module-level QUINTANT_ROTATIONS).
+static QUINTANT_ROTATIONS: LazyLock<[Mat2; 5]> = LazyLock::new(|| {
     let mut rotations = [Mat2::new(1.0, 0.0, 0.0, 1.0); 5];
 
     for (quintant, rotation) in rotations.iter_mut().enumerate() {
@@ -33,7 +44,7 @@ fn quintant_rotations() -> [Mat2; 5] {
     }
 
     rotations
-}
+});
 
 /// Transform a pentagon shape using a 2x2 matrix
 fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
@@ -66,63 +77,75 @@ fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
     }
 }
 
-/// Get pentagon vertices with transformations applied
+/// Get pentagon vertices for a cell.
+///
+/// A cell's pentagon is one of exactly FOUR orientations of the base PENTAGON
+/// (the Cairo-like metatile): flavor bit 0 is a 180° rotation, bit 1 a Y
+/// reflection. The oriented pentagon sits at the triple-derived lattice point
+/// ref = (x+y, -x) in IJ, shifted by one j unit for the rotated flavors.
+/// The flavor is a 1:1 function of the cell's L-system jigsaw piece and is
+/// produced by the descent (`s_to_cell`); the placement was derived and verified
+/// exhaustively against the pentagon geometry.
 ///
 /// # Arguments
 ///
 /// * `resolution` - The resolution level
-/// * `quintant` - The quintant index (0-4)  
-/// * `anchor` - The anchor information containing offset and flip data
+/// * `quintant` - The quintant index (0-4)
+/// * `triple` - The cell's triple coordinates
+/// * `flavor` - The cell's pentagon flavor (0-3)
 ///
 /// # Returns
 ///
 /// A pentagon shape with transformed vertices
-pub fn get_pentagon_vertices(resolution: i32, quintant: usize, anchor: &Anchor) -> PentagonShape {
+pub fn get_pentagon_vertices(
+    resolution: i32,
+    quintant: usize,
+    triple: &Triple,
+    flavor: u8,
+) -> PentagonShape {
     let mut pentagon_shape = if TRIANGLE_MODE {
         triangle().clone()
     } else {
         pentagon().clone()
     };
 
-    // Transform anchor offset using basis matrix
-    let basis_mat = basis();
-    let translation_x = basis_mat.m00 * anchor.offset.x() + basis_mat.m01 * anchor.offset.y();
-    let translation_y = basis_mat.m10 * anchor.offset.x() + basis_mat.m11 * anchor.offset.y();
-    let translation = Face::new(translation_x, translation_y);
-
-    // Apply transformations based on anchor properties
-    if anchor.flips[0] == NO && anchor.flips[1] == YES {
+    if flavor & 1 == 1 {
         pentagon_shape.rotate180();
     }
-
-    let k = anchor.q;
-    let f = anchor.flips[0] + anchor.flips[1];
-
-    if
-    // Orient last two pentagons when both or neither flips are YES
-    ((f == -2 || f == 2) && k > 1) ||
-        // Orient first & last pentagons when only one of flips is YES  
-        (f == 0 && (k == 0 || k == 3))
-    {
+    if flavor & 2 == 2 {
         pentagon_shape.reflect_y();
     }
 
-    if anchor.flips[0] == YES && anchor.flips[1] == YES {
-        pentagon_shape.rotate180();
-    } else if anchor.flips[0] == YES {
-        pentagon_shape.translate(shift_left());
-    } else if anchor.flips[1] == YES {
-        pentagon_shape.translate(shift_right());
-    }
-
-    // Position within quintant
+    // Position within quintant: ref(triple), plus (0, 1) for the rotated flavors
+    let ref_ij = Face::new(
+        (triple.x + triple.y) as f64,
+        (-triple.x + (flavor & 1) as i32) as f64,
+    );
+    let translation = basis().transform(ref_ij);
     pentagon_shape.translate(translation);
     pentagon_shape.scale(1.0 / (2.0_f64.powi(resolution)));
 
-    let rotations = quintant_rotations();
-    transform_pentagon(&mut pentagon_shape, &rotations[quintant]);
+    transform_pentagon(&mut pentagon_shape, &QUINTANT_ROTATIONS[quintant]);
 
     pentagon_shape
+}
+
+/// The center of a cell's pentagon, without constructing the pentagon —
+/// O(1) via the precomputed flavor centers. Equivalent to
+/// `get_pentagon_vertices(...).get_center()` (up to float associativity).
+pub fn get_pentagon_center(resolution: i32, quintant: usize, triple: &Triple, flavor: u8) -> Face {
+    let c = FLAVOR_CENTERS[flavor as usize];
+    let ref_ij = Face::new(
+        (triple.x + triple.y) as f64,
+        (-triple.x + (flavor & 1) as i32) as f64,
+    );
+    let translation = basis().transform(ref_ij);
+    let scale = 2.0_f64.powi(resolution);
+    let out = Face::new(
+        (c.x() + translation.x()) / scale,
+        (c.y() + translation.y()) / scale,
+    );
+    QUINTANT_ROTATIONS[quintant].transform(out)
 }
 
 /// Get quintant vertices
@@ -141,8 +164,7 @@ pub fn get_quintant_vertices(quintant: usize) -> crate::geometry::pentagon::Pent
 
     let mut pentagon_shape =
         crate::geometry::pentagon::PentagonShape::new_triangle(triangle_3_verts);
-    let rotations = quintant_rotations();
-    transform_pentagon(&mut pentagon_shape, &rotations[quintant]);
+    transform_pentagon(&mut pentagon_shape, &QUINTANT_ROTATIONS[quintant]);
     pentagon_shape
 }
 
@@ -154,9 +176,7 @@ pub fn get_quintant_vertices(quintant: usize) -> crate::geometry::pentagon::Pent
 pub fn get_face_vertices() -> PentagonShape {
     let mut vertices = Vec::new();
     let v_vertex = v();
-    let rotations = quintant_rotations();
-
-    for rotation in &rotations {
+    for rotation in QUINTANT_ROTATIONS.iter() {
         // Transform v vertex by rotation matrix
         let transformed_x = rotation.m00 * v_vertex.x() + rotation.m01 * v_vertex.y();
         let transformed_y = rotation.m10 * v_vertex.x() + rotation.m11 * v_vertex.y();
@@ -189,32 +209,4 @@ pub fn get_face_vertices() -> PentagonShape {
 pub fn get_quintant_polar(polar: Polar) -> usize {
     let gamma = polar.gamma().0; // Extract f64 from Radians
     ((gamma / (TWO_PI_OVER_5).0).round() as i32 + 5) as usize % 5
-}
-
-/// Pentagon flavor type (0-7)
-pub type PentagonFlavor = u8;
-
-/// Get the flavor (0-7) of a pentagon from its anchor.
-pub fn get_pentagon_flavor(anchor: &Anchor) -> PentagonFlavor {
-    let mut f: u8 = 0;
-    if anchor.flips[1] == YES {
-        f += 2;
-    }
-
-    let q = anchor.q;
-    let sum = anchor.flips[0] + anchor.flips[1];
-    if
-    // Orient last two pentagons when both or neither flips are YES
-    ((sum == -2 || sum == 2) && q > 1) ||
-        // Orient first & last pentagons when only one of flips is YES
-        (sum == 0 && (q == 0 || q == 3))
-    {
-        f += 1;
-    }
-
-    if sum == -2 || sum == 2 {
-        f += 4;
-    }
-
-    f
 }

@@ -371,12 +371,16 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
     Ok((((c >> 58) / 5) << 58) | (1u64 << 57))
 }
 
+/// The 12 resolution-0 cells (dodecahedron faces) — a constant, computed once.
+static RES0_CELLS: std::sync::LazyLock<Vec<u64>> =
+    std::sync::LazyLock::new(|| cell_to_children(WORLD_CELL, Some(0)).expect("res 0 cells"));
+
 /// Returns resolution 0 cells of the A5 system, which serve as a starting point
 /// for all higher-resolution subdivisions in the hierarchy.
 ///
 /// Returns Array of 12 cell indices
 pub fn get_res0_cells() -> Result<Vec<u64>, String> {
-    cell_to_children(WORLD_CELL, Some(0))
+    Ok(RES0_CELLS.clone())
 }
 
 /// Check whether index corresponds to first child of its parent

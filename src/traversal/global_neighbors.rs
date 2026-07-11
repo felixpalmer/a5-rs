@@ -8,7 +8,7 @@ use crate::core::face_adjacency::FACE_ADJACENCY;
 use crate::core::origin::{get_origins, quintant_to_segment, segment_to_quintant};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::{A5Cell, Origin};
-use crate::lattice::{anchor_to_triple, s_to_anchor, triple_parity, triple_to_anchor, Orientation};
+use crate::lattice::{s_to_cell, triple_parity};
 use crate::traversal::lattice_boundary::{get_boundary_neighbors, BoundaryContext};
 use crate::traversal::quintant_neighbors::find_quintant_neighbor_s;
 
@@ -99,7 +99,7 @@ fn get_res1_neighbors(origin: &Origin, segment: usize, edge_only: bool) -> Vec<u
 
 /// Get all neighbors of a cell across quintant and face boundaries.
 ///
-/// Within-quintant candidates are validated with `is_neighbor()` in uv space
+/// Within-quintant neighbors come from the fixed per-flavor triple deltas
 /// (via `find_quintant_neighbor_s`). Cross-quintant, cross-face, apex, and
 /// corner neighbors are emitted by the shared `get_boundary_neighbors` helper
 /// using fixed delta tables — see `lattice_boundary.rs`.
@@ -124,20 +124,17 @@ pub fn get_global_cell_neighbors(cell_id: u64, edge_only: bool) -> Vec<u64> {
 
     let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
     let (source_quintant, source_orientation) = segment_to_quintant(cell.segment, origin);
-    let anchor = s_to_anchor(cell.s, hilbert_res, source_orientation);
 
     // Triple coordinates are orientation-independent
-    let triple = anchor_to_triple(&anchor);
-
-    // Get uv anchor for is_neighbor validation (within-quintant)
-    let uv_source_anchor = triple_to_anchor(&triple, hilbert_res, Orientation::UV);
+    let source_cell = s_to_cell(cell.s, hilbert_res, source_orientation);
+    let triple = source_cell.triple;
 
     let mut neighbor_set: BTreeSet<u64> = BTreeSet::new();
 
-    // --- Within-quintant: validated by is_neighbor() in uv space ---
+    // --- Within-quintant: fixed per-flavor triple deltas ---
     let within_neighbors = find_quintant_neighbor_s(
         &triple,
-        uv_source_anchor.as_ref(),
+        source_cell.flavor,
         cell.s,
         hilbert_res,
         source_orientation,
