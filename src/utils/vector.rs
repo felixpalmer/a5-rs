@@ -4,20 +4,13 @@
 
 use crate::coordinate_systems::Cartesian;
 
-/// Computes the triple product of three vectors
-///
-/// # Arguments
-///
-/// * `a` - The first vector
-/// * `b` - The second vector
-/// * `c` - The third vector
-///
-/// # Returns
-///
-/// The scalar result
+/// Computes the scalar triple product a · (b × c).
+/// Written out fully (same operation order as cross followed by dot,
+/// so results are bit-identical) to avoid an intermediate vector on hot paths.
 pub fn triple_product(a: Cartesian, b: Cartesian, c: Cartesian) -> f64 {
-    let cross_bc = cross(b, c);
-    dot(a, cross_bc)
+    a.x() * (b.y() * c.z() - b.z() * c.y())
+        + a.y() * (b.z() * c.x() - b.x() * c.z())
+        + a.z() * (b.x() * c.y() - b.y() * c.x())
 }
 
 /// Cached `gamma` and `sin(gamma)` for a fixed (A, B) pair, so loops that
@@ -77,15 +70,6 @@ pub fn slerp_ctx(a: Cartesian, b: Cartesian, t: f64, ctx: Option<SlerpContext>) 
 /// Compute dot product of two vectors
 fn dot(a: Cartesian, b: Cartesian) -> f64 {
     a.x() * b.x() + a.y() * b.y() + a.z() * b.z()
-}
-
-/// Compute cross product of two vectors
-fn cross(a: Cartesian, b: Cartesian) -> Cartesian {
-    Cartesian::new(
-        a.y() * b.z() - a.z() * b.y(),
-        a.z() * b.x() - a.x() * b.z(),
-        a.x() * b.y() - a.y() * b.x(),
-    )
 }
 
 /// Compute length of a vector

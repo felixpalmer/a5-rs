@@ -9,27 +9,21 @@ use crate::utils::vector::{slerp, triple_product};
 /// Using [x, y, z] gives equal precision in all directions, unlike spherical coordinates
 pub type SphericalPolygon = Vec<Cartesian>;
 
-/// Area of the spherical triangle (v1, v2, v3) on the unit sphere, in radians.
+/// Signed area (spherical excess) of the spherical triangle (v1, v2, v3) on the
+/// unit sphere, in radians.
 ///
+/// Uses the Van Oosterom–Strackee formula.
+/// atan2 keeps full precision for tiny triangles (numerator → area/2) and
+/// does not fold areas above π back into [-π, π].
 /// Free-function form avoids the `Vec` heap allocation of
 /// `SphericalTriangleShape::new(vec![v1, v2, v3])?.get_area()` on the
 /// lon_lat_to_cell hot path.
 pub fn spherical_triangle_area(v1: Cartesian, v2: Cartesian, v3: Cartesian) -> Radians {
-    let mid_a = normalize(lerp(v2, v3, 0.5));
-    let mid_b = normalize(lerp(v3, v1, 0.5));
-    let mid_c = normalize(lerp(v1, v2, 0.5));
-
-    let s = triple_product(mid_a, mid_b, mid_c);
-    let clamped = s.clamp(-1.0, 1.0);
-
-    // sin(x) ≈ x for small x — keep precision on tiny triangles.
-    let area = if clamped.abs() < 1e-8 {
-        2.0 * clamped
-    } else {
-        clamped.asin() * 2.0
-    };
-
-    Radians::new_unchecked(area)
+    let norm = 1.0
+        + (v1.x() * v2.x() + v1.y() * v2.y() + v1.z() * v2.z())
+        + (v2.x() * v3.x() + v2.y() * v3.y() + v2.z() * v3.z())
+        + (v3.x() * v1.x() + v3.y() * v1.y() + v3.z() * v1.z());
+    Radians::new_unchecked(2.0 * triple_product(v1, v2, v3).atan2(norm))
 }
 
 /// Spherical point-in-polygon via signed-angle summation. Works for concave
@@ -280,15 +274,6 @@ fn normalize(v: Cartesian) -> Cartesian {
         return v;
     }
     Cartesian::new(v.x() / len, v.y() / len, v.z() / len)
-}
-
-/// Linear interpolation between two vectors
-fn lerp(a: Cartesian, b: Cartesian, t: f64) -> Cartesian {
-    Cartesian::new(
-        a.x() + t * (b.x() - a.x()),
-        a.y() + t * (b.y() - a.y()),
-        a.z() + t * (b.z() - a.z()),
-    )
 }
 
 /// Subtract two vectors
