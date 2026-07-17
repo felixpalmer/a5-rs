@@ -296,7 +296,7 @@ pub fn compat_triple_to_s(t: &Triple, resolution: usize, orientation: Orientatio
         raw = Triple::new(raw.z, raw.y, raw.x);
     }
     let (ab_a, ab_b) = triple_to_ab(&raw);
-    let s_geo = axiom_target_to_s(&ORIGINAL, ab_a, ab_b, resolution, *AXIOM_W, true).0;
+    let s_geo = axiom_target_to_s(&ORIGINAL, ab_a, ab_b, resolution, *AXIOM_W).0;
     let (mut digits, len) = digits_of(s_geo, resolution);
     inverse_shift(&mut digits[..len], rec.invert_j, rec.flip_ij);
     let v = pack_digits(&digits[..len]);
