@@ -114,75 +114,80 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
     let quintant = get_quintant_polar(polar);
     let (segment, orientation) = quintant_to_segment(quintant, origin);
 
-    // Res-30 ids cannot encode quintants > 41 (serialize degrades them to the
-    // res-29 parent), and the legacy search's answer there is path-dependent.
-    // TODO(res30): pick canonical semantics; until then keep legacy behavior.
+    // Res-30 ids can only encode quintants 0-41 (by design: 64 bits cannot fit
+    // res 30 globally, so A5 covers the populous region). In the unsupported
+    // quintants, answer at the finest representable resolution instead — the
+    // res-29 cell CONTAINING the point. (Previously the cap lived only in
+    // serialize, which swapped in the res-29 parent of a res-30 search result —
+    // a cell that fails to contain the query point ~44% of the time there.)
     let segment_n = (segment + 5 - origin.first_quintant) % 5;
-    let degraded = resolution == MAX_RESOLUTION && 5 * origin.id as usize + segment_n > 41;
+    let resolution = if resolution == MAX_RESOLUTION && 5 * origin.id as usize + segment_n > 41 {
+        MAX_RESOLUTION - 1
+    } else {
+        resolution
+    };
 
-    if !degraded {
-        let (mut px, mut py) = (dodec_point.x(), dodec_point.y());
-        if quintant != 0 {
-            let extra_angle = 2.0 * PI_OVER_5.get() * quintant as f64;
-            let cos_angle = (-extra_angle).cos();
-            let sin_angle = (-extra_angle).sin();
-            let rotated_x = cos_angle * px - sin_angle * py;
-            let rotated_y = sin_angle * px + cos_angle * py;
-            px = rotated_x;
-            py = rotated_y;
-        }
-        let hilbert_resolution = (1 + resolution - FIRST_HILBERT_RESOLUTION) as usize;
-        let scale = (1u64 << hilbert_resolution) as f64;
-        px *= scale;
-        py *= scale;
-        let ij = face_to_ij(Face::new(px, py));
-
-        let mut triple = round_to_triple(ij, hilbert_resolution);
-        let mut flavor = triple_flavor(&triple);
-        let mut found = cell_contains_scaled(px, py, triple.x, triple.y, flavor);
-        if !found {
-            let max_row = (1i64 << hilbert_resolution) as i32 - 1;
-            for d in &NEIGHBOR_DELTAS[flavor as usize].all {
-                let neighbor = Triple::new(triple.x + d.x, triple.y + d.y, triple.z + d.z);
-                if !triple_in_bounds(&neighbor, max_row) {
-                    continue;
-                }
-                let neighbor_flavor = triple_flavor(&neighbor);
-                if cell_contains_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor) {
-                    triple = neighbor;
-                    flavor = neighbor_flavor;
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if found {
-            if let Some(s) = triple_to_s(&triple, hilbert_resolution, orientation) {
-                let cell_id = serialize(&A5Cell {
-                    origin_id: origin.id,
-                    segment,
-                    s,
-                    resolution,
-                })?;
-                // Cache the pentagon for the dense-sample fast accept above —
-                // built directly from (triple, flavor), no curve decode needed.
-                let pentagon =
-                    get_pentagon_vertices(hilbert_resolution as i32, quintant, &triple, flavor);
-                let origin_id = origin.id;
-                LAST_RESULT.with(|c| {
-                    *c.borrow_mut() = Some(LastResult {
-                        cell_id,
-                        pentagon,
-                        origin_id,
-                        resolution,
-                    });
-                });
-                return Ok(cell_id);
-            }
-        }
-        // No strict container among the candidates: the point is on a pentagon
-        // boundary or belongs to a neighboring quintant/face — search robustly.
+    let (mut px, mut py) = (dodec_point.x(), dodec_point.y());
+    if quintant != 0 {
+        let extra_angle = 2.0 * PI_OVER_5.get() * quintant as f64;
+        let cos_angle = (-extra_angle).cos();
+        let sin_angle = (-extra_angle).sin();
+        let rotated_x = cos_angle * px - sin_angle * py;
+        let rotated_y = sin_angle * px + cos_angle * py;
+        px = rotated_x;
+        py = rotated_y;
     }
+    let hilbert_resolution = (1 + resolution - FIRST_HILBERT_RESOLUTION) as usize;
+    let scale = (1u64 << hilbert_resolution) as f64;
+    px *= scale;
+    py *= scale;
+    let ij = face_to_ij(Face::new(px, py));
+
+    let mut triple = round_to_triple(ij, hilbert_resolution);
+    let mut flavor = triple_flavor(&triple);
+    let mut found = cell_contains_scaled(px, py, triple.x, triple.y, flavor);
+    if !found {
+        let max_row = (1i64 << hilbert_resolution) as i32 - 1;
+        for d in &NEIGHBOR_DELTAS[flavor as usize].all {
+            let neighbor = Triple::new(triple.x + d.x, triple.y + d.y, triple.z + d.z);
+            if !triple_in_bounds(&neighbor, max_row) {
+                continue;
+            }
+            let neighbor_flavor = triple_flavor(&neighbor);
+            if cell_contains_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor) {
+                triple = neighbor;
+                flavor = neighbor_flavor;
+                found = true;
+                break;
+            }
+        }
+    }
+    if found {
+        if let Some(s) = triple_to_s(&triple, hilbert_resolution, orientation) {
+            let cell_id = serialize(&A5Cell {
+                origin_id: origin.id,
+                segment,
+                s,
+                resolution,
+            })?;
+            // Cache the pentagon for the dense-sample fast accept above —
+            // built directly from (triple, flavor), no curve decode needed.
+            let pentagon =
+                get_pentagon_vertices(hilbert_resolution as i32, quintant, &triple, flavor);
+            let origin_id = origin.id;
+            LAST_RESULT.with(|c| {
+                *c.borrow_mut() = Some(LastResult {
+                    cell_id,
+                    pentagon,
+                    origin_id,
+                    resolution,
+                });
+            });
+            return Ok(cell_id);
+        }
+    }
+    // No strict container among the candidates: the point is on a pentagon
+    // boundary or belongs to a neighboring quintant/face — search robustly.
     spherical_to_cell_search(spherical, resolution)
 }
 
