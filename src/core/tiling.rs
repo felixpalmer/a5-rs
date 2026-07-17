@@ -46,6 +46,55 @@ static QUINTANT_ROTATIONS: LazyLock<[Mat2; 5]> = LazyLock::new(|| {
     rotations
 });
 
+/// The base PENTAGON under each flavor's orientation ops, flattened to
+/// [x0,y0,...,x4,y4] for the allocation-free containment test below.
+static FLAVOR_PENTAGONS: LazyLock<[[f64; 10]; 4]> = LazyLock::new(|| {
+    let mut out = [[0.0f64; 10]; 4];
+    for (flavor, slot) in out.iter_mut().enumerate() {
+        let mut p = pentagon().clone();
+        if flavor & 1 == 1 {
+            p.rotate180();
+        }
+        if flavor & 2 == 2 {
+            p.reflect_y();
+        }
+        let verts = p.get_vertices();
+        for i in 0..5 {
+            slot[i * 2] = verts[i].x();
+            slot[i * 2 + 1] = verts[i].y();
+        }
+    }
+    out
+});
+
+/// Strict containment of a point in the pentagon of (triple.x, triple.y,
+/// flavor), tested in the SCALED quintant-0 frame (face coords rotated into
+/// quintant 0 and scaled by 2^resolution — the frame `face_to_estimate` works
+/// in). In this frame the cell's pentagon is the flavor-oriented base pentagon
+/// translated by BASIS·(x+y, -x+(flavor&1)), so the test needs no curve
+/// decode, no re-projection, and — pentagons being unit-size here — stays
+/// well-conditioned at every resolution.
+pub fn cell_contains_scaled(px: f64, py: f64, x: i32, y: i32, flavor: u8) -> bool {
+    let rx = (x + y) as f64;
+    let ry = (-x + (flavor & 1) as i32) as f64;
+    let b = basis();
+    let tx = b.m00 * rx + b.m01 * ry;
+    let ty = b.m10 * rx + b.m11 * ry;
+    let pent = &FLAVOR_PENTAGONS[flavor as usize];
+    for i in 0..5 {
+        let j = if i == 4 { 0 } else { i + 1 };
+        let v1x = pent[i * 2] + tx;
+        let v1y = pent[i * 2 + 1] + ty;
+        let v2x = pent[j * 2] + tx;
+        let v2y = pent[j * 2 + 1] + ty;
+        // (v1 - v2) × (p - v1) < 0 ⇒ strictly outside this edge
+        if (v1x - v2x) * (py - v1y) - (v1y - v2y) * (px - v1x) < 0.0 {
+            return false;
+        }
+    }
+    true
+}
+
 /// Transform a pentagon shape using a 2x2 matrix
 fn transform_pentagon(pentagon: &mut PentagonShape, matrix: &Mat2) {
     let vertices = pentagon.get_vertices_vec();

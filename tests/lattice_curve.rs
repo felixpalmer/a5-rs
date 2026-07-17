@@ -142,3 +142,22 @@ fn test_triple_in_bounds() {
         );
     }
 }
+
+#[test]
+fn test_triple_flavor_closed_form() {
+    // The pentagon flavor depends only on (parity, y mod 2); pin the closed
+    // form against the descent over all cells at res 6, two orientations.
+    use a5::lattice::{s_to_cell, triple_flavor, Orientation};
+    for orientation in [Orientation::UV, Orientation::WU] {
+        for s in 0..(1u64 << 12) {
+            let cell = s_to_cell(s, 6, orientation);
+            assert_eq!(
+                triple_flavor(&cell.triple),
+                cell.flavor,
+                "flavor mismatch at s={} {:?}",
+                s,
+                orientation
+            );
+        }
+    }
+}

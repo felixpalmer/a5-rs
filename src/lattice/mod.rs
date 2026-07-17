@@ -17,7 +17,7 @@ pub mod types;
 pub use curve::ij_to_s;
 pub use lsystem::{s_to_cell, s_to_triple, Cell};
 
-pub use triple::{triple_in_bounds, triple_parity, triple_to_s};
+pub use triple::{triple_flavor, triple_in_bounds, triple_parity, triple_to_s};
 pub use types::{Orientation, Triple};
 
 // The ORIGINAL (pre-L-system) curve, bit-for-bit, for the migration path —

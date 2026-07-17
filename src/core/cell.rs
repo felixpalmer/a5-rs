@@ -10,16 +10,20 @@ use crate::core::coordinate_transforms::{
 use crate::core::origin::{
     find_nearest_origin, find_nearest_origin_cartesian, quintant_to_segment, segment_to_quintant,
 };
-use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION, WORLD_CELL};
+use crate::core::serialization::{
+    deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
+};
 use crate::core::tiling::{
-    get_face_vertices, get_pentagon_center, get_pentagon_vertices, get_quintant_polar,
-    get_quintant_vertices,
+    cell_contains_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices,
+    get_quintant_polar, get_quintant_vertices,
 };
 use crate::core::utils::{A5Cell, Origin, OriginId};
 use crate::geometry::pentagon::PentagonShape;
-use crate::lattice::{ij_to_s, s_to_cell};
+use crate::lattice::curve::round_to_triple;
+use crate::lattice::{ij_to_s, s_to_cell, triple_flavor, triple_in_bounds, triple_to_s, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::global_neighbors::get_global_cell_neighbors;
+use crate::traversal::neighbors::NEIGHBOR_DELTAS;
 use crate::utils::spiral::{Spiral, SPIRAL_SAMPLE_COUNT};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -77,8 +81,8 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
         return serialize(&estimate);
     }
 
-    // Try the cached pentagon first — skips the full estimate pipeline when
-    // consecutive calls land in the same cell (common in dense-sample loops).
+    // Try the cached pentagon first — skips the full lookup when consecutive
+    // calls land in the same cell (common in dense-sample loops).
     let cached_hit = LAST_RESULT.with(|c| -> Result<Option<u64>, String> {
         let last_ref = c.borrow();
         let last = match last_ref.as_ref() {
@@ -97,6 +101,95 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
         return Ok(cell_id);
     }
 
+    // Fast path: locate the containing pentagon directly. Round to the leaf
+    // triangle, get the closed-form flavor, and test the pentagon geometrically
+    // in the scaled quintant frame; the triangular and pentagonal lattices are
+    // not congruent, but the containing pentagon is always the triangle's cell
+    // or one of its fixed neighbor deltas (verified exhaustively), so at most
+    // one 7-candidate walk resolves it — then a single curve encode.
+    let origin = find_nearest_origin(spherical);
+    let dodecahedron = DodecahedronProjection::get_thread_local();
+    let dodec_point = dodecahedron.forward(spherical, origin.id)?;
+    let polar = to_polar(dodec_point);
+    let quintant = get_quintant_polar(polar);
+    let (segment, orientation) = quintant_to_segment(quintant, origin);
+
+    // Res-30 ids cannot encode quintants > 41 (serialize degrades them to the
+    // res-29 parent), and the legacy search's answer there is path-dependent.
+    // TODO(res30): pick canonical semantics; until then keep legacy behavior.
+    let segment_n = (segment + 5 - origin.first_quintant) % 5;
+    let degraded = resolution == MAX_RESOLUTION && 5 * origin.id as usize + segment_n > 41;
+
+    if !degraded {
+        let (mut px, mut py) = (dodec_point.x(), dodec_point.y());
+        if quintant != 0 {
+            let extra_angle = 2.0 * PI_OVER_5.get() * quintant as f64;
+            let cos_angle = (-extra_angle).cos();
+            let sin_angle = (-extra_angle).sin();
+            let rotated_x = cos_angle * px - sin_angle * py;
+            let rotated_y = sin_angle * px + cos_angle * py;
+            px = rotated_x;
+            py = rotated_y;
+        }
+        let hilbert_resolution = (1 + resolution - FIRST_HILBERT_RESOLUTION) as usize;
+        let scale = (1u64 << hilbert_resolution) as f64;
+        px *= scale;
+        py *= scale;
+        let ij = face_to_ij(Face::new(px, py));
+
+        let mut triple = round_to_triple(ij, hilbert_resolution);
+        let mut flavor = triple_flavor(&triple);
+        let mut found = cell_contains_scaled(px, py, triple.x, triple.y, flavor);
+        if !found {
+            let max_row = (1i64 << hilbert_resolution) as i32 - 1;
+            for d in &NEIGHBOR_DELTAS[flavor as usize].all {
+                let neighbor = Triple::new(triple.x + d.x, triple.y + d.y, triple.z + d.z);
+                if !triple_in_bounds(&neighbor, max_row) {
+                    continue;
+                }
+                let neighbor_flavor = triple_flavor(&neighbor);
+                if cell_contains_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor) {
+                    triple = neighbor;
+                    flavor = neighbor_flavor;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if found {
+            if let Some(s) = triple_to_s(&triple, hilbert_resolution, orientation) {
+                let cell_id = serialize(&A5Cell {
+                    origin_id: origin.id,
+                    segment,
+                    s,
+                    resolution,
+                })?;
+                // Cache the pentagon for the dense-sample fast accept above —
+                // built directly from (triple, flavor), no curve decode needed.
+                let pentagon =
+                    get_pentagon_vertices(hilbert_resolution as i32, quintant, &triple, flavor);
+                let origin_id = origin.id;
+                LAST_RESULT.with(|c| {
+                    *c.borrow_mut() = Some(LastResult {
+                        cell_id,
+                        pentagon,
+                        origin_id,
+                        resolution,
+                    });
+                });
+                return Ok(cell_id);
+            }
+        }
+        // No strict container among the candidates: the point is on a pentagon
+        // boundary or belongs to a neighboring quintant/face — search robustly.
+    }
+    spherical_to_cell_search(spherical, resolution)
+}
+
+// Legacy search: estimate + verification + spiral + neighbor/closest fallback.
+// Reached only from the fast path's fallthrough (boundary points,
+// cross-quintant points, the degraded res-30 zone) — rare, but fully robust.
+fn spherical_to_cell_search(spherical: Spherical, resolution: i32) -> Result<u64, String> {
     // Try the original point's projection-based estimate. Common case for
     // non-boundary points.
     let first_estimate = spherical_to_estimate(spherical, resolution)?;
