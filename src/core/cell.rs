@@ -7,9 +7,7 @@ use crate::core::constants::PI_OVER_5;
 use crate::core::coordinate_transforms::{
     face_to_ij, from_lon_lat, normalize_longitudes, to_lon_lat, to_polar,
 };
-use crate::core::origin::{
-    find_nearest_origin, find_nearest_origins, quintant_to_segment, segment_to_quintant,
-};
+use crate::core::origin::{find_nearest_origin, find_nearest_origins, quintant_tables};
 use crate::core::serialization::{
     deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 };
@@ -64,7 +62,8 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
         let dodecahedron = DodecahedronProjection::get_thread_local();
         let dodec_point = dodecahedron.forward(spherical, origin.id)?;
         let quintant = get_quintant_polar(to_polar(dodec_point));
-        let (segment, _) = quintant_to_segment(quintant, origin);
+        let segment =
+            quintant_tables().quintant_to_segment[origin.id as usize * 5 + quintant] as usize;
         return serialize(&A5Cell {
             origin_id: origin.id,
             segment,
@@ -137,7 +136,10 @@ fn lookup_in_quintant(
     quintant: usize,
     resolution: i32,
 ) -> Result<Option<CellCandidate>, String> {
-    let (segment, orientation) = quintant_to_segment(quintant, origin);
+    let tables = quintant_tables();
+    let global_quintant = origin.id as usize * 5 + quintant;
+    let segment = tables.quintant_to_segment[global_quintant] as usize;
+    let orientation = tables.quintant_to_orientation[global_quintant];
 
     // Res-30 ids can only encode quintants 0-41 (by design: 64 bits cannot fit
     // res 30 globally, so A5 covers the populous region). In the unsupported
@@ -307,7 +309,10 @@ fn spherical_to_cell_boundary(
 
 /// Get the pentagon shape for a given A5 cell
 pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
-    let (quintant, orientation) = segment_to_quintant(cell.segment, cell.origin());
+    let tables = quintant_tables();
+    let global_quintant = cell.origin_id as usize * 5 + cell.segment;
+    let quintant = tables.segment_to_quintant[global_quintant] as usize;
+    let orientation = tables.segment_to_orientation[global_quintant];
 
     if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
         let pentagon_shape = get_quintant_vertices(quintant);
@@ -335,7 +340,10 @@ pub fn cell_to_spherical(cell: u64) -> Result<crate::coordinate_systems::Spheric
     if cell_data.resolution >= FIRST_HILBERT_RESOLUTION {
         // Fast path: the pentagon center is O(1) from (triple, flavor) — no need
         // to construct the pentagon itself.
-        let (quintant, orientation) = segment_to_quintant(cell_data.segment, cell_data.origin());
+        let tables = quintant_tables();
+        let global_quintant = cell_data.origin_id as usize * 5 + cell_data.segment;
+        let quintant = tables.segment_to_quintant[global_quintant] as usize;
+        let orientation = tables.segment_to_orientation[global_quintant];
         let hilbert_resolution = cell_data.resolution - FIRST_HILBERT_RESOLUTION + 1;
         let cell_geom = s_to_cell(cell_data.s, hilbert_resolution as usize, orientation);
         let center = get_pentagon_center(
@@ -435,7 +443,8 @@ pub fn a5cell_contains_point(cell: &A5Cell, spherical: Spherical) -> Result<f64,
     let dodecahedron = DodecahedronProjection::get_thread_local();
     let projected_point = dodecahedron.forward(spherical, cell.origin_id)?;
 
-    let (quintant, _orientation) = segment_to_quintant(cell.segment, cell.origin());
+    let quintant =
+        quintant_tables().segment_to_quintant[cell.origin_id as usize * 5 + cell.segment] as usize;
 
     let containment_result = if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
         // Use quintant vertices (triangle as PentagonShape)

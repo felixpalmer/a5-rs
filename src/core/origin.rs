@@ -191,6 +191,41 @@ fn is_layout_clockwise(layout: &[Orientation]) -> bool {
     layout == CLOCKWISE_FAN.as_slice() || layout == CLOCKWISE_STEP.as_slice()
 }
 
+/// Lookup tables for the two mappings above, built once at startup — there
+/// are only 60 (origin, quintant) pairs. Indexed by origin.id * 5 + quintant
+/// (resp. + segment, the global quintant number as encoded in serialized cell
+/// ids). Call sites read these directly instead of calling the functions.
+pub struct QuintantTables {
+    pub quintant_to_segment: [u8; 60],
+    pub quintant_to_orientation: [Orientation; 60],
+    pub segment_to_quintant: [u8; 60],
+    pub segment_to_orientation: [Orientation; 60],
+}
+
+pub fn quintant_tables() -> &'static QuintantTables {
+    static TABLES: OnceLock<QuintantTables> = OnceLock::new();
+    TABLES.get_or_init(|| {
+        let mut tables = QuintantTables {
+            quintant_to_segment: [0; 60],
+            quintant_to_orientation: [Orientation::UV; 60],
+            segment_to_quintant: [0; 60],
+            segment_to_orientation: [Orientation::UV; 60],
+        };
+        for origin in get_origins() {
+            for i in 0..5 {
+                let index = origin.id as usize * 5 + i;
+                let (segment, orientation) = quintant_to_segment(i, origin);
+                tables.quintant_to_segment[index] = segment as u8;
+                tables.quintant_to_orientation[index] = orientation;
+                let (quintant, orientation) = segment_to_quintant(i, origin);
+                tables.segment_to_quintant[index] = quintant as u8;
+                tables.segment_to_orientation[index] = orientation;
+            }
+        }
+        tables
+    })
+}
+
 /// The `count` origins nearest to a point, by haversine distance, nearest
 /// first. Used by the boundary resolution in `spherical_to_cell`: a point on
 /// (or within float noise of) a face seam or dodecahedron vertex may belong
