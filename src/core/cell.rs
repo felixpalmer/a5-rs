@@ -2,31 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coordinate_systems::{Cartesian, Face, LonLat, Spherical};
+use crate::coordinate_systems::{Face, LonLat, Spherical};
 use crate::core::constants::PI_OVER_5;
 use crate::core::coordinate_transforms::{
     face_to_ij, from_lon_lat, normalize_longitudes, to_lon_lat, to_polar,
 };
 use crate::core::origin::{
-    find_nearest_origin, find_nearest_origin_cartesian, quintant_to_segment, segment_to_quintant,
+    find_nearest_origin, find_nearest_origins, quintant_to_segment, segment_to_quintant,
 };
 use crate::core::serialization::{
     deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 };
 use crate::core::tiling::{
-    cell_contains_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices,
+    cell_margin_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices,
     get_quintant_polar, get_quintant_vertices,
 };
 use crate::core::utils::{A5Cell, Origin, OriginId};
 use crate::geometry::pentagon::PentagonShape;
 use crate::lattice::curve::round_to_triple;
-use crate::lattice::{ij_to_s, s_to_cell, triple_flavor, triple_in_bounds, triple_to_s, Triple};
+use crate::lattice::{s_to_cell, triple_flavor, triple_in_bounds, triple_to_s, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
-use crate::traversal::global_neighbors::get_global_cell_neighbors;
 use crate::traversal::neighbors::NEIGHBOR_DELTAS;
-use crate::utils::spiral::{Spiral, SPIRAL_SAMPLE_COUNT};
 use std::cell::RefCell;
-use std::collections::HashSet;
 
 // Single-entry cache of the most recent successful lookup. Speeds up
 // dense-sample workloads (polygon boundary tracing, line tracing) where
@@ -42,21 +39,6 @@ struct LastResult {
 
 thread_local! {
     static LAST_RESULT: RefCell<Option<LastResult>> = const { RefCell::new(None) };
-}
-
-/// Update the single-entry cache with a successful (cell, cell_id) pair.
-fn cache_result(cell: &A5Cell, cell_id: u64, resolution: i32) -> Result<u64, String> {
-    let pentagon = get_pentagon(cell)?;
-    let origin_id = cell.origin_id;
-    LAST_RESULT.with(|c| {
-        *c.borrow_mut() = Some(LastResult {
-            cell_id,
-            pentagon,
-            origin_id,
-            resolution,
-        });
-    });
-    Ok(cell_id)
 }
 
 /// Convert lon/lat coordinates to A5 cell ID
@@ -76,9 +58,19 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
     }
 
     if resolution < FIRST_HILBERT_RESOLUTION {
-        // For low resolutions there is no Hilbert curve, so we can just return as the result is exact
-        let estimate = spherical_to_estimate(spherical, resolution)?;
-        return serialize(&estimate);
+        // For low resolutions there is no Hilbert curve: the cell is determined
+        // by the face (and quintant) alone, so the lookup is exact.
+        let origin = find_nearest_origin(spherical);
+        let dodecahedron = DodecahedronProjection::get_thread_local();
+        let dodec_point = dodecahedron.forward(spherical, origin.id)?;
+        let quintant = get_quintant_polar(to_polar(dodec_point));
+        let (segment, _) = quintant_to_segment(quintant, origin);
+        return serialize(&A5Cell {
+            origin_id: origin.id,
+            segment,
+            s: 0,
+            resolution,
+        });
     }
 
     // Try the cached pentagon first — skips the full lookup when consecutive
@@ -110,8 +102,41 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
     let origin = find_nearest_origin(spherical);
     let dodecahedron = DodecahedronProjection::get_thread_local();
     let dodec_point = dodecahedron.forward(spherical, origin.id)?;
-    let polar = to_polar(dodec_point);
-    let quintant = get_quintant_polar(polar);
+    let quintant = get_quintant_polar(to_polar(dodec_point));
+    let best = lookup_in_quintant(dodec_point, origin, quintant, resolution)?;
+    if let Some(candidate) = &best {
+        if candidate.margin > 0.0 {
+            return Ok(accept_candidate(candidate));
+        }
+    }
+    // No strictly-containing pentagon in the assigned frame: the point sits on
+    // a cell boundary or within float noise of a quintant/face seam.
+    spherical_to_cell_boundary(spherical, resolution, origin.id, quintant, best)
+}
+
+// The best cell for `dodec_point` (face frame of `origin`) within one
+// quintant: round to the leaf triangle, closed-form flavor, geometric margin,
+// and — when the triangle's cell doesn't strictly contain the point — the
+// best of its fixed neighbor deltas. margin > 0 ⇔ the unique strictly-
+// containing pentagon.
+struct CellCandidate {
+    margin: f64,
+    cell_id: u64,
+    triple: Triple,
+    flavor: u8,
+    quintant: usize,
+    hilbert_resolution: usize,
+    origin_id: OriginId,
+    resolution: i32,
+}
+
+#[inline]
+fn lookup_in_quintant(
+    dodec_point: Face,
+    origin: &Origin,
+    quintant: usize,
+    resolution: i32,
+) -> Result<Option<CellCandidate>, String> {
     let (segment, orientation) = quintant_to_segment(quintant, origin);
 
     // Res-30 ids can only encode quintants 0-41 (by design: 64 bits cannot fit
@@ -143,187 +168,141 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
     py *= scale;
     let ij = face_to_ij(Face::new(px, py));
 
-    let mut triple = round_to_triple(ij, hilbert_resolution);
-    let mut flavor = triple_flavor(&triple);
-    let mut found = cell_contains_scaled(px, py, triple.x, triple.y, flavor);
-    if !found {
+    let base = round_to_triple(ij, hilbert_resolution);
+    let mut triple = base;
+    let mut flavor = triple_flavor(&base);
+    let mut margin = cell_margin_scaled(px, py, base.x, base.y, flavor);
+    if margin <= 0.0 {
+        // All deltas are relative to the ROUNDED triple (the containing
+        // pentagon is always among its fixed neighbors), not to intermediate
+        // best cells.
         let max_row = (1i64 << hilbert_resolution) as i32 - 1;
         for d in &NEIGHBOR_DELTAS[flavor as usize].all {
-            let neighbor = Triple::new(triple.x + d.x, triple.y + d.y, triple.z + d.z);
+            let neighbor = Triple::new(base.x + d.x, base.y + d.y, base.z + d.z);
             if !triple_in_bounds(&neighbor, max_row) {
                 continue;
             }
             let neighbor_flavor = triple_flavor(&neighbor);
-            if cell_contains_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor) {
+            let neighbor_margin =
+                cell_margin_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor);
+            if neighbor_margin > margin {
                 triple = neighbor;
                 flavor = neighbor_flavor;
-                found = true;
-                break;
+                margin = neighbor_margin;
+                if margin > 0.0 {
+                    break;
+                }
             }
         }
     }
-    if found {
-        if let Some(s) = triple_to_s(&triple, hilbert_resolution, orientation) {
-            let cell_id = serialize(&A5Cell {
-                origin_id: origin.id,
-                segment,
-                s,
-                resolution,
-            })?;
-            // Cache the pentagon for the dense-sample fast accept above —
-            // built directly from (triple, flavor), no curve decode needed.
-            let pentagon =
-                get_pentagon_vertices(hilbert_resolution as i32, quintant, &triple, flavor);
-            let origin_id = origin.id;
-            LAST_RESULT.with(|c| {
-                *c.borrow_mut() = Some(LastResult {
-                    cell_id,
-                    pentagon,
-                    origin_id,
-                    resolution,
-                });
-            });
-            return Ok(cell_id);
-        }
-    }
-    // No strict container among the candidates: the point is on a pentagon
-    // boundary or belongs to a neighboring quintant/face — search robustly.
-    spherical_to_cell_search(spherical, resolution)
-}
-
-// Legacy search: estimate + verification + spiral + neighbor/closest fallback.
-// Reached only from the fast path's fallthrough (boundary points,
-// cross-quintant points, the degraded res-30 zone) — rare, but fully robust.
-fn spherical_to_cell_search(spherical: Spherical, resolution: i32) -> Result<u64, String> {
-    // Try the original point's projection-based estimate. Common case for
-    // non-boundary points.
-    let first_estimate = spherical_to_estimate(spherical, resolution)?;
-    let first_key = serialize(&first_estimate)?;
-    let first_distance = a5cell_contains_point(&first_estimate, spherical)?;
-    if first_distance > 0.0 {
-        return cache_result(&first_estimate, first_key, resolution);
-    }
-
-    // Spiral search: perturb the point in the tangent plane to find nearby
-    // estimate cells (see src/utils/spiral.rs).
-    let hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION;
-    let scale = SPIRAL_SCALE_RAD / 2.0_f64.powi(hilbert_resolution);
-    let mut estimate_set: HashSet<u64> = HashSet::new();
-    estimate_set.insert(first_key);
-    let mut cells: Vec<(u64, f64)> = vec![(first_key, first_distance)];
-
-    let spiral = Spiral::new(spherical, scale);
-    for i in 0..SPIRAL_SAMPLE_COUNT {
-        let estimate = cartesian_to_estimate(spiral.sample(i), resolution)?;
-        let estimate_key = serialize(&estimate)?;
-        if estimate_set.contains(&estimate_key) {
-            continue;
-        }
-        estimate_set.insert(estimate_key);
-        let distance = a5cell_contains_point(&estimate, spherical)?;
-        if distance > 0.0 {
-            return cache_result(&estimate, estimate_key, resolution);
-        }
-        cells.push((estimate_key, distance));
-    }
-
-    // Spiral exhausted without finding a strict container. This is reachable
-    // for points right at the polar singularity at very high resolutions,
-    // where re-projecting any tangent sample snaps back to a small set of
-    // cells while the geometrically-containing cell is offset by one
-    // adjacency step. Fall back to direct neighbours of the closest spiral
-    // candidate, which always finds it.
-    cells.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    let k = std::cmp::min(3, cells.len());
-    for j in 0..k {
-        let neighbors = get_global_cell_neighbors(cells[j].0, false);
-        for neighbor_key in neighbors {
-            if estimate_set.contains(&neighbor_key) {
-                continue;
-            }
-            estimate_set.insert(neighbor_key);
-            let neighbor_cell = deserialize(neighbor_key)?;
-            let distance = a5cell_contains_point(&neighbor_cell, spherical)?;
-            if distance > 0.0 {
-                return cache_result(&neighbor_cell, neighbor_key, resolution);
-            }
-            cells.push((neighbor_key, distance));
-        }
-    }
-
-    // True fallback: closest cell wins, even if technically just outside.
-    cells.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    let fallback_key = cells[0].0;
-    let fallback = deserialize(fallback_key)?;
-    cache_result(&fallback, fallback_key, resolution)
-}
-
-// Spiral perturbation radius at hilbertResolution=1 (in radians of tangent
-// offset). For higher resolutions we scale by 1/2^hilbertResolution.
-const SPIRAL_SCALE_RAD: f64 = 70.0 * std::f64::consts::PI / 180.0;
-
-/// The ij_to_s function uses the triangular lattice which only approximates the pentagon lattice
-/// Thus these functions only return a cell nearby, and we need to search the neighbourhood to find the correct cell
-/// TODO: Implement a more accurate function
-fn spherical_to_estimate(spherical: Spherical, resolution: i32) -> Result<A5Cell, String> {
-    let origin = find_nearest_origin(spherical);
-    let dodecahedron = DodecahedronProjection::get_thread_local();
-    let dodec_point = dodecahedron.forward(spherical, origin.id)?;
-    face_to_estimate(dodec_point, origin, resolution)
-}
-
-fn cartesian_to_estimate(cartesian: Cartesian, resolution: i32) -> Result<A5Cell, String> {
-    let origin = find_nearest_origin_cartesian(cartesian);
-    let dodecahedron = DodecahedronProjection::get_thread_local();
-    let dodec_point = dodecahedron.forward_cartesian(cartesian, origin.id)?;
-    face_to_estimate(dodec_point, origin, resolution)
-}
-
-fn face_to_estimate(
-    mut dodec_point: Face,
-    origin: &Origin,
-    resolution: i32,
-) -> Result<A5Cell, String> {
-    let polar = to_polar(dodec_point);
-    let quintant = get_quintant_polar(polar);
-    let (segment, orientation) = quintant_to_segment(quintant, origin);
-
-    if resolution < FIRST_HILBERT_RESOLUTION {
-        // For low resolutions there is no Hilbert curve
-        return Ok(A5Cell {
-            s: 0,
-            segment,
-            origin_id: origin.id,
-            resolution,
-        });
-    }
-
-    // Rotate into right fifth
-    if quintant != 0 {
-        let extra_angle = 2.0 * PI_OVER_5.get() * quintant as f64;
-        let cos_angle = (-extra_angle).cos();
-        let sin_angle = (-extra_angle).sin();
-        let rotated_x = cos_angle * dodec_point.x() - sin_angle * dodec_point.y();
-        let rotated_y = sin_angle * dodec_point.x() + cos_angle * dodec_point.y();
-        dodec_point = Face::new(rotated_x, rotated_y);
-    }
-
-    let hilbert_resolution = 1 + resolution - FIRST_HILBERT_RESOLUTION;
-    let scale_factor = 2.0_f64.powi(hilbert_resolution);
-    dodec_point = Face::new(
-        dodec_point.x() * scale_factor,
-        dodec_point.y() * scale_factor,
-    );
-
-    let ij = face_to_ij(dodec_point);
-    let s = ij_to_s(ij, hilbert_resolution as usize, orientation);
-
-    Ok(A5Cell {
-        s,
+    let s = match triple_to_s(&triple, hilbert_resolution, orientation) {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+    let cell_id = serialize(&A5Cell {
+        origin_id: origin.id,
         segment,
+        s,
+        resolution,
+    })?;
+    Ok(Some(CellCandidate {
+        margin,
+        cell_id,
+        triple,
+        flavor,
+        quintant,
+        hilbert_resolution,
         origin_id: origin.id,
         resolution,
-    })
+    }))
+}
+
+/// Cache the winning pentagon for the dense-sample fast accept and return its id.
+#[inline]
+fn accept_candidate(c: &CellCandidate) -> u64 {
+    let pentagon =
+        get_pentagon_vertices(c.hilbert_resolution as i32, c.quintant, &c.triple, c.flavor);
+    let cell_id = c.cell_id;
+    let origin_id = c.origin_id;
+    let resolution = c.resolution;
+    LAST_RESULT.with(|cache| {
+        *cache.borrow_mut() = Some(LastResult {
+            cell_id,
+            pentagon,
+            origin_id,
+            resolution,
+        });
+    });
+    cell_id
+}
+
+// Tie margin tolerance: containment margins are cross products of unit-scale
+// pentagon edges against coordinates of magnitude up to 2^hilbert_resolution,
+// so their float noise is ~2^(hilbert_resolution - 52); 2^-44 gives a wide
+// safety factor while staying geometrically negligible (cells are unit-size
+// in the scaled frame).
+const TIE_EPS: f64 = 5.684341886080802e-14; // 2^-44
+
+/// Boundary resolution: the point has no strictly-containing pentagon in its
+/// assigned frame — it lies on a cell edge, or within float noise of a
+/// quintant or face seam (where the containing cell belongs to a neighboring
+/// frame). Deterministically rerun the same lookup in every frame that could
+/// own the point — all 5 quintants of the 3 nearest faces (a dodecahedron
+/// vertex joins 3 faces; a face center joins 5 quintants). A strictly-
+/// containing pentagon is unique, so the first strict hit wins; if none
+/// exists the point is exactly on a boundary shared by the near-best
+/// candidates, and the tie-break is the cell that comes FIRST ALONG THE CURVE
+/// — the lowest cell id (origin/segment occupy the top id bits in curve
+/// order, so numeric order is curve order globally).
+fn spherical_to_cell_boundary(
+    spherical: Spherical,
+    resolution: i32,
+    first_origin_id: OriginId,
+    first_quintant: usize,
+    first: Option<CellCandidate>,
+) -> Result<u64, String> {
+    let mut candidates: Vec<CellCandidate> = Vec::with_capacity(16);
+    if let Some(c) = first {
+        candidates.push(c);
+    }
+    let dodecahedron = DodecahedronProjection::get_thread_local();
+    for origin in find_nearest_origins(spherical, 3) {
+        let dodec_point = dodecahedron.forward(spherical, origin.id)?;
+        // Try this origin's assigned quintant first, then its gamma-adjacent
+        // neighbors: seam points resolve in the adjacent frame, so this order
+        // finds the strict container in 1-2 lookups instead of scanning all 5.
+        let q0 = get_quintant_polar(to_polar(dodec_point));
+        for dq in [0usize, 1, 4, 2, 3] {
+            let quintant = (q0 + dq) % 5;
+            if origin.id == first_origin_id && quintant == first_quintant {
+                continue;
+            }
+            let Some(c) = lookup_in_quintant(dodec_point, origin, quintant, resolution)? else {
+                continue;
+            };
+            if c.margin > 0.0 {
+                return Ok(accept_candidate(&c));
+            }
+            candidates.push(c);
+        }
+    }
+    let mut best = f64::NEG_INFINITY;
+    for c in &candidates {
+        if c.margin > best {
+            best = c.margin;
+        }
+    }
+    let eps = TIE_EPS * (1u64 << (1 + resolution - FIRST_HILBERT_RESOLUTION)) as f64;
+    let mut winner: Option<&CellCandidate> = None;
+    for c in &candidates {
+        if c.margin >= best - eps && winner.is_none_or(|w| c.cell_id < w.cell_id) {
+            winner = Some(c);
+        }
+    }
+    match winner {
+        Some(w) => Ok(accept_candidate(w)),
+        None => Err("spherical_to_cell: no candidate cell found".to_string()),
+    }
 }
 
 /// Get the pentagon shape for a given A5 cell

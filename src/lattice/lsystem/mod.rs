@@ -151,7 +151,7 @@ pub fn axiom_leaf_cell(t: &CurveTables, s: u64, r: usize, axiom: usize) -> LeafC
 // Shared descent: the target is the corner sum of a real cell, which is
 // strictly interior at every level, so the branchless classifier is provably
 // the containing child (and the leaf resolves by exact sum match). Fractional
-// point location no longer descends at all — ij_to_s rounds to a triple first
+// point location no longer descends at all — spherical_to_cell rounds to a triple
 // (see curve.rs round_to_triple). Internal; also used by compat.rs.
 pub fn axiom_target_to_s(t: &CurveTables, ta: f64, tb: f64, r: usize, axiom: usize) -> (u64, u8) {
     let mut motif = axiom;

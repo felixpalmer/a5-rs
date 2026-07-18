@@ -67,32 +67,35 @@ static FLAVOR_PENTAGONS: LazyLock<[[f64; 10]; 4]> = LazyLock::new(|| {
     out
 });
 
-/// Strict containment of a point in the pentagon of (triple.x, triple.y,
-/// flavor), tested in the SCALED quintant-0 frame (face coords rotated into
+/// Signed containment margin of a point in the pentagon of (triple.x,
+/// triple.y, flavor) (> 0 ⇔ strictly inside; the most-violated-edge cross
+/// product otherwise), tested in the SCALED quintant-0 frame (face coords rotated into
 /// quintant 0 and scaled by 2^resolution — the frame `face_to_estimate` works
 /// in). In this frame the cell's pentagon is the flavor-oriented base pentagon
 /// translated by BASIS·(x+y, -x+(flavor&1)), so the test needs no curve
 /// decode, no re-projection, and — pentagons being unit-size here — stays
 /// well-conditioned at every resolution.
-pub fn cell_contains_scaled(px: f64, py: f64, x: i32, y: i32, flavor: u8) -> bool {
+pub fn cell_margin_scaled(px: f64, py: f64, x: i32, y: i32, flavor: u8) -> f64 {
     let rx = (x + y) as f64;
     let ry = (-x + (flavor & 1) as i32) as f64;
     let b = basis();
     let tx = b.m00 * rx + b.m01 * ry;
     let ty = b.m10 * rx + b.m11 * ry;
     let pent = &FLAVOR_PENTAGONS[flavor as usize];
+    let mut margin = f64::INFINITY;
     for i in 0..5 {
         let j = if i == 4 { 0 } else { i + 1 };
         let v1x = pent[i * 2] + tx;
         let v1y = pent[i * 2 + 1] + ty;
         let v2x = pent[j * 2] + tx;
         let v2y = pent[j * 2 + 1] + ty;
-        // (v1 - v2) × (p - v1) < 0 ⇒ strictly outside this edge
-        if (v1x - v2x) * (py - v1y) - (v1y - v2y) * (px - v1x) < 0.0 {
-            return false;
+        // (v1 - v2) × (p - v1): < 0 ⇒ strictly outside this edge
+        let cross = (v1x - v2x) * (py - v1y) - (v1y - v2y) * (px - v1x);
+        if cross < margin {
+            margin = cross;
         }
     }
-    true
+    margin
 }
 
 /// Transform a pentagon shape using a 2x2 matrix

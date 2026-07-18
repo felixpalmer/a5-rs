@@ -3,11 +3,10 @@
 // Copyright (c) A5 contributors
 
 // Benchmarks for the space-filling curve: cell -> s encode (triple_to_s) and
-// fractional-point location (ij_to_s).
 //
 // CI runs this same file against both the PR and its merge-base with main, so
 // it must compile and run on either side of the L-system migration. It uses
-// ONLY the API common to both engines — `triple_to_s` and `ij_to_s` — whose
+// ONLY the API common to both engines — `triple_to_s` — whose
 // signatures and (bit-identical) behavior are unchanged across the swap, so
 // both runs measure the equivalent operation on identical inputs. The decode
 // primitive changed name across the migration (s_to_anchor -> s_to_cell) with
@@ -16,8 +15,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use a5::coordinate_systems::IJ;
-use a5::lattice::{ij_to_s, triple_in_bounds, triple_to_s, Orientation, Triple};
+use a5::lattice::{triple_in_bounds, triple_to_s, Orientation, Triple};
 
 mod common;
 
@@ -48,17 +46,6 @@ fn sample_triples(resolution: usize, n: usize, seed: u32) -> Vec<Triple> {
     out
 }
 
-/// The cell's centroid in IJ coordinates
-/// (parity 0: (x+y+1/3, -x+1/3), parity 1: (x+y-1/3, -x+2/3)).
-fn centroid_ij(t: &Triple) -> IJ {
-    let parity = t.x + t.y + t.z;
-    if parity == 0 {
-        IJ::new(t.x as f64 + t.y as f64 + 1.0 / 3.0, -t.x as f64 + 1.0 / 3.0)
-    } else {
-        IJ::new(t.x as f64 + t.y as f64 - 1.0 / 3.0, -t.x as f64 + 2.0 / 3.0)
-    }
-}
-
 fn bench_triple_to_s(c: &mut Criterion) {
     let mut g = c.benchmark_group("tripleToS");
     for resolution in [5usize, 15, 28] {
@@ -86,20 +73,5 @@ fn bench_triple_to_s(c: &mut Criterion) {
     g.finish();
 }
 
-fn bench_ij_to_s(c: &mut Criterion) {
-    let triples = sample_triples(15, N, 42);
-    let ijs: Vec<IJ> = triples.iter().map(centroid_ij).collect();
-    let mut g = c.benchmark_group("IJToS");
-    let mut i = 0usize;
-    g.bench_function("IJToS res 15", |b| {
-        b.iter(|| {
-            let ij = ijs[i & (N - 1)];
-            i += 1;
-            black_box(ij_to_s(black_box(ij), 15, Orientation::UV))
-        })
-    });
-    g.finish();
-}
-
-criterion_group!(benches, bench_triple_to_s, bench_ij_to_s);
+criterion_group!(benches, bench_triple_to_s);
 criterion_main!(benches);
