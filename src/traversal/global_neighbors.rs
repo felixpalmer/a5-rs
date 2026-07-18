@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use crate::core::face_adjacency::FACE_ADJACENCY;
-use crate::core::origin::{get_origins, quintant_to_segment, segment_to_quintant};
+use crate::core::origin::{get_origins, quintant_tables};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::{A5Cell, Origin};
 use crate::lattice::{s_to_cell, triple_parity};
@@ -14,7 +14,7 @@ use crate::traversal::quintant_neighbors::find_quintant_neighbor_s;
 
 /// Serialize a res 1 cell from origin and quintant.
 fn serialize_res1(origin: &Origin, quintant: usize) -> u64 {
-    let (segment, _) = quintant_to_segment(quintant, origin);
+    let segment = quintant_tables().quintant_to_segment[origin.id as usize * 5 + quintant] as usize;
     serialize(&A5Cell {
         origin_id: origin.id,
         segment,
@@ -46,7 +46,7 @@ fn get_res0_neighbors(origin: &Origin) -> Vec<u64> {
 /// Get neighbors of a resolution 1 cell (quintant).
 fn get_res1_neighbors(origin: &Origin, segment: usize, edge_only: bool) -> Vec<u64> {
     let origins = get_origins();
-    let (quintant, _) = segment_to_quintant(segment, origin);
+    let quintant = quintant_tables().segment_to_quintant[origin.id as usize * 5 + segment] as usize;
     let mut neighbor_set = BTreeSet::new();
 
     // Left and right quintant on the same face (A, B)
@@ -123,7 +123,10 @@ pub fn get_global_cell_neighbors(cell_id: u64, edge_only: bool) -> Vec<u64> {
     }
 
     let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
-    let (source_quintant, source_orientation) = segment_to_quintant(cell.segment, origin);
+    let tables = quintant_tables();
+    let global_quintant = cell.origin_id as usize * 5 + cell.segment;
+    let source_quintant = tables.segment_to_quintant[global_quintant] as usize;
+    let source_orientation = tables.segment_to_orientation[global_quintant];
 
     // Triple coordinates are orientation-independent
     let source_cell = s_to_cell(cell.s, hilbert_res, source_orientation);

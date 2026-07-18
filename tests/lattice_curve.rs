@@ -6,8 +6,8 @@
 
 use a5::coordinate_systems::IJ;
 use a5::lattice::{
-    ij_to_s, s_to_cell, s_to_triple, triple_in_bounds, triple_parity, triple_to_s, Orientation,
-    Triple,
+    round_to_triple, s_to_cell, s_to_triple, triple_in_bounds, triple_parity, triple_to_s,
+    Orientation, Triple,
 };
 use serde::Deserialize;
 use std::fs;
@@ -17,8 +17,8 @@ use std::str::FromStr;
 struct Fixtures {
     #[serde(rename = "sToCell")]
     s_to_cell: Vec<SToCellFixture>,
-    #[serde(rename = "IJToS")]
-    ij_to_s: Vec<IJToSFixture>,
+    #[serde(rename = "pointToS")]
+    point_to_s: Vec<PointToSFixture>,
     #[serde(rename = "tripleInBounds")]
     triple_in_bounds: Vec<TripleInBoundsFixture>,
 }
@@ -36,7 +36,7 @@ struct SToCellFixture {
 }
 
 #[derive(Deserialize)]
-struct IJToSFixture {
+struct PointToSFixture {
     i: f64,
     j: f64,
     resolution: usize,
@@ -120,9 +120,14 @@ fn test_triple_to_s() {
 }
 
 #[test]
-fn test_ij_to_s() {
-    for f in &load().ij_to_s {
-        let s = ij_to_s(IJ::new(f.i, f.j), f.resolution, ori(&f.orientation));
+fn test_point_to_s() {
+    for f in &load().point_to_s {
+        let s = triple_to_s(
+            &round_to_triple(IJ::new(f.i, f.j), f.resolution),
+            f.resolution,
+            ori(&f.orientation),
+        )
+        .unwrap();
         assert_eq!(s, f.s, "s for ({},{}) res={}", f.i, f.j, f.resolution);
     }
 }
@@ -140,5 +145,24 @@ fn test_triple_in_bounds() {
             f.z,
             f.max_row
         );
+    }
+}
+
+#[test]
+fn test_triple_flavor_closed_form() {
+    // The pentagon flavor depends only on (parity, y mod 2); pin the closed
+    // form against the descent over all cells at res 6, two orientations.
+    use a5::lattice::{s_to_cell, triple_flavor, Orientation};
+    for orientation in [Orientation::UV, Orientation::WU] {
+        for s in 0..(1u64 << 12) {
+            let cell = s_to_cell(s, 6, orientation);
+            assert_eq!(
+                triple_flavor(&cell.triple),
+                cell.flavor,
+                "flavor mismatch at s={} {:?}",
+                s,
+                orientation
+            );
+        }
     }
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coordinate_systems::{Cartesian, Radians, Spherical};
+use crate::coordinate_systems::{Radians, Spherical};
 use crate::core::constants::{INTERHEDRAL_ANGLE, PI_OVER_5, TWO_PI_OVER_5};
 use crate::core::coordinate_transforms::to_cartesian;
 use crate::core::dodecahedron_quaternions::QUATERNIONS;
@@ -191,6 +191,57 @@ fn is_layout_clockwise(layout: &[Orientation]) -> bool {
     layout == CLOCKWISE_FAN.as_slice() || layout == CLOCKWISE_STEP.as_slice()
 }
 
+/// Lookup tables for the two mappings above, built once at startup — there
+/// are only 60 (origin, quintant) pairs. Indexed by origin.id * 5 + quintant
+/// (resp. + segment, the global quintant number as encoded in serialized cell
+/// ids). Call sites read these directly instead of calling the functions.
+pub struct QuintantTables {
+    pub quintant_to_segment: [u8; 60],
+    pub quintant_to_orientation: [Orientation; 60],
+    pub segment_to_quintant: [u8; 60],
+    pub segment_to_orientation: [Orientation; 60],
+}
+
+pub fn quintant_tables() -> &'static QuintantTables {
+    static TABLES: OnceLock<QuintantTables> = OnceLock::new();
+    TABLES.get_or_init(|| {
+        let mut tables = QuintantTables {
+            quintant_to_segment: [0; 60],
+            quintant_to_orientation: [Orientation::UV; 60],
+            segment_to_quintant: [0; 60],
+            segment_to_orientation: [Orientation::UV; 60],
+        };
+        for origin in get_origins() {
+            for i in 0..5 {
+                let index = origin.id as usize * 5 + i;
+                let (segment, orientation) = quintant_to_segment(i, origin);
+                tables.quintant_to_segment[index] = segment as u8;
+                tables.quintant_to_orientation[index] = orientation;
+                let (quintant, orientation) = segment_to_quintant(i, origin);
+                tables.segment_to_quintant[index] = quintant as u8;
+                tables.segment_to_orientation[index] = orientation;
+            }
+        }
+        tables
+    })
+}
+
+/// The `count` origins nearest to a point, by haversine distance, nearest
+/// first. Used by the boundary resolution in `spherical_to_cell`: a point on
+/// (or within float noise of) a face seam or dodecahedron vertex may belong
+/// to a cell of the 2nd- or 3rd-nearest face.
+pub fn find_nearest_origins(point: Spherical, count: usize) -> Vec<&'static Origin> {
+    let origins = get_origins();
+    let mut sorted: Vec<&'static Origin> = origins.iter().collect();
+    sorted.sort_by(|a, b| {
+        haversine(point, a.axis)
+            .partial_cmp(&haversine(point, b.axis))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    sorted.truncate(count);
+    sorted
+}
+
 /// Find the nearest origin to a point on the sphere
 /// Uses haversine formula to calculate great-circle distance
 pub fn find_nearest_origin(point: Spherical) -> &'static Origin {
@@ -200,26 +251,6 @@ pub fn find_nearest_origin(point: Spherical) -> &'static Origin {
 
     for origin in origins {
         let distance = haversine(point, origin.axis);
-        if distance < min_distance {
-            min_distance = distance;
-            nearest = origin;
-        }
-    }
-
-    nearest
-}
-
-/// Same as `find_nearest_origin` but takes a Cartesian unit vector. The
-/// argmin of `1 − a·b` matches the argmin of haversine, so this returns
-/// the same origin without any spherical-trig conversions.
-pub fn find_nearest_origin_cartesian(c: Cartesian) -> &'static Origin {
-    let origins = get_origins();
-    let mut min_distance = f64::INFINITY;
-    let mut nearest = &origins[0];
-
-    for origin in origins {
-        let ax = origin.axis_cartesian;
-        let distance = 1.0 - (c.x() * ax.x() + c.y() * ax.y() + c.z() * ax.z());
         if distance < min_distance {
             min_distance = distance;
             nearest = origin;
