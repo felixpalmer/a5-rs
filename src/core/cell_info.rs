@@ -81,3 +81,31 @@ pub fn cell_area(resolution: i32) -> f64 {
     }
     AUTHALIC_AREA_EARTH / (get_num_cells(resolution) as f64)
 }
+
+// Mean cell edge length divided by sqrt(cell_area), measured exhaustively from the
+// cell boundaries. Resolution 0 cells (dodecahedron faces) and resolution 1 cells
+// (triangular quintants) have their own geometry; from resolution 2 the pentagonal
+// tiling refines self-similarly and the ratio converges to ~0.8211, so a constant
+// serves all higher resolutions.
+const EDGE_LENGTH_RATIOS: [f64; 6] = [0.7131, 1.4818, 0.8164, 0.8198, 0.8208, 0.821];
+const EDGE_LENGTH_RATIO: f64 = 0.8211;
+
+/// Returns the average edge length of a cell at a given resolution in meters.
+/// Individual edge lengths vary from the average by roughly ±10%, depending
+/// on the cell's shape and its position on the globe.
+///
+/// # Arguments
+///
+/// * `resolution` - The resolution level
+///
+/// # Returns
+///
+/// Average edge length of a cell in meters
+pub fn cell_edge_length_avg(resolution: i32) -> f64 {
+    let resolution = resolution.max(0);
+    let ratio = EDGE_LENGTH_RATIOS
+        .get(resolution as usize)
+        .copied()
+        .unwrap_or(EDGE_LENGTH_RATIO);
+    ratio * cell_area(resolution).sqrt()
+}
