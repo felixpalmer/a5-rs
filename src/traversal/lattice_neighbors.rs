@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::core::origin::{get_origins, segment_to_quintant};
+use crate::core::origin::{get_origins, quintant_tables};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::{A5Cell, Origin};
 use crate::lattice::{
@@ -33,7 +33,10 @@ fn decode_source(cell_id: u64) -> Option<LatticeSource<'static>> {
     }
     let origin = &get_origins()[cell.origin_id as usize];
     let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
-    let (quintant, orientation) = segment_to_quintant(cell.segment, origin);
+    let tables = quintant_tables();
+    let global_quintant = cell.origin_id as usize * 5 + cell.segment;
+    let quintant = tables.segment_to_quintant[global_quintant] as usize;
+    let orientation = tables.segment_to_orientation[global_quintant];
     let triple = s_to_triple(cell.s, hilbert_res, orientation);
 
     Some(LatticeSource {

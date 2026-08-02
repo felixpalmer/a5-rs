@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::core::origin::{get_origins, segment_to_quintant};
+use crate::core::origin::{get_origins, quintant_tables};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::{A5Cell, Origin};
 use crate::lattice::{s_to_triple, triple_to_s, Orientation};
@@ -96,7 +96,8 @@ fn cell_to_quintant_key(
 ) -> Option<(usize, i64, QuintantCtx)> {
     let cell = deserialize(cell_id).ok()?;
     let origin = &get_origins()[cell.origin_id as usize];
-    let (_, orientation) = segment_to_quintant(cell.segment, origin);
+    let orientation =
+        quintant_tables().segment_to_orientation[cell.origin_id as usize * 5 + cell.segment];
     let triple = s_to_triple(cell.s, hilbert_res, orientation);
     let parity = triple.x + triple.y + triple.z; // 0 or 1
     let quintant_idx = (origin.id as usize) * 60 + cell.segment;

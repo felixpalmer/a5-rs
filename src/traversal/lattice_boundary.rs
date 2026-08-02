@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use crate::core::face_adjacency::FACE_ADJACENCY;
-use crate::core::origin::{get_origins, quintant_to_segment};
+use crate::core::origin::{get_origins, quintant_tables};
 use crate::core::serialization::serialize;
 use crate::core::utils::{A5Cell, Origin};
 use crate::lattice::{triple_in_bounds, triple_to_s, Orientation, Triple};
@@ -142,11 +142,14 @@ pub fn get_boundary_neighbors(
     let delta_index = (parity * 2 + if y_odd { 1 } else { 0 }) as usize;
 
     let origins = get_origins();
+    let tables = quintant_tables();
 
     // Left edge (z=0): neighbor in previous quintant at swapped [0, y, x]
     if triple.z == 0 {
         let target_quintant = (source_quintant + 4) % 5;
-        let (segment, orientation) = quintant_to_segment(target_quintant, origin);
+        let global_quintant = origin.id as usize * 5 + target_quintant;
+        let segment = tables.quintant_to_segment[global_quintant] as usize;
+        let orientation = tables.quintant_to_orientation[global_quintant];
         let base = Triple::new(0, triple.y, triple.x);
         push_deltas(
             &mut out,
@@ -163,7 +166,9 @@ pub fn get_boundary_neighbors(
     // Right edge (x=0): neighbor in next quintant at swapped [z, y, 0]
     if triple.x == 0 {
         let target_quintant = (source_quintant + 1) % 5;
-        let (segment, orientation) = quintant_to_segment(target_quintant, origin);
+        let global_quintant = origin.id as usize * 5 + target_quintant;
+        let segment = tables.quintant_to_segment[global_quintant] as usize;
+        let orientation = tables.quintant_to_orientation[global_quintant];
         let base = Triple::new(triple.z, triple.y, 0);
         push_deltas(
             &mut out,
@@ -181,7 +186,9 @@ pub fn get_boundary_neighbors(
     if triple.y == max_row {
         let (adj_face_id, adj_quintant) = FACE_ADJACENCY[origin.id as usize][source_quintant];
         let adj_origin = &origins[adj_face_id as usize];
-        let (segment, orientation) = quintant_to_segment(adj_quintant, adj_origin);
+        let global_quintant = adj_origin.id as usize * 5 + adj_quintant;
+        let segment = tables.quintant_to_segment[global_quintant] as usize;
+        let orientation = tables.quintant_to_orientation[global_quintant];
         let base = Triple::new(triple.z, max_row, triple.x);
         push_deltas(
             &mut out,
@@ -206,7 +213,9 @@ pub fn get_boundary_neighbors(
             if edge_only && distance != 1 {
                 continue;
             }
-            let (segment, orientation) = quintant_to_segment(q, origin);
+            let global_quintant = origin.id as usize * 5 + q;
+            let segment = tables.quintant_to_segment[global_quintant] as usize;
+            let orientation = tables.quintant_to_orientation[global_quintant];
             push_triple(&mut out, &triple, orientation, origin, segment, ctx);
         }
     }
@@ -220,8 +229,9 @@ pub fn get_boundary_neighbors(
         let (prev_adj_face_id, prev_adj_quintant) =
             FACE_ADJACENCY[origin.id as usize][prev_quintant];
         let prev_adj_origin = &origins[prev_adj_face_id as usize];
-        let (prev_adj_segment, prev_adj_orientation) =
-            quintant_to_segment(prev_adj_quintant, prev_adj_origin);
+        let prev_adj_global_quintant = prev_adj_origin.id as usize * 5 + prev_adj_quintant;
+        let prev_adj_segment = tables.quintant_to_segment[prev_adj_global_quintant] as usize;
+        let prev_adj_orientation = tables.quintant_to_orientation[prev_adj_global_quintant];
         push_triple(
             &mut out,
             &triple,
@@ -235,8 +245,9 @@ pub fn get_boundary_neighbors(
         let (cross_face_id, cross_quintant) = FACE_ADJACENCY[origin.id as usize][source_quintant];
         let cross_origin = &origins[cross_face_id as usize];
         let next_cross_quintant = (cross_quintant + 1) % 5;
-        let (cross_segment, cross_orientation) =
-            quintant_to_segment(next_cross_quintant, cross_origin);
+        let cross_global_quintant = cross_origin.id as usize * 5 + next_cross_quintant;
+        let cross_segment = tables.quintant_to_segment[cross_global_quintant] as usize;
+        let cross_orientation = tables.quintant_to_orientation[cross_global_quintant];
         push_triple(
             &mut out,
             &triple,

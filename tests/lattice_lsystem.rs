@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use a5::coordinate_systems::IJ;
-use a5::lattice::curve::ij_to_s;
+use a5::lattice::curve::round_to_triple;
 use a5::lattice::lsystem::{s_to_cell, s_to_triple, triple_to_s_lattice};
 use a5::lattice::{Orientation, Triple};
 use serde::Deserialize;
@@ -14,8 +14,8 @@ use std::str::FromStr;
 struct Fixtures {
     #[serde(rename = "sToCell")]
     s_to_cell: Vec<SToCellFixture>,
-    #[serde(rename = "IJToS")]
-    ij_to_s: Vec<IJToSFixture>,
+    #[serde(rename = "pointToS")]
+    point_to_s: Vec<PointToSFixture>,
 }
 
 #[derive(Deserialize)]
@@ -32,7 +32,7 @@ struct SToCellFixture {
 }
 
 #[derive(Deserialize)]
-struct IJToSFixture {
+struct PointToSFixture {
     i: f64,
     j: f64,
     resolution: usize,
@@ -87,9 +87,13 @@ fn test_triple_to_s_lattice() {
 }
 
 #[test]
-fn test_ij_to_s() {
-    for f in &load().ij_to_s {
-        let s = ij_to_s(IJ::new(f.i, f.j), f.resolution, ori(&f.orientation));
+fn test_point_to_s() {
+    for f in &load().point_to_s {
+        let s = triple_to_s_lattice(
+            &round_to_triple(IJ::new(f.i, f.j), f.resolution),
+            f.resolution,
+            ori(&f.orientation),
+        );
         assert_eq!(s, f.s, "s for ({},{}) res={}", f.i, f.j, f.resolution);
     }
 }
