@@ -1,7 +1,7 @@
 use a5::coordinate_systems::LonLat;
 use a5::core::compact::uncompact;
 use a5::core::hex::u64_to_hex;
-use a5::regions::polygon::polygon_to_cells;
+use a5::regions::polygon::{polygon_to_cells, Containment, PolygonToCellsOptions};
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs;
@@ -27,6 +27,8 @@ struct CountryFixture {
 struct Fixtures {
     polygon: Vec<PolygonFixture>,
     #[serde(default)]
+    overlapping: Vec<PolygonFixture>,
+    #[serde(default)]
     country: Vec<CountryFixture>,
 }
 
@@ -45,7 +47,7 @@ fn test_polygon_to_cells_fixtures() {
 
     for f in &fixtures.polygon {
         let rings = to_rings(&f.polygon);
-        let result = polygon_to_cells(&rings, f.resolution).expect("polygon_to_cells");
+        let result = polygon_to_cells(&rings, f.resolution, None).expect("polygon_to_cells");
         let expanded = uncompact(&result, f.resolution).expect("uncompact");
         let mut sorted = expanded;
         sorted.sort();
@@ -56,11 +58,15 @@ fn test_polygon_to_cells_fixtures() {
 
 #[test]
 fn test_polygon_to_cells_empty_for_too_few_vertices() {
-    assert_eq!(polygon_to_cells(&[], 5).unwrap().len(), 0);
+    assert_eq!(polygon_to_cells(&[], 5, None).unwrap().len(), 0);
     assert_eq!(
-        polygon_to_cells(&[vec![LonLat::new(0.0, 0.0), LonLat::new(1.0, 1.0)]], 5)
-            .unwrap()
-            .len(),
+        polygon_to_cells(
+            &[vec![LonLat::new(0.0, 0.0), LonLat::new(1.0, 1.0)]],
+            5,
+            None
+        )
+        .unwrap()
+        .len(),
         0
     );
     // Closed ring with only 2 distinct vertices
@@ -71,7 +77,8 @@ fn test_polygon_to_cells_empty_for_too_few_vertices() {
                 LonLat::new(1.0, 1.0),
                 LonLat::new(0.0, 0.0)
             ]],
-            5
+            5,
+            None
         )
         .unwrap()
         .len(),
@@ -98,8 +105,8 @@ fn test_polygon_to_cells_accepts_closed_rings() {
         c.push(r[0]);
         c
     };
-    let open_result = polygon_to_cells(&[ring.clone(), hole.clone()], 6).unwrap();
-    let closed_result = polygon_to_cells(&[closed(&ring), closed(&hole)], 6).unwrap();
+    let open_result = polygon_to_cells(&[ring.clone(), hole.clone()], 6, None).unwrap();
+    let closed_result = polygon_to_cells(&[closed(&ring), closed(&hole)], 6, None).unwrap();
     assert_eq!(closed_result, open_result);
 }
 
@@ -112,9 +119,57 @@ fn test_polygon_to_cells_ignores_degenerate_holes() {
         LonLat::new(-5.0, 44.0),
     ];
     let degenerate_hole = vec![LonLat::new(2.0, 50.0), LonLat::new(3.0, 49.0)];
-    let without = polygon_to_cells(&[ring.clone()], 5).unwrap();
-    let with = polygon_to_cells(&[ring, degenerate_hole], 5).unwrap();
+    let without = polygon_to_cells(&[ring.clone()], 5, None).unwrap();
+    let with = polygon_to_cells(&[ring, degenerate_hole], 5, None).unwrap();
     assert_eq!(with, without);
+}
+
+#[test]
+fn test_polygon_to_cells_overlapping_fixtures() {
+    let content = fs::read_to_string("tests/fixtures/regions/polygon.json")
+        .expect("Could not read polygon.json");
+    let fixtures: Fixtures = serde_json::from_str(&content).expect("Could not parse polygon.json");
+
+    let options = Some(PolygonToCellsOptions {
+        containment: Containment::Overlapping,
+    });
+    for f in &fixtures.overlapping {
+        let rings = to_rings(&f.polygon);
+        let result = polygon_to_cells(&rings, f.resolution, options).expect("polygon_to_cells");
+        let expanded = uncompact(&result, f.resolution).expect("uncompact");
+        let mut sorted = expanded;
+        sorted.sort();
+        let result_hex: Vec<String> = sorted.into_iter().map(u64_to_hex).collect();
+        assert_eq!(
+            result_hex, f.cells,
+            "{}: overlapping cells mismatch",
+            f.name
+        );
+    }
+}
+
+#[test]
+fn test_polygon_to_cells_overlapping_is_superset_of_center() {
+    let ring = vec![
+        LonLat::new(-5.0, 54.0),
+        LonLat::new(15.0, 54.0),
+        LonLat::new(15.0, 44.0),
+        LonLat::new(-5.0, 44.0),
+    ];
+    let center = polygon_to_cells(&[ring.clone()], 6, None).unwrap();
+    let overlapping = polygon_to_cells(
+        &[ring],
+        6,
+        Some(PolygonToCellsOptions {
+            containment: Containment::Overlapping,
+        }),
+    )
+    .unwrap();
+    let center_expanded: HashSet<u64> = uncompact(&center, 6).unwrap().into_iter().collect();
+    let overlapping_expanded: HashSet<u64> =
+        uncompact(&overlapping, 6).unwrap().into_iter().collect();
+    assert!(center_expanded.is_subset(&overlapping_expanded));
+    assert!(overlapping_expanded.len() > center_expanded.len());
 }
 
 #[test]
@@ -125,7 +180,7 @@ fn test_polygon_to_cells_country_fixtures() {
 
     for f in &fixtures.country {
         let rings = to_rings(&f.polygon);
-        let result = polygon_to_cells(&rings, f.resolution).expect("polygon_to_cells");
+        let result = polygon_to_cells(&rings, f.resolution, None).expect("polygon_to_cells");
         let expanded = uncompact(&result, f.resolution).expect("uncompact");
         let unique: HashSet<u64> = expanded.into_iter().collect();
         assert_eq!(
