@@ -51,7 +51,7 @@ pub use traversal::grid_disk::{grid_disk, grid_disk_vertex};
 pub use traversal::line::line_string_to_cells;
 
 // Regions
-pub use regions::polygon::polygon_to_cells;
+pub use regions::polygon::{polygon_to_cells, Containment, PolygonToCellsOptions};
 
 // Types
 pub use coordinate_systems::{Degrees, LonLat, Radians};

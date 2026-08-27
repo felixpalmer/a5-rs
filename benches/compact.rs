@@ -10,7 +10,7 @@ fn bench_compact(c: &mut Criterion) {
     let uk = common::load_country("United Kingdom");
 
     // A realistic mixed-resolution cell set: country fill expanded to a flat list.
-    let compacted = a5::polygon_to_cells(&uk, 10).unwrap();
+    let compacted = a5::polygon_to_cells(&uk, 10, Default::default()).unwrap();
     let flat = a5::uncompact(&compacted, 10).unwrap();
 
     let mut g = c.benchmark_group("compact");

@@ -22,7 +22,12 @@ fn bench_polygon(c: &mut Criterion) {
     for (name, resolution) in CASES {
         let polygon = common::load_country(name);
         g.bench_function(format!("polygonToCells {name} res {resolution}"), |b| {
-            b.iter(|| black_box(a5::polygon_to_cells(black_box(&polygon), resolution).unwrap()))
+            b.iter(|| {
+                black_box(
+                    a5::polygon_to_cells(black_box(&polygon), resolution, Default::default())
+                        .unwrap(),
+                )
+            })
         });
     }
     g.finish();
