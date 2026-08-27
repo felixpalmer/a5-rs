@@ -55,11 +55,15 @@ pub fn estimate_cell_radius(resolution: i32) -> f64 {
 /// Pick the coarsest resolution where the cap contains enough cells
 /// to make hierarchical subdivision worthwhile.
 pub fn pick_coarse_resolution(radius: f64, target_res: i32) -> i32 {
-    let cap_area_m2 = 2.0
+    // Spherical cap area in m²: 2πR²(1 − cos(r/R)) computed as 4πR²·sin²(r/2R),
+    // which keeps full precision for small radii where 1 − cos cancels
+    let half_angle_sin = (radius / (2.0 * AUTHALIC_RADIUS_EARTH)).sin();
+    let cap_area_m2 = 4.0
         * std::f64::consts::PI
         * AUTHALIC_RADIUS_EARTH
         * AUTHALIC_RADIUS_EARTH
-        * (1.0 - (radius / AUTHALIC_RADIUS_EARTH).cos());
+        * half_angle_sin
+        * half_angle_sin;
 
     for res in FIRST_HILBERT_RESOLUTION..=target_res {
         let c_area = cell_area(res);

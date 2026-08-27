@@ -197,6 +197,28 @@ fn test_spherical_cartesian_conversions() {
     );
 }
 
+/// Full precision for phi near the poles (Kahan §12): acos(z/r) returns 0 for
+/// any phi below ~1e-8 and loses half the digits carried near both poles; the
+/// atan2 form must round-trip these at full relative precision.
+#[test]
+fn test_cartesian_to_spherical_near_poles() {
+    let pi = std::f64::consts::PI;
+    let phis = [1e-12, 1e-9, 1e-6, 1e-3, pi - 1e-3, pi - 1e-6, pi - 1e-9];
+    for &phi in &phis {
+        let cartesian = to_cartesian(Spherical::new(
+            Radians::new_unchecked(0.5),
+            Radians::new_unchecked(phi),
+        ));
+        let spherical = to_spherical(cartesian);
+        let phi_out = spherical.phi().get();
+        let dist_from_pole = phi.min(pi - phi);
+        assert!(
+            (phi_out - phi).abs() <= 1e-12 * dist_from_pole.max(1e-3),
+            "phi={phi}: got {phi_out}"
+        );
+    }
+}
+
 #[test]
 fn test_lonlat_spherical_conversions() {
     let test_points = [
