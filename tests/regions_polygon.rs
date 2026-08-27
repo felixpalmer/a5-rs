@@ -47,8 +47,7 @@ fn test_polygon_to_cells_fixtures() {
 
     for f in &fixtures.polygon {
         let rings = to_rings(&f.polygon);
-        let result =
-            polygon_to_cells(&rings, f.resolution, Default::default()).expect("polygon_to_cells");
+        let result = polygon_to_cells(&rings, f.resolution, None).expect("polygon_to_cells");
         let expanded = uncompact(&result, f.resolution).expect("uncompact");
         let mut sorted = expanded;
         sorted.sort();
@@ -59,15 +58,12 @@ fn test_polygon_to_cells_fixtures() {
 
 #[test]
 fn test_polygon_to_cells_empty_for_too_few_vertices() {
-    assert_eq!(
-        polygon_to_cells(&[], 5, Default::default()).unwrap().len(),
-        0
-    );
+    assert_eq!(polygon_to_cells(&[], 5, None).unwrap().len(), 0);
     assert_eq!(
         polygon_to_cells(
             &[vec![LonLat::new(0.0, 0.0), LonLat::new(1.0, 1.0)]],
             5,
-            Default::default()
+            None
         )
         .unwrap()
         .len(),
@@ -82,7 +78,7 @@ fn test_polygon_to_cells_empty_for_too_few_vertices() {
                 LonLat::new(0.0, 0.0)
             ]],
             5,
-            Default::default()
+            None
         )
         .unwrap()
         .len(),
@@ -109,10 +105,8 @@ fn test_polygon_to_cells_accepts_closed_rings() {
         c.push(r[0]);
         c
     };
-    let open_result =
-        polygon_to_cells(&[ring.clone(), hole.clone()], 6, Default::default()).unwrap();
-    let closed_result =
-        polygon_to_cells(&[closed(&ring), closed(&hole)], 6, Default::default()).unwrap();
+    let open_result = polygon_to_cells(&[ring.clone(), hole.clone()], 6, None).unwrap();
+    let closed_result = polygon_to_cells(&[closed(&ring), closed(&hole)], 6, None).unwrap();
     assert_eq!(closed_result, open_result);
 }
 
@@ -125,8 +119,8 @@ fn test_polygon_to_cells_ignores_degenerate_holes() {
         LonLat::new(-5.0, 44.0),
     ];
     let degenerate_hole = vec![LonLat::new(2.0, 50.0), LonLat::new(3.0, 49.0)];
-    let without = polygon_to_cells(&[ring.clone()], 5, Default::default()).unwrap();
-    let with = polygon_to_cells(&[ring, degenerate_hole], 5, Default::default()).unwrap();
+    let without = polygon_to_cells(&[ring.clone()], 5, None).unwrap();
+    let with = polygon_to_cells(&[ring, degenerate_hole], 5, None).unwrap();
     assert_eq!(with, without);
 }
 
@@ -136,9 +130,9 @@ fn test_polygon_to_cells_overlapping_fixtures() {
         .expect("Could not read polygon.json");
     let fixtures: Fixtures = serde_json::from_str(&content).expect("Could not parse polygon.json");
 
-    let options = PolygonToCellsOptions {
+    let options = Some(PolygonToCellsOptions {
         containment: Containment::Overlapping,
-    };
+    });
     for f in &fixtures.overlapping {
         let rings = to_rings(&f.polygon);
         let result = polygon_to_cells(&rings, f.resolution, options).expect("polygon_to_cells");
@@ -162,13 +156,13 @@ fn test_polygon_to_cells_overlapping_is_superset_of_center() {
         LonLat::new(15.0, 44.0),
         LonLat::new(-5.0, 44.0),
     ];
-    let center = polygon_to_cells(&[ring.clone()], 6, Default::default()).unwrap();
+    let center = polygon_to_cells(&[ring.clone()], 6, None).unwrap();
     let overlapping = polygon_to_cells(
         &[ring],
         6,
-        PolygonToCellsOptions {
+        Some(PolygonToCellsOptions {
             containment: Containment::Overlapping,
-        },
+        }),
     )
     .unwrap();
     let center_expanded: HashSet<u64> = uncompact(&center, 6).unwrap().into_iter().collect();
@@ -186,8 +180,7 @@ fn test_polygon_to_cells_country_fixtures() {
 
     for f in &fixtures.country {
         let rings = to_rings(&f.polygon);
-        let result =
-            polygon_to_cells(&rings, f.resolution, Default::default()).expect("polygon_to_cells");
+        let result = polygon_to_cells(&rings, f.resolution, None).expect("polygon_to_cells");
         let expanded = uncompact(&result, f.resolution).expect("uncompact");
         let unique: HashSet<u64> = expanded.into_iter().collect();
         assert_eq!(

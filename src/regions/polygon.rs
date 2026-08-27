@@ -342,14 +342,16 @@ pub struct PolygonToCellsOptions {
 /// (GeoJSON-style, first vertex repeated at the end) — closure is automatic
 /// either way. Holes with fewer than 3 distinct vertices are ignored.
 ///
-/// `options.containment` selects [`Containment::Center`] (default, cell center
-/// inside the polygon) or [`Containment::Overlapping`] (any cell touching the
-/// polygon, for gap-free coverage). Returns sorted, compacted cell IDs.
+/// Pass `None` for `options` to use the defaults. `options.containment` selects
+/// [`Containment::Center`] (default, cell center inside the polygon) or
+/// [`Containment::Overlapping`] (any cell touching the polygon, for gap-free
+/// coverage). Returns sorted, compacted cell IDs.
 pub fn polygon_to_cells(
     polygon: &[Vec<LonLat>],
     resolution: i32,
-    options: PolygonToCellsOptions,
+    options: Option<PolygonToCellsOptions>,
 ) -> Result<Vec<u64>, String> {
+    let options = options.unwrap_or_default();
     // GeoJSON rings repeat the first vertex at the end — drop the duplicate.
     fn strip_closing(ring: &[LonLat]) -> &[LonLat] {
         if ring.len() > 1 && ring[0] == ring[ring.len() - 1] {
