@@ -73,8 +73,10 @@ pub fn to_spherical(cart: Cartesian) -> Spherical {
     let z = cart.z();
 
     let theta = Radians::new_unchecked(y.atan2(x));
-    let r = (x * x + y * y + z * z).sqrt();
-    let phi = Radians::new_unchecked((z / r).acos());
+    // atan2 keeps full precision near the poles, where acos(z/r) loses half of
+    // the digits carried (its derivative blows up as z/r → ±1)
+    let rxy = (x * x + y * y).sqrt();
+    let phi = Radians::new_unchecked(rxy.atan2(z));
 
     Spherical::new(theta, phi)
 }
