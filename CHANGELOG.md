@@ -19,7 +19,15 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## a5-rs
 
-#### a5-rs [v0.8.0] - May 12 2026
+#### a5-rs [v0.10.0] - August 28 2026
+
+- Improve precision in vec3.angle function (#60)
+- **BREAKING**: Feat: polygonToCells overlapping containment (#59)
+- feat: Add cellEdgeLengthAvg function (#57)
+- feat: More efficient equal area projection (#55)
+- feat: Use L-system to layout lattice curve (#54)
+
+#### a5-rs [v0.9.0] - June 17 2026
 
 - **BREAKING**: spherical_to_cell removed and add doc(hidden) to clarify public API
 - chore: Align API (#51)
