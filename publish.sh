@@ -68,6 +68,15 @@ if ! grep -qF "[${TAG}]" CHANGELOG.md; then
   exit 1
 fi
 
+# Guard: Cargo.lock must record the same version as Cargo.toml. If you bump Cargo.toml
+# but forget to refresh the lockfile, `cargo publish --locked` fails in CI — catch it here.
+LOCK_VERSION="$(awk '/^name = "a5"$/{getline; print; exit}' Cargo.lock | cut -d'"' -f2)"
+if [ "$LOCK_VERSION" != "$VERSION" ]; then
+  echo "error: Cargo.lock has a5 v${LOCK_VERSION} but Cargo.toml is v${VERSION}" >&2
+  echo "       run 'cargo build' and commit the updated Cargo.lock" >&2
+  exit 1
+fi
+
 echo "Publishing ${TAG} (${MODE}) from '${BRANCH}' — tagging and pushing to trigger CI..."
 git tag "${TAG}"
 git push origin HEAD --tags
