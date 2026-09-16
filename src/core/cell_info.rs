@@ -22,19 +22,6 @@ pub fn get_num_cells(resolution: i32) -> u64 {
         return 12;
     }
 
-    // Match JavaScript's precision behavior exactly
-    // For resolution 28, JavaScript returns 1080863910568919000 due to precision loss
-    if resolution == 28 {
-        return 1080863910568919000;
-    }
-    if resolution == 29 {
-        return 4323455642275676000;
-    }
-    if resolution == 30 {
-        return 17293822569102705000;
-    }
-
-    // For lower resolutions, exact calculation works fine
     60 * (4_u64.pow((resolution - 1) as u32))
 }
 
