@@ -65,6 +65,3 @@ git commit -m "x.y.z release"
 ./publish.sh beta   # prerelease (-beta.N), from main
 ./publish.sh prod   # stable X.Y.Z, from a *-release branch
 ```
-
-Unlike npm, crates.io has no dist-tag: cargo automatically excludes prerelease versions
-(`X.Y.Z-beta.N`) from `cargo add`, so prereleases stay out of the way with no extra step. 
