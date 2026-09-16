@@ -19,6 +19,12 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## a5-rs
 
+#### a5-rs [v0.10.1] - September 16 2026
+
+- fix: correct get_num_cells for high resolutions (#65)
+- Re-export option types from the crate root (#62)
+- chore: cleanup CRS debug logging (#64)
+
 #### a5-rs [v0.10.0] - August 28 2026
 
 - Improve precision in vec3.angle function (#60)
