@@ -180,12 +180,13 @@ impl DodecahedronProjection {
 
         let even = face_triangle_index % 2 == 0;
 
-        // Note: center & midpoint compared to DGGAL implementation are swapped
-        // as we are using a dodecahedron, rather than an icosahedron.
+        // ISEA: the radiating vertex (first) is the dodecahedron corner, not the
+        // centre. This is a cyclic rotation of the DSEA order [centre, mid, corner]
+        // to [corner, centre, mid], preserving winding (see constructor).
         Ok(if even {
-            FaceTriangle::new(v_center, v_edge_midpoint, v_corner1)
+            FaceTriangle::new(v_corner1, v_center, v_edge_midpoint)
         } else {
-            FaceTriangle::new(v_center, v_corner2, v_edge_midpoint)
+            FaceTriangle::new(v_corner2, v_edge_midpoint, v_center)
         })
     }
 
@@ -194,25 +195,36 @@ impl DodecahedronProjection {
         face_triangle_index: FaceTriangleIndex,
         squashed: bool,
     ) -> Result<FaceTriangle, String> {
-        // First obtain ordinary unreflected triangle
+        // First obtain ordinary unreflected triangle: [corner (A), centre, midpoint]
+        // (even) or [corner (A), midpoint, centre] (odd).
         let base = self.get_base_face_triangle(face_triangle_index)?;
-        let (mut a, b, c) = (base.a, base.b, base.c);
+        let (a, b, c) = (base.a, base.b, base.c);
 
-        // Reflect dodecahedron center (A) across edge (BC)
         let even = face_triangle_index % 2 == 0;
-        a = Face::new(-a.x(), -a.y());
-        let midpoint = if even { b } else { c };
+        let centre = if even { b } else { c };
+        let midpoint = if even { c } else { b };
 
-        // Squashing is important. A squashed triangle when unprojected will yield the correct spherical triangle.
+        // ISEA: the corner (radiating vertex A) and the edge midpoint are shared
+        // with the neighbouring face across the dodecahedron edge, so only the
+        // centre moves. Reflect the centre across that edge (it sits at the origin,
+        // with the midpoint the foot of the perpendicular) and keep the corner
+        // fixed. Squashing yields the correct spherical triangle when unprojected.
         let scale = if squashed {
             1.0 + 1.0 / INTERHEDRAL_ANGLE.get().cos()
         } else {
             2.0
         };
-        a = Face::new(a.x() + midpoint.x() * scale, a.y() + midpoint.y() * scale);
+        let centre = Face::new(
+            -centre.x() + midpoint.x() * scale,
+            -centre.y() + midpoint.y() * scale,
+        );
 
-        // Swap midpoint and corner to maintain correct vertex order
-        Ok(FaceTriangle::new(a, c, b))
+        // Restore winding (swap centre and midpoint back into their slots)
+        Ok(if even {
+            FaceTriangle::new(a, midpoint, centre)
+        } else {
+            FaceTriangle::new(a, centre, midpoint)
+        })
     }
 
     /// Gets the spherical triangle for a given face triangle index and origin
