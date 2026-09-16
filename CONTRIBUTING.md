@@ -57,6 +57,7 @@ crates.io via trusted publishing (OIDC) — no `CARGO_REGISTRY_TOKEN` and no loc
 
 ```bash
 # Update version in Cargo.toml (e.g. 1.0.0-beta.1 or 0.10.1)
+cargo build   # refreshes Cargo.lock with the new version — required, else CI's --locked fails
 # Add a "#### a5-rs [v<version>] - <date>" entry to CHANGELOG.md
 git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "x.y.z release"
@@ -64,6 +65,3 @@ git commit -m "x.y.z release"
 ./publish.sh beta   # prerelease (-beta.N), from main
 ./publish.sh prod   # stable X.Y.Z, from a *-release branch
 ```
-
-Unlike npm, crates.io has no dist-tag: cargo automatically excludes prerelease versions
-(`X.Y.Z-beta.N`) from `cargo add`, so prereleases stay out of the way with no extra step. 
