@@ -10,7 +10,10 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 struct NumCellsFixture {
     resolution: i32,
-    count: u64,
+    // Rust computes the exact u64 count, so compare against the exact `countBigInt`
+    // string, not the lossy JS-number `count` (which rounds at high resolutions).
+    #[serde(rename = "countBigInt")]
+    count_big_int: String,
 }
 
 #[derive(Deserialize)]
@@ -47,10 +50,13 @@ fn test_get_num_cells() {
     let fixtures = load_cell_info_fixtures();
 
     for fixture in fixtures.num_cells {
-        // Test u64 version
+        let expected: u64 = fixture
+            .count_big_int
+            .parse()
+            .expect("countBigInt should parse as u64");
         assert_eq!(
             get_num_cells(fixture.resolution),
-            fixture.count,
+            expected,
             "get_num_cells failed for resolution {}",
             fixture.resolution
         );
