@@ -19,9 +19,46 @@ struct Fixture {
 }
 
 #[derive(Deserialize)]
+struct DistanceFixture {
+    name: String,
+    #[serde(rename = "aVec")]
+    a_vec: [f64; 3],
+    #[serde(rename = "bVec")]
+    b_vec: [f64; 3],
+    distance: f64,
+}
+
+#[derive(Deserialize)]
 struct Fixtures {
     #[serde(rename = "sampleGreatCircleArc")]
     sample_great_circle_arc: Vec<Fixture>,
+    distances: Vec<DistanceFixture>,
+}
+
+/// Near-degenerate cases with analytically-known distances (Kahan §12):
+/// acos(a·b) would fail these — it returns 0 for separations below ~1e-8 rad
+/// and errs by ~0.1 m near the antipode. The stable 2·atan2 form must match
+/// the analytic value to within 1e-10 relative (or 1e-9 m absolute near zero).
+#[test]
+fn test_great_circle_distance_precision() {
+    let content = fs::read_to_string("tests/fixtures/utils/great-circle.json")
+        .expect("Could not read great-circle.json");
+    let fixtures: Fixtures =
+        serde_json::from_str(&content).expect("Could not parse great-circle.json");
+
+    for f in &fixtures.distances {
+        let a = Cartesian::new(f.a_vec[0], f.a_vec[1], f.a_vec[2]);
+        let b = Cartesian::new(f.b_vec[0], f.b_vec[1], f.b_vec[2]);
+        let d = great_circle_distance(a, b);
+        let tolerance = (1e-10 * f.distance).max(1e-9);
+        assert!(
+            (d - f.distance).abs() <= tolerance,
+            "{}: distance {} != {}",
+            f.name,
+            d,
+            f.distance
+        );
+    }
 }
 
 #[test]

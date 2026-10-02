@@ -13,6 +13,26 @@ pub fn triple_product(a: Cartesian, b: Cartesian, c: Cartesian) -> f64 {
         + a.z() * (b.x() * c.y() - b.y() * c.x())
 }
 
+/// Angle between two UNIT vectors, computed as 2·atan2(‖a−b‖, ‖a+b‖).
+///
+/// Unlike acos(a·b), which loses half the significant digits carried when the
+/// vectors are nearly parallel (and all of them below ~1e-8 rad), this formula
+/// keeps full working precision over the whole range [0, π]: the subtraction
+/// a−b is exact for nearby vectors, and atan2 has no sensitive endpoints
+/// (Kahan, "How Futile are Mindless Assessments of Roundoff…", §12).
+/// Inputs are assumed to be unit length.
+pub fn angle(a: Cartesian, b: Cartesian) -> f64 {
+    let dx = a.x() - b.x();
+    let dy = a.y() - b.y();
+    let dz = a.z() - b.z();
+    let sx = a.x() + b.x();
+    let sy = a.y() + b.y();
+    let sz = a.z() + b.z();
+    let diff = (dx * dx + dy * dy + dz * dz).sqrt();
+    let sum = (sx * sx + sy * sy + sz * sz).sqrt();
+    2.0 * diff.atan2(sum)
+}
+
 /// Cached `gamma` and `sin(gamma)` for a fixed (A, B) pair, so loops that
 /// slerp many times along the same arc don't re-run `angle` and `sin`.
 /// Build with `precompute_slerp(a, b)` and pass to `slerp_ctx` as the optional context.
@@ -67,11 +87,6 @@ pub fn slerp_ctx(a: Cartesian, b: Cartesian, t: f64, ctx: Option<SlerpContext>) 
 
 // Helper functions for 3D vector operations
 
-/// Compute dot product of two vectors
-fn dot(a: Cartesian, b: Cartesian) -> f64 {
-    a.x() * b.x() + a.y() * b.y() + a.z() * b.z()
-}
-
 /// Compute length of a vector
 pub fn length(v: Cartesian) -> f64 {
     (v.x() * v.x() + v.y() * v.y() + v.z() * v.z()).sqrt()
@@ -99,14 +114,4 @@ fn subtract(a: Cartesian, b: Cartesian) -> Cartesian {
 /// Distance between two 3D vectors
 pub fn vec3_distance(a: &Cartesian, b: &Cartesian) -> f64 {
     length(subtract(*a, *b))
-}
-
-/// Compute angle between two vectors
-fn angle(a: Cartesian, b: Cartesian) -> f64 {
-    let dot_product = dot(a, b);
-    let len_a = length(a);
-    let len_b = length(b);
-    let cos_angle = dot_product / (len_a * len_b);
-    // Clamp to avoid numerical errors
-    cos_angle.clamp(-1.0, 1.0).acos()
 }

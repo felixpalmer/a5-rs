@@ -315,16 +315,43 @@ fn flood_interior(
     Ok(interior_cells)
 }
 
-/// Find all cells within a polygon using center-point containment: a cell is
-/// included iff its center lies inside the polygon. The result is compacted —
-/// use `uncompact` to expand to the input resolution.
+/// How a cell is judged to belong to the polygon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Containment {
+    /// Include a cell iff its center lies inside the polygon.
+    #[default]
+    Center,
+    /// Additionally include every cell that overlaps the polygon boundary,
+    /// giving gap-free coverage (a superset of [`Containment::Center`]).
+    Overlapping,
+}
+
+/// Options for [`polygon_to_cells`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PolygonToCellsOptions {
+    /// Which cells to include relative to the polygon. Defaults to
+    /// [`Containment::Center`].
+    pub containment: Containment,
+}
+
+/// Find all cells within a polygon. The result is compacted — use `uncompact`
+/// to expand to the input resolution.
 ///
 /// `polygon` is GeoJSON-style rings `[outer, ...holes]` of `[longitude, latitude]`
 /// vertices; cells inside a hole are excluded. Rings may be open or closed
 /// (GeoJSON-style, first vertex repeated at the end) — closure is automatic
 /// either way. Holes with fewer than 3 distinct vertices are ignored.
-/// Returns sorted, compacted cell IDs whose centers lie inside the polygon.
-pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<u64>, String> {
+///
+/// Pass `None` for `options` to use the defaults. `options.containment` selects
+/// [`Containment::Center`] (default, cell center inside the polygon) or
+/// [`Containment::Overlapping`] (any cell touching the polygon, for gap-free
+/// coverage). Returns sorted, compacted cell IDs.
+pub fn polygon_to_cells(
+    polygon: &[Vec<LonLat>],
+    resolution: i32,
+    options: Option<PolygonToCellsOptions>,
+) -> Result<Vec<u64>, String> {
+    let options = options.unwrap_or_default();
     // GeoJSON rings repeat the first vertex at the end — drop the duplicate.
     fn strip_closing(ring: &[LonLat]) -> &[LonLat] {
         if ring.len() > 1 && ring[0] == ring[ring.len() - 1] {
@@ -368,31 +395,38 @@ pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<
         segment_map,
     } = dense_sample_boundary(&rings, &ring_vecs_list, resolution)?;
 
-    // Flattened per-segment normals and interior-side signs, indexed like the
-    // segment map. The polygon interior lies on the *outside* of a hole ring,
-    // so hole segments get the opposite sign.
-    let mut seg_normals: Vec<Cartesian> = Vec::new();
-    let mut seg_signs: Vec<f64> = Vec::new();
-    for (r, ring_vecs) in ring_vecs_list.iter().enumerate() {
-        let sign = (if r == 0 { 1 } else { -1 }) * ring_winding_sign(ring_vecs);
-        for normal in &prep.ring_normals[r] {
-            seg_normals.push(*normal);
-            seg_signs.push(sign as f64);
+    // The boundary contribution to the output. In `Overlapping` mode every
+    // densely-sampled boundary cell contains a point on the polygon boundary, so
+    // it overlaps the polygon — keep them all, unfiltered. In `Center` mode we
+    // filter down to those whose center lies inside.
+    let boundary_out: Vec<u64> = if options.containment == Containment::Overlapping {
+        boundary_cells.clone()
+    } else {
+        // Flattened per-segment normals and interior-side signs, indexed like the
+        // segment map. The polygon interior lies on the *outside* of a hole ring,
+        // so hole segments get the opposite sign.
+        let mut seg_normals: Vec<Cartesian> = Vec::new();
+        let mut seg_signs: Vec<f64> = Vec::new();
+        for (r, ring_vecs) in ring_vecs_list.iter().enumerate() {
+            let sign = (if r == 0 { 1 } else { -1 }) * ring_winding_sign(ring_vecs);
+            for normal in &prep.ring_normals[r] {
+                seg_normals.push(*normal);
+                seg_signs.push(sign as f64);
+            }
         }
-    }
-
-    let filtered_boundary = filter_boundary_cells(
-        &boundary_cells,
-        &segment_map,
-        &seg_normals,
-        &seg_signs,
-        &prep,
-    )?;
+        filter_boundary_cells(
+            &boundary_cells,
+            &segment_map,
+            &seg_normals,
+            &seg_signs,
+            &prep,
+        )?
+    };
 
     // Dense sampling can leave gaps; the shell catches them, classifying each cell.
     let shell_cells = expand_shell(&boundary_cells, &boundary_set);
     if shell_cells.is_empty() {
-        return compact(&filtered_boundary);
+        return compact(&boundary_out);
     }
 
     let mut interior_seeds: Vec<u64> = Vec::new();
@@ -406,7 +440,7 @@ pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<
         }
     }
     if interior_seeds.is_empty() {
-        return compact(&filtered_boundary);
+        return compact(&boundary_out);
     }
 
     let interior_cells = flood_interior(
@@ -416,8 +450,8 @@ pub fn polygon_to_cells(polygon: &[Vec<LonLat>], resolution: i32) -> Result<Vec<
         resolution,
     )?;
 
-    let mut combined: Vec<u64> = Vec::with_capacity(filtered_boundary.len() + interior_cells.len());
-    combined.extend(filtered_boundary);
+    let mut combined: Vec<u64> = Vec::with_capacity(boundary_out.len() + interior_cells.len());
+    combined.extend(boundary_out);
     combined.extend(interior_cells);
     compact(&combined)
 }

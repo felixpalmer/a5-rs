@@ -20,14 +20,12 @@ use std::f64::consts::PI;
  */
 pub struct CRS {
     vertices: Vec<Cartesian>,
-    invocations: usize,
 }
 
 impl CRS {
     pub fn new() -> Result<Self, String> {
         let mut crs = CRS {
             vertices: Vec::new(),
-            invocations: 0,
         };
 
         crs.add_face_centers();
@@ -62,11 +60,6 @@ impl CRS {
     }
 
     pub fn get_vertex(&mut self, point: Cartesian) -> Result<Cartesian, String> {
-        self.invocations += 1;
-        if self.invocations == 10000 {
-            eprintln!("Warning: Too many CRS invocations, results should be cached");
-        }
-
         for vertex in &self.vertices {
             if vec3_distance(&point, vertex) < 1e-5 {
                 return Ok(*vertex);

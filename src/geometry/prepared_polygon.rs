@@ -8,6 +8,7 @@
 
 use crate::coordinate_systems::Cartesian;
 use crate::geometry::spherical_polygon::{point_in_spherical_polygon, ring_segment_normals};
+use crate::utils::vector::angle;
 
 /// Point-in-polygon for a polygon with holes: inside the outer ring and
 /// outside every hole ring. Winding-number test — robust but O(atan2) per
@@ -32,6 +33,9 @@ fn point_in_polygon_rings(point: Cartesian, ring_vecs_list: &[Vec<Cartesian>]) -
 #[derive(Debug, Clone, Copy)]
 pub struct BoundingCap {
     pub center: Cartesian,
+    /// Cap half-angle in radians; kept alongside min_dot so no lossy
+    /// acos(min_dot) round-trip is needed
+    pub angle: f64,
     pub min_dot: f64,
 }
 
@@ -48,6 +52,7 @@ fn bounding_cap(ring_vecs_list: &[Vec<Cartesian>]) -> BoundingCap {
     if len < 1e-12 {
         return BoundingCap {
             center: Cartesian::new(0.0, 0.0, 1.0),
+            angle: std::f64::consts::PI,
             min_dot: -1.0,
         };
     }
@@ -56,6 +61,8 @@ fn bounding_cap(ring_vecs_list: &[Vec<Cartesian>]) -> BoundingCap {
     cz /= len;
     let center = Cartesian::new(cx, cy, cz);
 
+    // angle (2·atan2 form) keeps full precision for tiny polygons, where
+    // acos(dot) would lose half the digits carried on near-parallel vectors
     let mut max_angle = 0.0_f64;
     let mut max_edge = 0.0_f64;
     for ring_vecs in ring_vecs_list {
@@ -63,15 +70,14 @@ fn bounding_cap(ring_vecs_list: &[Vec<Cartesian>]) -> BoundingCap {
         for i in 0..n {
             let v = ring_vecs[i];
             let w = ring_vecs[(i + 1) % n];
-            let dot_cv = center.x() * v.x() + center.y() * v.y() + center.z() * v.z();
-            max_angle = max_angle.max(dot_cv.clamp(-1.0, 1.0).acos());
-            let dot_vw = v.x() * w.x() + v.y() * w.y() + v.z() * w.z();
-            max_edge = max_edge.max(dot_vw.clamp(-1.0, 1.0).acos());
+            max_angle = max_angle.max(angle(center, v));
+            max_edge = max_edge.max(angle(v, w));
         }
     }
     let cap_angle = std::f64::consts::PI.min(max_angle + max_edge / 2.0);
     BoundingCap {
         center,
+        angle: cap_angle,
         min_dot: cap_angle.cos(),
     }
 }
@@ -98,7 +104,7 @@ pub fn prepare_polygon(ring_vecs_list: Vec<Vec<Cartesian>>) -> PreparedPolygon {
         .iter()
         .map(|ring| ring_segment_normals(ring))
         .collect();
-    let cap_angle = cap.min_dot.clamp(-1.0, 1.0).acos();
+    let cap_angle = cap.angle;
     let use_fast = cap.min_dot > -1.0 && cap_angle < 1.37;
     let c = cap.center;
 

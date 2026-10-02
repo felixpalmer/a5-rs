@@ -33,11 +33,11 @@ pub mod utils;
 
 // PUBLIC API
 // Indexing
-pub use core::cell::{cell_to_boundary, cell_to_lonlat, lonlat_to_cell};
+pub use core::cell::{cell_to_boundary, cell_to_lonlat, lonlat_to_cell, CellToBoundaryOptions};
 pub use core::hex::{hex_to_u64, u64_to_hex};
 
 // Hierarchy
-pub use core::cell_info::{cell_area, get_num_cells, get_num_children};
+pub use core::cell_info::{cell_area, cell_edge_length_avg, get_num_cells, get_num_children};
 pub use core::serialization::{
     cell_to_children, cell_to_parent, get_res0_cells, get_resolution, MAX_RESOLUTION, WORLD_CELL,
 };
@@ -51,7 +51,7 @@ pub use traversal::grid_disk::{grid_disk, grid_disk_vertex};
 pub use traversal::line::line_string_to_cells;
 
 // Regions
-pub use regions::polygon::polygon_to_cells;
+pub use regions::polygon::{polygon_to_cells, Containment, PolygonToCellsOptions};
 
 // Types
 pub use coordinate_systems::{Degrees, LonLat, Radians};
