@@ -211,32 +211,37 @@ pub fn get_boundary_neighbors(
         }
     }
 
-    // Base-left corner [-max_row, max_row, 0]: 3 dodecahedron faces meet at this vertex.
-    // The symmetric base-right corner is implicitly covered: its cross-quintant and
+    // Base-left corner [-max_row, max_row, 0]: 3 dodecahedron faces meet at each base
+    // vertex of the quintant, and this cell touches one of them. From resolution 2
+    // it is a flavor 2 cell touching the vertex shared with the previous quintant;
+    // the single resolution 1 cell (max_row 0) is flavor 0 and touches the one shared
+    // with the next. The other vertex is implicitly covered: its cross-quintant and
     // cross-face paths land on the [-max_row, max_row, 0] cell of neighboring quintants.
     if !skip_corners && triple.x == -max_row && triple.y == max_row && triple.z == 0 {
-        // Vertex neighbor 1: across the previous quintant's base edge
-        let prev_quintant = (source_quintant + 4) % 5;
-        let (prev_adj_face_id, prev_adj_quintant) =
-            FACE_ADJACENCY[origin.id as usize][prev_quintant];
-        let prev_adj_origin = &origins[prev_adj_face_id as usize];
-        let (prev_adj_segment, prev_adj_orientation) =
-            quintant_to_segment(prev_adj_quintant, prev_adj_origin);
+        // Quintant step towards that vertex: +1 (next) or +4 (previous, mod 5)
+        let side = if max_row == 0 { 1 } else { 4 };
+        // Vertex neighbor 1: across the side quintant's base edge
+        let side_quintant = (source_quintant + side) % 5;
+        let (side_adj_face_id, side_adj_quintant) =
+            FACE_ADJACENCY[origin.id as usize][side_quintant];
+        let side_adj_origin = &origins[side_adj_face_id as usize];
+        let (side_adj_segment, side_adj_orientation) =
+            quintant_to_segment(side_adj_quintant, side_adj_origin);
         push_triple(
             &mut out,
             &triple,
-            prev_adj_orientation,
-            prev_adj_origin,
-            prev_adj_segment,
+            side_adj_orientation,
+            side_adj_origin,
+            side_adj_segment,
             ctx,
         );
 
         // Vertex neighbor 2: adjacent quintant on the primary cross-face
         let (cross_face_id, cross_quintant) = FACE_ADJACENCY[origin.id as usize][source_quintant];
         let cross_origin = &origins[cross_face_id as usize];
-        let next_cross_quintant = (cross_quintant + 1) % 5;
+        let cross_side_quintant = (cross_quintant + 5 - side) % 5;
         let (cross_segment, cross_orientation) =
-            quintant_to_segment(next_cross_quintant, cross_origin);
+            quintant_to_segment(cross_side_quintant, cross_origin);
         push_triple(
             &mut out,
             &triple,

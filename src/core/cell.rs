@@ -15,7 +15,7 @@ use crate::core::serialization::{
 };
 use crate::core::tiling::{
     cell_margin_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices,
-    get_quintant_polar, get_quintant_vertices,
+    get_quintant_polar,
 };
 use crate::core::utils::{A5Cell, Origin, OriginId};
 use crate::geometry::pentagon::PentagonShape;
@@ -57,9 +57,8 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
         return Ok(WORLD_CELL);
     }
 
-    if resolution < FIRST_HILBERT_RESOLUTION {
-        // For low resolutions there is no Hilbert curve: the cell is determined
-        // by the face (and quintant) alone, so the lookup is exact.
+    if resolution == 0 {
+        // The dodecahedron face containing the point is exact
         let origin = find_nearest_origin(spherical);
         let dodecahedron = DodecahedronProjection::get_thread_local();
         let dodec_point = dodecahedron.forward(spherical, origin.id)?;
@@ -309,10 +308,7 @@ fn spherical_to_cell_boundary(
 pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
     let (quintant, orientation) = segment_to_quintant(cell.segment, cell.origin());
 
-    if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
-        let pentagon_shape = get_quintant_vertices(quintant);
-        return Ok(pentagon_shape);
-    } else if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
+    if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
         let pentagon_shape = get_face_vertices();
         return Ok(pentagon_shape);
     }
@@ -332,7 +328,7 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
 pub fn cell_to_spherical(cell: u64) -> Result<crate::coordinate_systems::Spherical, String> {
     let cell_data = deserialize(cell)?;
     let dodecahedron = DodecahedronProjection::get_thread_local();
-    if cell_data.resolution >= FIRST_HILBERT_RESOLUTION {
+    if cell_data.resolution >= FIRST_HILBERT_RESOLUTION - 1 {
         // Fast path: the pentagon center is O(1) from (triple, flavor) — no need
         // to construct the pentagon itself.
         let (quintant, orientation) = segment_to_quintant(cell_data.segment, cell_data.origin());
@@ -430,18 +426,12 @@ pub fn cell_to_boundary(
 
 /// Test if an A5 cell contains a given point (in A5's internal spherical frame).
 pub fn a5cell_contains_point(cell: &A5Cell, spherical: Spherical) -> Result<f64, String> {
-    use crate::core::tiling::{get_face_vertices, get_quintant_vertices};
+    use crate::core::tiling::get_face_vertices;
 
     let dodecahedron = DodecahedronProjection::get_thread_local();
     let projected_point = dodecahedron.forward(spherical, cell.origin_id)?;
 
-    let (quintant, _orientation) = segment_to_quintant(cell.segment, cell.origin());
-
-    let containment_result = if cell.resolution == FIRST_HILBERT_RESOLUTION - 1 {
-        // Use quintant vertices (triangle as PentagonShape)
-        let pentagon_shape = get_quintant_vertices(quintant);
-        pentagon_shape.contains_point(projected_point)
-    } else if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
+    let containment_result = if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
         // Use face vertices (pentagon)
         let pentagon_shape = get_face_vertices();
         pentagon_shape.contains_point(projected_point)

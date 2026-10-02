@@ -281,9 +281,12 @@ pub fn s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> Cell {
         };
     }
     let p = POW2[resolution] as i32;
+    // At resolution 0 the leaf is the B axiom itself, whose flavor reflects the
+    // axiom rather than the cell. Every quintant holds the same single pentagon
+    // regardless of curve orientation, so its flavor is fixed.
     Cell {
         triple: Triple::new(base.x - p, base.y + p, base.z),
-        flavor: cell.flavor,
+        flavor: if resolution == 0 { 0 } else { cell.flavor },
     }
 }
 
