@@ -147,53 +147,13 @@ pub fn axiom_leaf_cell(t: &CurveTables, s: u64, r: usize, axiom: usize) -> LeafC
     }
 }
 
-// ---------- inverse: descend by which child's convex footprint contains the target ----------
-#[allow(clippy::too_many_arguments)]
-fn inside_score(
-    t: &CurveTables,
-    motif: usize,
-    flip: u8,
-    lvl: usize,
-    pos_a: f64,
-    pos_b: f64,
-    ta: f64,
-    tb: f64,
-    best: f64,
-) -> f64 {
-    let scale = POW2[lvl - 1];
-    let k = motif * 2 + flip as usize;
-    let edges = &t.fp_edges[t.fp_offset[k]..t.fp_offset[k + 1]];
-    // pos is fixed across this hull; fold 3*pos into the target once.
-    let ra = ta - 3.0 * pos_a;
-    let rb = tb - 3.0 * pos_b;
-    let mut min_cross = f64::INFINITY;
-    let mut e = 0;
-    while e < edges.len() {
-        let dta = ra - edges[e] * scale;
-        let dtb = rb - edges[e + 1] * scale;
-        let cross = edges[e + 2] * dtb - edges[e + 3] * dta;
-        if cross < min_cross {
-            min_cross = cross;
-            if min_cross <= 0.0 && min_cross <= best {
-                return min_cross;
-            }
-        }
-        e += 4;
-    }
-    min_cross
-}
-
-// Shared descent for both leaf modes. `exact` targets are corner sums of real
-// cells (leaf resolved by exact sum match); fractional targets resolve the leaf
-// by point-in-cell over the 4 level-1 triangles. Internal; also used by compat.rs.
-pub fn axiom_target_to_s(
-    t: &CurveTables,
-    ta: f64,
-    tb: f64,
-    r: usize,
-    axiom: usize,
-    exact: bool,
-) -> (u64, u8) {
+// ---------- inverse: descend by the branchless child classifier ----------
+// Shared descent: the target is the corner sum of a real cell, which is
+// strictly interior at every level, so the branchless classifier is provably
+// the containing child (and the leaf resolves by exact sum match). Fractional
+// point location no longer descends at all — ij_to_s rounds to a triple first
+// (see curve.rs round_to_triple). Internal; also used by compat.rs.
+pub fn axiom_target_to_s(t: &CurveTables, ta: f64, tb: f64, r: usize, axiom: usize) -> (u64, u8) {
     let mut motif = axiom;
     let mut flip: u8 = 0;
     let mut pos_a = 0.0f64;
@@ -203,46 +163,13 @@ pub fn axiom_target_to_s(
     while level >= 2 {
         let scale = POW2[level - 2];
         let sign = if flip == 1 { -scale } else { scale };
-        // Exact targets (real cell corner sums) are strictly interior at every
-        // level, so the branchless classifier is provably the containing child —
-        // and it beats the 4-hull scan in native code. Fractional targets can sit
-        // on a child boundary, where the classifier's tie-break can differ from
-        // the argmax; there the classifier + a verify costs more than just the
-        // scan, so keep the exact argmax scan for that (rarer, non-hot) path.
-        let best_d = if exact {
-            classify(
-                t,
-                motif * 2 + flip as usize,
-                ta - 3.0 * pos_a,
-                tb - 3.0 * pos_b,
-                scale,
-            )
-        } else {
-            let mut best_d = 0usize;
-            let mut best_score = f64::NEG_INFINITY;
-            for d in 0..4 {
-                let ci = motif * 4 + d;
-                let score = inside_score(
-                    t,
-                    t.child_token[ci] as usize,
-                    flip ^ t.child_flip[ci],
-                    level - 1,
-                    pos_a + t.child_off_a[ci] * sign,
-                    pos_b + t.child_off_b[ci] * sign,
-                    ta,
-                    tb,
-                    best_score,
-                );
-                if score > best_score {
-                    best_score = score;
-                    best_d = d;
-                    if score > 0.0 {
-                        break;
-                    }
-                }
-            }
-            best_d
-        };
+        let best_d = classify(
+            t,
+            motif * 2 + flip as usize,
+            ta - 3.0 * pos_a,
+            tb - 3.0 * pos_b,
+            scale,
+        );
         let ci = motif * 4 + best_d;
         pos_a += t.child_off_a[ci] * sign;
         pos_b += t.child_off_b[ci] * sign;
@@ -251,49 +178,24 @@ pub fn axiom_target_to_s(
         s_val |= (best_d as u64) << (2 * (level - 1));
         level -= 1;
     }
-    // level 1: pick the leaf cell, by exact corner-sum match or point-in-cell
+    // level 1: pick the leaf cell by exact corner-sum match
     let base = motif * 2 + flip as usize;
     let mut d0 = 0usize;
-    if exact {
-        let rel_a = ta - 3.0 * pos_a;
-        let rel_b = tb - 3.0 * pos_b;
-        let mut found = false;
-        for d in 0..4 {
-            if t.leaf_sum[base * 8 + d * 2] == rel_a && t.leaf_sum[base * 8 + d * 2 + 1] == rel_b {
-                d0 = d;
-                found = true;
-                break;
-            }
+    let rel_a = ta - 3.0 * pos_a;
+    let rel_b = tb - 3.0 * pos_b;
+    let mut found = false;
+    for d in 0..4 {
+        if t.leaf_sum[base * 8 + d * 2] == rel_a && t.leaf_sum[base * 8 + d * 2 + 1] == rel_b {
+            d0 = d;
+            found = true;
+            break;
         }
-        if !found {
-            panic!(
-                "lsystem inverse: no leaf match for corner sum ({},{})",
-                ta, tb
-            );
-        }
-    } else {
-        let ra = ta - 3.0 * pos_a;
-        let rb = tb - 3.0 * pos_b;
-        let mut best_score = f64::NEG_INFINITY;
-        for d in 0..4 {
-            let mut min_cross = f64::INFINITY;
-            for e in 0..3 {
-                let o = base * 48 + d * 12 + e * 4;
-                let dta = ra - t.leaf_tri[o];
-                let dtb = rb - t.leaf_tri[o + 1];
-                let cross = t.leaf_tri[o + 2] * dtb - t.leaf_tri[o + 3] * dta;
-                if cross < min_cross {
-                    min_cross = cross;
-                }
-            }
-            if min_cross > best_score {
-                best_score = min_cross;
-                d0 = d;
-                if min_cross > 0.0 {
-                    break;
-                }
-            }
-        }
+    }
+    if !found {
+        panic!(
+            "lsystem inverse: no leaf match for corner sum ({},{})",
+            ta, tb
+        );
     }
     (s_val | d0 as u64, t.leaf_flavor[base * 4 + d0])
 }
@@ -399,42 +301,7 @@ pub fn triple_to_s_lattice(triple: &Triple, resolution: usize, orientation: Orie
     } else {
         0.0
     };
-    let s_axiom = axiom_target_to_s(
-        &A5,
-        ab_a - tau_sum,
-        ab_b + tau_sum,
-        resolution,
-        rec.axiom,
-        true,
-    )
-    .0;
-    if rec.reverse {
-        (1u64 << (2 * resolution)) - 1 - s_axiom
-    } else {
-        s_axiom
-    }
-}
-
-/// Fractional point -> the curve position `s` of the containing cell, by direct
-/// descent. The target is given in the corner-sum frame (= 3x the L-system (a,b)
-/// point frame); callers map their coordinate system into it (for the IJ plane
-/// the exact affine map is target = (12*(i+j), -12*j), see curve.rs).
-pub fn sum_point_to_s(ta: f64, tb: f64, resolution: usize, orientation: Orientation) -> u64 {
-    let rec = &A5_ORIENT[orient_index(orientation)];
-    let tau_sum = if rec.is_b {
-        12.0 * POW2[resolution]
-    } else {
-        0.0
-    };
-    let s_axiom = axiom_target_to_s(
-        &A5,
-        ta - tau_sum,
-        tb + tau_sum,
-        resolution,
-        rec.axiom,
-        false,
-    )
-    .0;
+    let s_axiom = axiom_target_to_s(&A5, ab_a - tau_sum, ab_b + tau_sum, resolution, rec.axiom).0;
     if rec.reverse {
         (1u64 << (2 * resolution)) - 1 - s_axiom
     } else {

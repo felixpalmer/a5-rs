@@ -39,10 +39,9 @@ pub struct CurveTables {
     // k = motif*2+flip are fp_edges[fp_offset[k]..fp_offset[k + 1]].
     pub fp_edges: Vec<f64>,
     pub fp_offset: Vec<usize>,
-    // leaf tables per (motif, flip): 4 host cells as corner sums, point-in-cell
-    // triangle edges, and pentagon flavors
+    // leaf tables per (motif, flip): 4 host cells as corner sums and pentagon
+    // flavors
     pub leaf_sum: Vec<f64>,
-    pub leaf_tri: Vec<f64>,
     pub leaf_flavor: Vec<u8>,
     // Branchless child classifier per state k = motif*2+flip: 3 separating lines
     // (`class_sep[k*9 ..]` = [nx0,ny0,c0, nx1,ny1,c1, nx2,ny2,c2]) evaluated
@@ -267,7 +266,6 @@ pub fn compile_grammar(
 
     // ---------- leaf tables: per (motif, flip = heading 0|3) the 4 level-1 host cells ----------
     let mut leaf_sum = vec![0.0f64; motif_count * 2 * 8];
-    let mut leaf_tri = vec![0.0f64; motif_count * 2 * 48];
     let mut leaf_flavor = vec![0u8; motif_count * 2 * 4];
     for &m in &all_motifs {
         let draw_str = to_draws(m, 1, rules, draws);
@@ -288,21 +286,6 @@ pub fn compile_grammar(
                     });
                     let is_lower = if sym == upper { 0 } else { 1 };
                     leaf_flavor[base * 4 + d] = fbase ^ is_lower ^ ((hh & 1) as u8);
-                    let mut c = host_corners(sym, from, hh);
-                    let area = (c[1].a - c[0].a) as i64 * (c[2].b - c[0].b) as i64
-                        - (c[1].b - c[0].b) as i64 * (c[2].a - c[0].a) as i64;
-                    if area < 0 {
-                        c = [c[0], c[2], c[1]];
-                    }
-                    for e in 0..3 {
-                        let c0 = c[e];
-                        let c1 = c[(e + 1) % 3];
-                        let o = base * 48 + d * 12 + e * 4;
-                        leaf_tri[o] = 3.0 * c0.a as f64;
-                        leaf_tri[o + 1] = 3.0 * c0.b as f64;
-                        leaf_tri[o + 2] = (c1.a - c0.a) as f64;
-                        leaf_tri[o + 3] = (c1.b - c0.b) as f64;
-                    }
                     d += 1;
                 },
             );
@@ -349,7 +332,6 @@ pub fn compile_grammar(
         fp_edges,
         fp_offset,
         leaf_sum,
-        leaf_tri,
         leaf_flavor,
         class_sep,
         class_lut,
