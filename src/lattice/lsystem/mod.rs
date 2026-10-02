@@ -262,10 +262,24 @@ static A5_ORIENT: LazyLock<[OrientRecipe; 6]> = LazyLock::new(|| {
     ]
 });
 
+/// The flavor of the single cell at resolution 0. There the leaf is the axiom
+/// itself, whose flavor reflects the axiom rather than the cell, so it is fixed
+/// instead. The single cell is the quintant's corner cell [-max_row, max_row, 0],
+/// which touches a dodecahedron vertex and is flavor 2 at every resolution, so
+/// the corner cells keep one orientation all the way down. This orientation is
+/// also the one where none of its 4 children lies entirely outside it.
+pub const LEVEL0_FLAVOR: u8 = 2;
+
 /// The A5 curve position `s` -> cell (triple coordinate + pentagon flavor), for
 /// a given resolution and orientation. The triple is bijective with
 /// `triple_to_s_lattice`.
 pub fn s_to_cell(s: u64, resolution: usize, orientation: Orientation) -> Cell {
+    if resolution == 0 {
+        return Cell {
+            triple: Triple::new(0, 0, 0),
+            flavor: LEVEL0_FLAVOR,
+        };
+    }
     let rec = &A5_ORIENT[orient_index(orientation)];
     let s_axiom = if rec.reverse {
         (1u64 << (2 * resolution)) - 1 - s
