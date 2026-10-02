@@ -3,6 +3,5 @@
 // Copyright (c) A5 contributors
 
 pub mod great_circle;
-pub mod spiral;
 pub mod vector;
 pub use vector::*;
