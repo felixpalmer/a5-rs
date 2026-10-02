@@ -45,6 +45,9 @@ pub use core::serialization::{
 // Compaction
 pub use core::compact::{compact, uncompact};
 
+// Migration
+pub use core::migrate::migrate;
+
 // Traversal
 pub use traversal::cap::spherical_cap;
 pub use traversal::grid_disk::{grid_disk, grid_disk_vertex};
