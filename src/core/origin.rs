@@ -8,13 +8,29 @@ use crate::core::dodecahedron_quaternions::QUATERNIONS;
 use crate::core::hilbert::Orientation;
 use crate::core::utils::{Origin, OriginId, Quat};
 
-// Quintant layouts (clockwise & counterclockwise)
-pub const CLOCKWISE_FAN: [Orientation; 5] = [
+// Quintant layouts. Every face threads its quintants with one of two patterns,
+// entering at the vertex shared by its first two quintants and passing through
+// the face center twice. In orientation terms u is the quintant's apex (the
+// face center), v and w its outer vertices, so VU runs from v to the apex.
+// - jump: exits two vertices against the winding from where it entered
+// - step: exits one vertex against the winding
+// Clockwise faces use the mirror image (v <-> w) of the counterclockwise
+// pattern. Every counterclockwise face is threaded with the jump, so the step
+// only occurs clockwise: three layouts in all.
+pub const COUNTER_JUMP: [Orientation; 5] = [
     Orientation::VU,
+    Orientation::UV,
+    Orientation::WV,
+    Orientation::WU,
+    Orientation::UW,
+];
+
+pub const CLOCKWISE_JUMP: [Orientation; 5] = [
+    Orientation::WU,
     Orientation::UW,
     Orientation::VW,
-    Orientation::VW,
-    Orientation::VW,
+    Orientation::VU,
+    Orientation::UV,
 ];
 
 pub const CLOCKWISE_STEP: [Orientation; 5] = [
@@ -25,39 +41,23 @@ pub const CLOCKWISE_STEP: [Orientation; 5] = [
     Orientation::UW,
 ];
 
-pub const COUNTER_STEP: [Orientation; 5] = [
-    Orientation::WU,
-    Orientation::UV,
-    Orientation::WV,
-    Orientation::WU,
-    Orientation::UW,
-];
-
-pub const COUNTER_JUMP: [Orientation; 5] = [
-    Orientation::VU,
-    Orientation::UV,
-    Orientation::WV,
-    Orientation::WU,
-    Orientation::UW,
-];
-
 const QUINTANT_ORIENTATIONS_ARRAYS: [[Orientation; 5]; 12] = [
-    CLOCKWISE_FAN,  // 0 Arctic
+    CLOCKWISE_STEP, // 0 Arctic
     COUNTER_JUMP,   // 1 North America
-    COUNTER_STEP,   // 2 South America
+    COUNTER_JUMP,   // 2 South America
     CLOCKWISE_STEP, // 3 North Atlantic & Western Europe & Africa
-    COUNTER_STEP,   // 4 South Atlantic & Africa
+    COUNTER_JUMP,   // 4 South Atlantic & Africa
     COUNTER_JUMP,   // 5 Europe, Middle East & CentralAfrica
-    COUNTER_STEP,   // 6 Indian Ocean
-    CLOCKWISE_STEP, // 7 Asia
+    COUNTER_JUMP,   // 6 Indian Ocean
+    CLOCKWISE_JUMP, // 7 Asia
     CLOCKWISE_STEP, // 8 Australia
-    CLOCKWISE_STEP, // 9 North Pacific
+    CLOCKWISE_JUMP, // 9 North Pacific
     COUNTER_JUMP,   // 10 South Pacific
     COUNTER_JUMP,   // 11 Antarctic
 ];
 
 // Within each face, these are the indices of the first quintant
-const QUINTANT_FIRST: [usize; 12] = [4, 2, 3, 2, 0, 4, 3, 2, 2, 0, 3, 0];
+const QUINTANT_FIRST: [usize; 12] = [4, 2, 2, 2, 0, 4, 3, 2, 1, 0, 3, 0];
 
 // Placements of dodecahedron faces along the Hilbert curve
 const ORIGIN_ORDER: [usize; 12] = [0, 1, 2, 4, 3, 5, 7, 8, 6, 11, 10, 9];
@@ -150,8 +150,7 @@ pub fn get_origins() -> &'static Vec<Origin> {
 pub fn quintant_to_segment(quintant: usize, origin: &Origin) -> (usize, Orientation) {
     // Lookup winding direction of this face
     let layout = &origin.orientation;
-    let is_clockwise = is_layout_clockwise(layout);
-    let step = if is_clockwise { -1i32 } else { 1i32 };
+    let step = face_step(origin);
 
     // Find (CCW) delta from first quintant of this face
     let delta = (quintant + 5 - origin.first_quintant) % 5;
@@ -167,8 +166,7 @@ pub fn quintant_to_segment(quintant: usize, origin: &Origin) -> (usize, Orientat
 pub fn segment_to_quintant(segment: usize, origin: &Origin) -> (usize, Orientation) {
     // Lookup winding direction of this face
     let layout = &origin.orientation;
-    let is_clockwise = is_layout_clockwise(layout);
-    let step = if is_clockwise { -1i32 } else { 1i32 };
+    let step = face_step(origin);
 
     let face_relative_quintant = (segment + 5 - origin.first_quintant) % 5;
     let orientation = layout[face_relative_quintant];
@@ -184,9 +182,14 @@ pub fn segment_to_quintant(segment: usize, origin: &Origin) -> (usize, Orientati
     (quintant, orientation)
 }
 
-fn is_layout_clockwise(layout: &[Orientation]) -> bool {
-    // Check if layout matches clockwise patterns
-    layout == CLOCKWISE_FAN.as_slice() || layout == CLOCKWISE_STEP.as_slice()
+/// Direction of travel around a face: 1 for counterclockwise faces, -1 for clockwise
+pub fn face_step(origin: &Origin) -> i32 {
+    let layout = &origin.orientation[..];
+    if layout == CLOCKWISE_JUMP.as_slice() || layout == CLOCKWISE_STEP.as_slice() {
+        -1
+    } else {
+        1
+    }
 }
 
 /// The `count` origins nearest to a point, by haversine distance, nearest
