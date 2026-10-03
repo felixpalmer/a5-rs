@@ -20,9 +20,7 @@ use crate::core::tiling::{
 use crate::core::utils::{A5Cell, Origin, OriginId};
 use crate::geometry::pentagon::PentagonShape;
 use crate::lattice::curve::round_to_triple;
-use crate::lattice::{
-    s_to_cell, triple_flavor, triple_in_bounds, triple_to_s, Triple, LEVEL0_FLAVOR,
-};
+use crate::lattice::{s_to_cell, triple_flavor, triple_in_bounds, triple_to_s, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::neighbors::NEIGHBOR_DELTAS;
 use std::cell::RefCell;
@@ -171,25 +169,19 @@ fn lookup_in_quintant(
 
     let base = round_to_triple(ij, hilbert_resolution);
     let mut triple = base;
-    // The closed form gives the corner cell flavor 2 only once its y = max_row is
-    // odd; the single resolution 1 cell is that corner cell too (see LEVEL0_FLAVOR)
-    let mut flavor = if hilbert_resolution == 0 {
-        LEVEL0_FLAVOR
-    } else {
-        triple_flavor(&base)
-    };
+    let max_row = (1i64 << hilbert_resolution) as i32 - 1;
+    let mut flavor = triple_flavor(&base, max_row);
     let mut margin = cell_margin_scaled(px, py, base.x, base.y, flavor);
     if margin <= 0.0 {
         // All deltas are relative to the ROUNDED triple (the containing
         // pentagon is always among its fixed neighbors), not to intermediate
         // best cells.
-        let max_row = (1i64 << hilbert_resolution) as i32 - 1;
         for d in &NEIGHBOR_DELTAS[flavor as usize].all {
             let neighbor = Triple::new(base.x + d.x, base.y + d.y, base.z + d.z);
             if !triple_in_bounds(&neighbor, max_row) {
                 continue;
             }
-            let neighbor_flavor = triple_flavor(&neighbor);
+            let neighbor_flavor = triple_flavor(&neighbor, max_row);
             let neighbor_margin =
                 cell_margin_scaled(px, py, neighbor.x, neighbor.y, neighbor_flavor);
             if neighbor_margin > margin {

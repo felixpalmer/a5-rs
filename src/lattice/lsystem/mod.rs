@@ -267,7 +267,8 @@ static A5_ORIENT: LazyLock<[OrientRecipe; 6]> = LazyLock::new(|| {
 /// instead. The single cell is the quintant's corner cell [-max_row, max_row, 0],
 /// which touches a dodecahedron vertex and is flavor 2 at every resolution, so
 /// the corner cells keep one orientation all the way down. This orientation is
-/// also the one where none of its 4 children lies entirely outside it.
+/// also the one where none of its 4 children lies entirely outside it, and the
+/// one triple_flavor gives it (see triple.rs).
 pub const LEVEL0_FLAVOR: u8 = 2;
 
 /// The A5 curve position `s` -> cell (triple coordinate + pentagon flavor), for
