@@ -12,12 +12,12 @@ use crate::core::origin::{get_origins, segment_to_quintant};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::tiling::get_pentagon_vertices;
 use crate::core::utils::A5Cell;
-use crate::lattice::{s_to_triple, triple_flavor, triple_in_bounds, Triple};
+use crate::lattice::{s_to_triple, triple_flavor, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::cap::estimate_cell_radius;
-use crate::traversal::lattice_boundary::get_boundary_neighbor_triples;
-use crate::traversal::neighbors::NEIGHBOR_DELTAS;
-use crate::traversal::triple_cells::{triple_cell_key, triple_cell_to_id};
+use crate::traversal::triple_cells::{
+    for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
+};
 use crate::utils::great_circle::sample_great_circle_arc;
 
 /// Resolution 0 version of the sub-segment BFS below: the cells are the 12
@@ -100,7 +100,6 @@ pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec
 
     // The current sub-segment, projected onto each face it is tested against
     let mut faces: Vec<Option<(Face, Face)>> = vec![None; origins.len()];
-    let mut boundary: Vec<i32> = Vec::new();
     for i in 0..waypoints.len() - 1 {
         let start = waypoints[i];
         let end = waypoints[i + 1];
@@ -192,35 +191,8 @@ pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec
                     }
                     Ok(())
                 };
-                for &[origin_id, q, x, y, z] in &frontier {
-                    let triple = Triple::new(x, y, z);
-
-                    // Within the quintant: the fixed per-flavor deltas (edge and vertex neighbors)
-                    let flavor = triple_flavor(&triple, max_row) as usize;
-                    for d in &NEIGHBOR_DELTAS[flavor].all {
-                        let neighbor = Triple::new(x + d.x, y + d.y, z + d.z);
-                        if triple_in_bounds(&neighbor, max_row) {
-                            visit([origin_id, q, neighbor.x, neighbor.y, neighbor.z])?;
-                        }
-                    }
-
-                    // Across a quintant edge: the boundary delta tables
-                    if x == 0 || z == 0 || y == max_row {
-                        boundary.clear();
-                        get_boundary_neighbor_triples(
-                            triple,
-                            x + y + z,
-                            q as usize,
-                            &origins[origin_id as usize],
-                            max_row,
-                            false,
-                            false,
-                            &mut boundary,
-                        );
-                        for c in boundary.chunks_exact(5) {
-                            visit([c[0], c[1], c[2], c[3], c[4]])?;
-                        }
-                    }
+                for &cell in &frontier {
+                    for_each_triple_neighbor(cell, max_row, false, &mut visit)?;
                 }
                 frontier = next;
             }

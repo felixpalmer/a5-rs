@@ -14,11 +14,11 @@ use crate::core::serialization::{
 };
 use crate::core::tiling::get_pentagon_center;
 use crate::core::utils::A5Cell;
-use crate::lattice::{s_to_triple, triple_flavor, triple_in_bounds, Triple};
+use crate::lattice::{s_to_triple, triple_flavor, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
-use crate::traversal::lattice_boundary::get_boundary_neighbor_triples;
-use crate::traversal::neighbors::NEIGHBOR_DELTAS;
-use crate::traversal::triple_cells::{triple_cell_key, triple_cell_to_id};
+use crate::traversal::triple_cells::{
+    for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
+};
 use std::collections::HashSet;
 
 /// Safety factor applied to equal-area circle radius to get conservative circumradius estimate
@@ -137,7 +137,6 @@ fn coarse_cap_cells(
     let mut visited: HashSet<i64> = HashSet::from([triple_cell_key(seed_cell)]);
     let mut cells: Vec<u64> = vec![start_cell];
     let mut frontier: Vec<[i32; 5]> = vec![seed_cell];
-    let mut boundary: Vec<i32> = Vec::new();
     let dodecahedron = DodecahedronProjection::get_thread_local();
 
     while !frontier.is_empty() {
@@ -159,35 +158,8 @@ fn coarse_cap_cells(
             }
             Ok(())
         };
-        for &[origin_id, q, x, y, z] in &frontier {
-            let triple = Triple::new(x, y, z);
-
-            // Within the quintant: the fixed per-flavor deltas (edge and vertex neighbors)
-            let flavor = triple_flavor(&triple, max_row) as usize;
-            for d in &NEIGHBOR_DELTAS[flavor].all {
-                let neighbor = Triple::new(x + d.x, y + d.y, z + d.z);
-                if triple_in_bounds(&neighbor, max_row) {
-                    visit([origin_id, q, neighbor.x, neighbor.y, neighbor.z])?;
-                }
-            }
-
-            // Across a quintant edge: the boundary delta tables
-            if x == 0 || z == 0 || y == max_row {
-                boundary.clear();
-                get_boundary_neighbor_triples(
-                    triple,
-                    x + y + z,
-                    q as usize,
-                    &origins[origin_id as usize],
-                    max_row,
-                    false,
-                    false,
-                    &mut boundary,
-                );
-                for b in boundary.chunks_exact(5) {
-                    visit([b[0], b[1], b[2], b[3], b[4]])?;
-                }
-            }
+        for &cell in &frontier {
+            for_each_triple_neighbor(cell, max_row, false, &mut visit)?;
         }
         frontier = next;
     }

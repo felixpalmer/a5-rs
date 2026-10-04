@@ -9,10 +9,10 @@ use crate::core::face_adjacency::FACE_ADJACENCY;
 use crate::core::origin::{get_origins, segment_to_quintant};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::A5Cell;
-use crate::lattice::{s_to_triple, triple_flavor, triple_in_bounds, Triple};
-use crate::traversal::lattice_boundary::get_boundary_neighbor_triples;
-use crate::traversal::neighbors::NEIGHBOR_DELTAS;
-use crate::traversal::triple_cells::{triple_cell_key, triple_cell_to_id};
+use crate::lattice::s_to_triple;
+use crate::traversal::triple_cells::{
+    for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
+};
 
 /// One BFS ring: its dedup keys, and its cells as flat (origin_id, quintant, x, y, z).
 #[derive(Default)]
@@ -111,56 +111,14 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
         &Ring::default(),
         [origin.id as i32, quintant as i32, seed.x, seed.y, seed.z],
     );
-    let mut boundary: Vec<i32> = Vec::new();
 
     for ring in 1..=k {
         let mut next_frontier = Ring::default();
         for c in frontier.cells.chunks_exact(5) {
-            let [origin_id, q, x, y, z] = [c[0], c[1], c[2], c[3], c[4]];
-            let triple = Triple::new(x, y, z);
-
-            // Within the quintant: the fixed per-flavor deltas
-            let flavor = triple_flavor(&triple, max_row) as usize;
-            let deltas: &[Triple] = if edge_only {
-                &NEIGHBOR_DELTAS[flavor].edge
-            } else {
-                &NEIGHBOR_DELTAS[flavor].all
-            };
-            for d in deltas {
-                let neighbor = Triple::new(x + d.x, y + d.y, z + d.z);
-                if !triple_in_bounds(&neighbor, max_row) {
-                    continue;
-                }
-                add_cell(
-                    &mut next_frontier,
-                    &prev_frontier,
-                    &frontier,
-                    [origin_id, q, neighbor.x, neighbor.y, neighbor.z],
-                );
-            }
-
-            // Across a quintant edge: the boundary delta tables
-            if x == 0 || z == 0 || y == max_row {
-                boundary.clear();
-                get_boundary_neighbor_triples(
-                    triple,
-                    x + y + z,
-                    q as usize,
-                    &origins[origin_id as usize],
-                    max_row,
-                    edge_only,
-                    false,
-                    &mut boundary,
-                );
-                for b in boundary.chunks_exact(5) {
-                    add_cell(
-                        &mut next_frontier,
-                        &prev_frontier,
-                        &frontier,
-                        [b[0], b[1], b[2], b[3], b[4]],
-                    );
-                }
-            }
+            for_each_triple_neighbor([c[0], c[1], c[2], c[3], c[4]], max_row, edge_only, |n| {
+                add_cell(&mut next_frontier, &prev_frontier, &frontier, n);
+                Ok(())
+            })?;
         }
 
         // The seed ring is expanded; drop its cell so it isn't encoded again (its key stays)
