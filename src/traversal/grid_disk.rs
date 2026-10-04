@@ -3,38 +3,16 @@
 // Copyright (c) A5 contributors
 
 use std::collections::HashSet;
-use std::sync::LazyLock;
 
 use crate::core::compact::compact;
 use crate::core::face_adjacency::FACE_ADJACENCY;
-use crate::core::origin::{get_origins, quintant_to_segment, segment_to_quintant};
+use crate::core::origin::{get_origins, segment_to_quintant};
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::A5Cell;
-use crate::lattice::{
-    s_to_triple, triple_flavor, triple_in_bounds, triple_to_s, Orientation, Triple,
-};
+use crate::lattice::{s_to_triple, triple_flavor, triple_in_bounds, Triple};
 use crate::traversal::lattice_boundary::get_boundary_neighbor_triples;
 use crate::traversal::neighbors::NEIGHBOR_DELTAS;
-
-// Cells are deduplicated by one integer key: the quintant (origin.id * 5 +
-// quintant, < 60), parity, and the low KEY_BITS bits of -x and -z (y follows).
-// Up to Hilbert resolution 21 the coordinates fit whole; above it, two cells of
-// one quintant share a key only if they are 2^22 rows apart, and a disk holding
-// both would need k ≈ 2^21 (~10^12 cells) — far past what fits in memory.
-const KEY_BITS: u32 = 22;
-const KEY_MASK: i64 = (1 << KEY_BITS) - 1;
-const KEY_SIDE: i64 = 1 << KEY_BITS;
-
-/// Segment and curve orientation of each of the 60 quintants, by origin.id * 5 + quintant.
-static QUINTANT_SEGMENTS: LazyLock<Vec<(usize, Orientation)>> = LazyLock::new(|| {
-    let mut out = Vec::with_capacity(60);
-    for origin in get_origins() {
-        for q in 0..5 {
-            out.push(quintant_to_segment(q, origin));
-        }
-    }
-    out
-});
+use crate::traversal::triple_cells::{triple_cell_key, triple_cell_to_id};
 
 /// One BFS ring: its dedup keys, and its cells as flat (origin_id, quintant, x, y, z).
 #[derive(Default)]
@@ -45,10 +23,7 @@ struct Ring {
 
 /// Add a cell to `next` unless it is already in one of the three live rings.
 fn add_cell(next: &mut Ring, prev: &Ring, current: &Ring, cell: [i32; 5]) {
-    let [origin_id, quintant, x, y, z] = cell;
-    let key = ((-x as i64 & KEY_MASK) * KEY_SIDE + (-z as i64 & KEY_MASK)) * 2
-        + (x + y + z) as i64
-        + (origin_id * 5 + quintant) as i64 * 2 * KEY_SIDE * KEY_SIDE;
+    let key = triple_cell_key(cell);
     if prev.keys.contains(&key) || current.keys.contains(&key) || !next.keys.insert(key) {
         return;
     }
@@ -63,15 +38,11 @@ fn push_cell_ids(
     resolution: i32,
 ) -> Result<(), String> {
     for c in cells.chunks_exact(5) {
-        let (segment, orientation) = QUINTANT_SEGMENTS[(c[0] * 5 + c[1]) as usize];
-        let s = triple_to_s(&Triple::new(c[2], c[3], c[4]), hilbert_res, orientation)
-            .ok_or("grid_disk: invalid triple")?;
-        out.push(serialize(&A5Cell {
-            origin_id: c[0] as u8,
-            segment,
-            s,
+        out.push(triple_cell_to_id(
+            [c[0], c[1], c[2], c[3], c[4]],
+            hilbert_res,
             resolution,
-        })?);
+        )?);
     }
     Ok(())
 }
