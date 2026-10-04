@@ -7,10 +7,7 @@ use std::fs;
 struct Fixture {
     cell: String,
     resolution: i32,
-    #[serde(rename = "edgeOnlyNeighbors")]
-    edge_only_neighbors: Vec<String>,
-    #[serde(rename = "supersetNeighbors")]
-    superset_neighbors: Vec<String>,
+    neighbors: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -28,25 +25,14 @@ fn test_get_lattice_neighbors_fixtures() {
     for f in &fixtures.cases {
         let cell = hex_to_u64(&f.cell).expect("hex_to_u64");
 
-        let mut edge: Vec<String> = get_lattice_neighbors(cell, true)
+        let mut neighbors: Vec<String> = get_lattice_neighbors(cell)
             .into_iter()
             .map(u64_to_hex)
             .collect();
-        edge.sort();
+        neighbors.sort();
         assert_eq!(
-            edge, f.edge_only_neighbors,
-            "edgeOnly mismatch for cell {} (res {})",
-            f.cell, f.resolution
-        );
-
-        let mut superset: Vec<String> = get_lattice_neighbors(cell, false)
-            .into_iter()
-            .map(u64_to_hex)
-            .collect();
-        superset.sort();
-        assert_eq!(
-            superset, f.superset_neighbors,
-            "superset mismatch for cell {} (res {})",
+            neighbors, f.neighbors,
+            "mismatch for cell {} (res {})",
             f.cell, f.resolution
         );
     }

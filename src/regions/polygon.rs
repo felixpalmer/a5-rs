@@ -169,7 +169,7 @@ fn expand_shell(boundary_cells: &[u64], boundary_set: &HashSet<u64>) -> Vec<u64>
     let mut shell_cells: Vec<u64> = Vec::new();
     let mut shell_set: HashSet<u64> = HashSet::new();
     for &cell in boundary_cells {
-        for neighbor in get_lattice_neighbors(cell, true) {
+        for neighbor in get_lattice_neighbors(cell) {
             if boundary_set.contains(&neighbor) {
                 continue;
             }
