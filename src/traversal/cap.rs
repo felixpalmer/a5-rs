@@ -2,14 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
+use crate::coordinate_systems::Spherical;
 use crate::core::cell::cell_to_spherical;
 use crate::core::cell_info::cell_area;
 use crate::core::constants::AUTHALIC_RADIUS_EARTH;
-use crate::core::origin::haversine;
+use crate::core::face_adjacency::FACE_ADJACENCY;
+use crate::core::origin::{get_origins, haversine, segment_to_quintant};
 use crate::core::serialization::{
-    cell_to_children, cell_to_parent, get_resolution, FIRST_HILBERT_RESOLUTION,
+    cell_to_children, cell_to_parent, deserialize, get_resolution, serialize,
+    FIRST_HILBERT_RESOLUTION,
 };
-use crate::traversal::global_neighbors::get_global_cell_neighbors;
+use crate::core::tiling::get_pentagon_center;
+use crate::core::utils::A5Cell;
+use crate::lattice::{s_to_triple, triple_flavor, Triple};
+use crate::projections::dodecahedron::DodecahedronProjection;
+use crate::traversal::triple_cells::{
+    for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
+};
 use std::collections::HashSet;
 
 /// Safety factor applied to equal-area circle radius to get conservative circumradius estimate
@@ -74,6 +83,89 @@ pub fn pick_coarse_resolution(radius: f64, target_res: i32) -> i32 {
     target_res // No coarsening benefit
 }
 
+/// BFS at the cap's coarse resolution from `start_cell` through every cell whose
+/// center lies within `h_expanded` of `center`, returning every cell reached: the
+/// cells within, plus the ring just outside (the subdivision classifies them).
+///
+/// Runs in triple space: neighbors (edge and vertex) come from the per-flavor
+/// triple deltas plus the boundary delta tables, and a cell's center straight
+/// from its triple, so no cell is decoded and each is encoded once.
+fn coarse_cap_cells(
+    start_cell: u64,
+    center: Spherical,
+    h_expanded: f64,
+) -> Result<Vec<u64>, String> {
+    let cell = deserialize(start_cell)?;
+    let origins = get_origins();
+    if cell.resolution == 0 {
+        // The cells are the 12 dodecahedron faces, adjacent across their edges
+        let face_cell = |id: u8| {
+            serialize(&A5Cell {
+                origin_id: id,
+                segment: 0,
+                s: 0,
+                resolution: 0,
+            })
+        };
+        let mut visited: Vec<u8> = vec![cell.origin_id];
+        let mut frontier: Vec<u8> = vec![cell.origin_id];
+        while !frontier.is_empty() {
+            let mut next: Vec<u8> = Vec::new();
+            for &id in &frontier {
+                for q in 0..5 {
+                    let face = FACE_ADJACENCY[id as usize][q].0;
+                    if visited.contains(&face) {
+                        continue;
+                    }
+                    visited.push(face);
+                    if haversine(center, cell_to_spherical(face_cell(face)?)?) <= h_expanded {
+                        next.push(face);
+                    }
+                }
+            }
+            frontier = next;
+        }
+        return visited.into_iter().map(face_cell).collect();
+    }
+
+    let origin = &origins[cell.origin_id as usize];
+    let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
+    let max_row = (1i32 << hilbert_res) - 1;
+    let (quintant, orientation) = segment_to_quintant(cell.segment, origin);
+    let seed = s_to_triple(cell.s, hilbert_res, orientation);
+    let seed_cell = [origin.id as i32, quintant as i32, seed.x, seed.y, seed.z];
+    let mut visited: HashSet<i64> = HashSet::from([triple_cell_key(seed_cell)]);
+    let mut cells: Vec<u64> = vec![start_cell];
+    let mut frontier: Vec<[i32; 5]> = vec![seed_cell];
+    let dodecahedron = DodecahedronProjection::get_thread_local();
+
+    while !frontier.is_empty() {
+        let mut next: Vec<[i32; 5]> = Vec::new();
+        let mut visit = |c: [i32; 5]| -> Result<(), String> {
+            if !visited.insert(triple_cell_key(c)) {
+                return Ok(());
+            }
+            cells.push(triple_cell_to_id(c, hilbert_res, cell.resolution)?);
+            let triple = Triple::new(c[2], c[3], c[4]);
+            let face = get_pentagon_center(
+                hilbert_res as i32,
+                c[1] as usize,
+                &triple,
+                triple_flavor(&triple, max_row),
+            );
+            if haversine(center, dodecahedron.inverse(face, c[0] as u8)?) <= h_expanded {
+                next.push(c);
+            }
+            Ok(())
+        };
+        for &cell in &frontier {
+            for_each_triple_neighbor(cell, max_row, false, &mut visit)?;
+        }
+        frontier = next;
+    }
+    Ok(cells)
+}
+
 /// Compute all cells within a great-circle radius, returning a naturally
 /// compacted result (mix of resolutions).
 ///
@@ -96,30 +188,11 @@ pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
     };
     let coarse_cell_radius = estimate_cell_radius(coarse_res);
     let h_expanded = meters_to_h(radius + coarse_cell_radius);
-    let mut coarse_visited: HashSet<u64> = HashSet::new();
-    coarse_visited.insert(start_cell);
-    let mut coarse_frontier: HashSet<u64> = HashSet::new();
-    coarse_frontier.insert(start_cell);
-
-    while !coarse_frontier.is_empty() {
-        let mut next_frontier: HashSet<u64> = HashSet::new();
-        for &cid in &coarse_frontier {
-            for neighbor in get_global_cell_neighbors(cid, false) {
-                if coarse_visited.contains(&neighbor) {
-                    continue;
-                }
-                coarse_visited.insert(neighbor);
-                if haversine(center, cell_to_spherical(neighbor)?) <= h_expanded {
-                    next_frontier.insert(neighbor);
-                }
-            }
-        }
-        coarse_frontier = next_frontier;
-    }
+    let coarse_cells = coarse_cap_cells(start_cell, center, h_expanded)?;
 
     // Recursive subdivision from coarseRes to targetRes.
     let mut result: Vec<u64> = Vec::new();
-    let mut boundary: Vec<u64> = coarse_visited.into_iter().collect();
+    let mut boundary: Vec<u64> = coarse_cells;
 
     for res in coarse_res..target_res {
         let cell_radius_val = estimate_cell_radius(res);

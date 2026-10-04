@@ -11,7 +11,9 @@ use std::sync::LazyLock;
 use crate::core::origin::{get_origins, quintant_to_segment};
 use crate::core::serialization::serialize;
 use crate::core::utils::A5Cell;
-use crate::lattice::{triple_to_s, Orientation, Triple};
+use crate::lattice::{triple_flavor, triple_in_bounds, triple_to_s, Orientation, Triple};
+use crate::traversal::lattice_boundary::get_boundary_neighbor_triples;
+use crate::traversal::neighbors::NEIGHBOR_DELTAS;
 
 // A cell's key packs the quintant (origin.id * 5 + quintant, < 60), parity,
 // and the low KEY_BITS bits of -x and -z (y follows). Up to Hilbert resolution
@@ -57,4 +59,52 @@ pub fn triple_cell_to_id(
         s,
         resolution,
     })
+}
+
+/// Visit every neighbor of a cell given in triple space: within its quintant the
+/// fixed per-flavor triple deltas, and, for a cell on a quintant edge (x = 0,
+/// z = 0 or y = max_row), the boundary delta tables. `edge_only` restricts to the
+/// 5 edge-sharing neighbors; otherwise the vertex-only neighbors come too. A
+/// neighbor may be visited more than once; visitors deduplicate.
+pub fn for_each_triple_neighbor(
+    cell: [i32; 5],
+    max_row: i32,
+    edge_only: bool,
+    mut visit: impl FnMut([i32; 5]) -> Result<(), String>,
+) -> Result<(), String> {
+    let [origin_id, quintant, x, y, z] = cell;
+    let triple = Triple::new(x, y, z);
+
+    // Within the quintant: the fixed per-flavor deltas
+    let flavor = triple_flavor(&triple, max_row) as usize;
+    let deltas: &[Triple] = if edge_only {
+        &NEIGHBOR_DELTAS[flavor].edge
+    } else {
+        &NEIGHBOR_DELTAS[flavor].all
+    };
+    for d in deltas {
+        let neighbor = Triple::new(x + d.x, y + d.y, z + d.z);
+        if triple_in_bounds(&neighbor, max_row) {
+            visit([origin_id, quintant, neighbor.x, neighbor.y, neighbor.z])?;
+        }
+    }
+
+    // Across a quintant edge: the boundary delta tables
+    if x == 0 || z == 0 || y == max_row {
+        let mut boundary: Vec<i32> = Vec::with_capacity(20);
+        get_boundary_neighbor_triples(
+            triple,
+            x + y + z,
+            quintant as usize,
+            &get_origins()[origin_id as usize],
+            max_row,
+            edge_only,
+            false,
+            &mut boundary,
+        );
+        for b in boundary.chunks_exact(5) {
+            visit([b[0], b[1], b[2], b[3], b[4]])?;
+        }
+    }
+    Ok(())
 }
