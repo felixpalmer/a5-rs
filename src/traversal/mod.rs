@@ -11,3 +11,4 @@ pub mod lattice_neighbors;
 pub mod line;
 pub mod neighbors;
 pub mod quintant_neighbors;
+pub mod triple_cells;

@@ -66,61 +66,24 @@ fn boundary_context<'a>(src: &'a LatticeSource<'a>) -> BoundaryContext<'a> {
 
 type Delta = (i32, i32, i32);
 
-/// All 26 non-zero ±1 moves in 3D — vertex- and edge-sharing within-quintant candidates.
-const SUPERSET_DELTAS: &[Delta] = &[
-    (-1, -1, -1),
-    (-1, -1, 0),
-    (-1, -1, 1),
-    (-1, 0, -1),
-    (-1, 0, 0),
-    (-1, 0, 1),
-    (-1, 1, -1),
-    (-1, 1, 0),
-    (-1, 1, 1),
-    (0, -1, -1),
-    (0, -1, 0),
-    (0, -1, 1),
-    (0, 0, -1),
-    (0, 0, 1),
-    (0, 1, -1),
-    (0, 1, 0),
-    (0, 1, 1),
-    (1, -1, -1),
-    (1, -1, 0),
-    (1, -1, 1),
-    (1, 0, -1),
-    (1, 0, 0),
-    (1, 0, 1),
-    (1, 1, -1),
-    (1, 1, 0),
-    (1, 1, 1),
-];
-
 /// The 3 parity-valid single-axis moves matching `triple_space_flood_fill`'s edge connectivity.
 const PARITY_EVEN_DELTAS: &[Delta] = &[(1, 0, 0), (0, 1, 0), (0, 0, 1)];
 const PARITY_ODD_DELTAS: &[Delta] = &[(-1, 0, 0), (0, -1, 0), (0, 0, -1)];
 
-/// Fast lattice-based neighbor finding. Skips `is_neighbor()` validation for
-/// within-quintant candidates; falls back to `get_global_cell_neighbors` below res 2.
-///
-/// - `edge_only=false`: 26-cube ±1 superset (may include vertex-only touchers).
-///   For BFS that re-validates candidates downstream (e.g. line tracing).
-/// - `edge_only=true`: 3 parity-valid moves matching `triple_space_flood_fill` —
-///   exact connectivity for shell-buffering the flood-fill firewall.
-pub fn get_lattice_neighbors(cell_id: u64, edge_only: bool) -> Vec<u64> {
+/// Fast lattice-based neighbor finding over triple-space deltas: the 3
+/// parity-valid moves — strict triple-lattice edge connectivity, the
+/// connectivity `triple_space_flood_fill` uses. Falls back to
+/// `get_global_cell_neighbors` below res 2.
+pub fn get_lattice_neighbors(cell_id: u64) -> Vec<u64> {
     let src = match decode_source(cell_id) {
         Some(s) => s,
-        None => return get_global_cell_neighbors(cell_id, edge_only),
+        None => return get_global_cell_neighbors(cell_id, true),
     };
 
-    let deltas: &[Delta] = if edge_only {
-        if triple_parity(&src.triple) == 0 {
-            PARITY_EVEN_DELTAS
-        } else {
-            PARITY_ODD_DELTAS
-        }
+    let deltas: &[Delta] = if triple_parity(&src.triple) == 0 {
+        PARITY_EVEN_DELTAS
     } else {
-        SUPERSET_DELTAS
+        PARITY_ODD_DELTAS
     };
 
     let mut result: Vec<u64> = Vec::new();
@@ -144,9 +107,9 @@ pub fn get_lattice_neighbors(cell_id: u64, edge_only: bool) -> Vec<u64> {
         }
     }
 
-    // Strict lattice connectivity (edge_only) doesn't traverse the [-max_row, max_row, 0]
-    // vertex corner, so we skip it there too — keeping the firewall topology tight.
-    for c in get_boundary_neighbors(&boundary_context(&src), edge_only, edge_only) {
+    // Strict lattice connectivity doesn't traverse the [-max_row, max_row, 0] vertex
+    // corner, so we skip it there too — keeping the firewall topology tight.
+    for c in get_boundary_neighbors(&boundary_context(&src), true, true) {
         result.push(c);
     }
     result

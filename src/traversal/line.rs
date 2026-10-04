@@ -4,12 +4,60 @@
 
 use std::collections::HashSet;
 
-use crate::coordinate_systems::LonLat;
+use crate::coordinate_systems::{Face, LonLat};
 use crate::core::cell::{cell_intersects_segment, lonlat_to_cell};
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_lon_lat, to_spherical};
+use crate::core::face_adjacency::FACE_ADJACENCY;
+use crate::core::origin::{get_origins, segment_to_quintant};
+use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
+use crate::core::tiling::get_pentagon_vertices;
+use crate::core::utils::A5Cell;
+use crate::lattice::{s_to_triple, triple_flavor, triple_in_bounds, Triple};
+use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::cap::estimate_cell_radius;
-use crate::traversal::lattice_neighbors::get_lattice_neighbors;
+use crate::traversal::lattice_boundary::get_boundary_neighbor_triples;
+use crate::traversal::neighbors::NEIGHBOR_DELTAS;
+use crate::traversal::triple_cells::{triple_cell_key, triple_cell_to_id};
 use crate::utils::great_circle::sample_great_circle_arc;
+
+/// Resolution 0 version of the sub-segment BFS below: the cells are the 12
+/// dodecahedron faces, adjacent across their edges.
+fn trace_faces(
+    cell_a: u64,
+    cell_b: u64,
+    a: LonLat,
+    b: LonLat,
+    mut add_cell: impl FnMut(u64),
+) -> Result<(), String> {
+    let mut frontier = vec![
+        deserialize(cell_a)?.origin_id,
+        deserialize(cell_b)?.origin_id,
+    ];
+    let mut visited: HashSet<u8> = frontier.iter().copied().collect();
+    while !frontier.is_empty() {
+        let mut next: Vec<u8> = Vec::new();
+        for &id in &frontier {
+            for q in 0..5 {
+                let face = FACE_ADJACENCY[id as usize][q].0;
+                if !visited.insert(face) {
+                    continue;
+                }
+                let cell = serialize(&A5Cell {
+                    origin_id: face,
+                    segment: 0,
+                    s: 0,
+                    resolution: 0,
+                })?;
+                if cell_intersects_segment(cell, a, b)? {
+                    add_cell(cell);
+                    next.push(face);
+                }
+            }
+        }
+        frontier = next;
+    }
+    Ok(())
+}
 
 /// Trace cells along a polyline defined by a sequence of waypoints.
 ///
@@ -19,9 +67,14 @@ use crate::utils::great_circle::sample_great_circle_arc;
 /// straight 2D segment between the two samples (projected onto each candidate
 /// cell's Face). Cells at waypoint junctions are deduplicated.
 ///
+/// The BFS runs in triple space: a cell's neighbors come from its flavor's
+/// triple deltas plus the boundary delta tables, and its pentagon straight from
+/// its triple, so a candidate is never decoded and only touched cells are
+/// encoded.
+///
 /// Pass `[start, end]` for a simple two-point line segment.
 ///
-/// Returns a vector of unique cell IDs along the polyline, in order.
+/// Returns unique cell IDs along the polyline, in order.
 pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec<u64>, String> {
     if waypoints.is_empty() {
         return Ok(Vec::new());
@@ -34,13 +87,20 @@ pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec
     let mut result: Vec<u64> = Vec::new();
     let cell_radius = estimate_cell_radius(resolution);
     let sample_interval = cell_radius * 0.5;
+    let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1).max(0) as usize;
+    let max_row = (1i32 << hilbert_res) - 1;
+    let origins = get_origins();
+    let dodecahedron = DodecahedronProjection::get_thread_local();
 
-    let add_cell = |cell: u64, seen: &mut HashSet<u64>, result: &mut Vec<u64>| {
+    let mut add_cell = |cell: u64| {
         if seen.insert(cell) {
             result.push(cell);
         }
     };
 
+    // The current sub-segment, projected onto each face it is tested against
+    let mut faces: Vec<Option<(Face, Face)>> = vec![None; origins.len()];
+    let mut boundary: Vec<i32> = Vec::new();
     for i in 0..waypoints.len() - 1 {
         let start = waypoints[i];
         let end = waypoints[i + 1];
@@ -56,9 +116,19 @@ pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec
         for (j, v) in interior.iter().enumerate() {
             samples[j + 1] = to_lon_lat(to_spherical(*v));
         }
+        // Each sample's cell, as its ID and in triple space as (origin_id, quintant, x, y, z)
         let mut sample_cells: Vec<u64> = Vec::with_capacity(samples.len());
+        let mut sample_triples: Vec<[i32; 5]> = Vec::with_capacity(samples.len());
         for s in &samples {
-            sample_cells.push(lonlat_to_cell(*s, resolution)?);
+            let cell_id = lonlat_to_cell(*s, resolution)?;
+            sample_cells.push(cell_id);
+            if resolution > 0 {
+                let cell = deserialize(cell_id)?;
+                let origin = &origins[cell.origin_id as usize];
+                let (quintant, orientation) = segment_to_quintant(cell.segment, origin);
+                let t = s_to_triple(cell.s, hilbert_res, orientation);
+                sample_triples.push([origin.id as i32, quintant as i32, t.x, t.y, t.z]);
+            }
         }
 
         // Walk pairwise. Each (P_j, P_{j+1}) sub-segment is short enough that its
@@ -70,31 +140,85 @@ pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec
             let cell_a = sample_cells[j];
             let cell_b = sample_cells[j + 1];
 
-            add_cell(cell_a, &mut seen, &mut result);
-            add_cell(cell_b, &mut seen, &mut result);
+            add_cell(cell_a);
+            add_cell(cell_b);
             if cell_a == cell_b {
                 continue;
             }
+            if resolution == 0 {
+                trace_faces(cell_a, cell_b, a, b, &mut add_cell)?;
+                continue;
+            }
+            faces.fill(None);
 
             // Strict local BFS: expand neighbors of every cell known to touch this
             // sub-segment, keeping anything whose pentagon the sub-segment crosses.
             // Terminates as soon as no new touching cells are found — typically 1–2
             // hops, since a sub-segment ≤ cell_radius/2 reaches at most a couple of
             // cells beyond its endpoint cells.
-            let mut visited: HashSet<u64> = HashSet::new();
-            visited.insert(cell_a);
-            visited.insert(cell_b);
-            let mut frontier: Vec<u64> = vec![cell_a, cell_b];
+            let mut visited: HashSet<i64> = HashSet::new();
+            visited.insert(triple_cell_key(sample_triples[j]));
+            visited.insert(triple_cell_key(sample_triples[j + 1]));
+            let mut frontier: Vec<[i32; 5]> = vec![sample_triples[j], sample_triples[j + 1]];
             while !frontier.is_empty() {
-                let mut next: Vec<u64> = Vec::new();
-                for cell in &frontier {
-                    for neighbor in get_lattice_neighbors(*cell, false) {
-                        if !visited.insert(neighbor) {
-                            continue;
+                let mut next: Vec<[i32; 5]> = Vec::new();
+                let mut visit = |cell: [i32; 5]| -> Result<(), String> {
+                    if !visited.insert(triple_cell_key(cell)) {
+                        return Ok(());
+                    }
+                    let [origin_id, quintant, x, y, z] = cell;
+                    let (a_face, b_face) = match faces[origin_id as usize] {
+                        Some(projected) => projected,
+                        None => {
+                            let id = origin_id as u8;
+                            let projected = (
+                                dodecahedron.forward(from_lon_lat(a), id)?,
+                                dodecahedron.forward(from_lon_lat(b), id)?,
+                            );
+                            faces[origin_id as usize] = Some(projected);
+                            projected
                         }
-                        if cell_intersects_segment(neighbor, a, b)? {
-                            add_cell(neighbor, &mut seen, &mut result);
-                            next.push(neighbor);
+                    };
+                    let triple = Triple::new(x, y, z);
+                    let pentagon = get_pentagon_vertices(
+                        hilbert_res as i32,
+                        quintant as usize,
+                        &triple,
+                        triple_flavor(&triple, max_row),
+                    );
+                    if pentagon.intersects_segment(a_face, b_face) {
+                        add_cell(triple_cell_to_id(cell, hilbert_res, resolution)?);
+                        next.push(cell);
+                    }
+                    Ok(())
+                };
+                for &[origin_id, q, x, y, z] in &frontier {
+                    let triple = Triple::new(x, y, z);
+
+                    // Within the quintant: the fixed per-flavor deltas (edge and vertex neighbors)
+                    let flavor = triple_flavor(&triple, max_row) as usize;
+                    for d in &NEIGHBOR_DELTAS[flavor].all {
+                        let neighbor = Triple::new(x + d.x, y + d.y, z + d.z);
+                        if triple_in_bounds(&neighbor, max_row) {
+                            visit([origin_id, q, neighbor.x, neighbor.y, neighbor.z])?;
+                        }
+                    }
+
+                    // Across a quintant edge: the boundary delta tables
+                    if x == 0 || z == 0 || y == max_row {
+                        boundary.clear();
+                        get_boundary_neighbor_triples(
+                            triple,
+                            x + y + z,
+                            q as usize,
+                            &origins[origin_id as usize],
+                            max_row,
+                            false,
+                            false,
+                            &mut boundary,
+                        );
+                        for c in boundary.chunks_exact(5) {
+                            visit([c[0], c[1], c[2], c[3], c[4]])?;
                         }
                     }
                 }
