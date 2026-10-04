@@ -1,7 +1,7 @@
 use a5::core::hex::{hex_to_u64, u64_to_hex};
 use a5::traversal::lattice_flood_fill::{triple_space_flood_fill, FloodInput};
+use a5::traversal::triple_cells::cell_ids_to_triples;
 use serde::Deserialize;
-use std::collections::HashSet;
 use std::fs;
 
 #[derive(Deserialize)]
@@ -33,23 +33,25 @@ fn test_triple_space_flood_fill_fixtures() {
         serde_json::from_str(&content).expect("Could not parse lattice-flood-fill.json");
 
     for f in &fixtures.cases {
-        let seeds: Vec<u64> = f
-            .seed_cells
-            .iter()
-            .map(|h| hex_to_u64(h).expect("hex_to_u64"))
-            .collect();
-        let mut firewall: HashSet<u64> = f
-            .firewall_cells
-            .iter()
-            .map(|h| hex_to_u64(h).expect("hex_to_u64"))
-            .collect();
+        let to_triples = |hexes: &[String]| {
+            let mut cells: Vec<[i32; 5]> = Vec::new();
+            cell_ids_to_triples(
+                hexes.iter().map(|h| hex_to_u64(h).expect("hex_to_u64")),
+                &mut cells,
+            )
+            .expect("cell_ids_to_triples");
+            cells
+        };
+        let seeds = to_triples(&f.seed_cells);
+        let firewall = to_triples(&f.firewall_cells);
 
         let result = triple_space_flood_fill(
-            FloodInput::Firewall(&mut firewall),
+            FloodInput::Firewall(&firewall),
             &seeds,
             f.resolution,
             f.max_layers,
-        );
+        )
+        .expect("flood fill");
 
         let mut interior: Vec<String> = result
             .interior_cells

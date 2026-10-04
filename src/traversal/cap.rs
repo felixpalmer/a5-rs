@@ -12,12 +12,10 @@ use crate::core::serialization::{
     cell_to_children, cell_to_parent, deserialize, get_resolution, serialize,
     FIRST_HILBERT_RESOLUTION,
 };
-use crate::core::tiling::get_pentagon_center;
 use crate::core::utils::A5Cell;
-use crate::lattice::{s_to_triple, triple_flavor, Triple};
-use crate::projections::dodecahedron::DodecahedronProjection;
+use crate::lattice::s_to_triple;
 use crate::traversal::triple_cells::{
-    for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
+    for_each_triple_neighbor, triple_cell_center, triple_cell_key, triple_cell_to_id,
 };
 use std::collections::HashSet;
 
@@ -137,7 +135,6 @@ fn coarse_cap_cells(
     let mut visited: HashSet<i64> = HashSet::from([triple_cell_key(seed_cell)]);
     let mut cells: Vec<u64> = vec![start_cell];
     let mut frontier: Vec<[i32; 5]> = vec![seed_cell];
-    let dodecahedron = DodecahedronProjection::get_thread_local();
 
     while !frontier.is_empty() {
         let mut next: Vec<[i32; 5]> = Vec::new();
@@ -146,14 +143,7 @@ fn coarse_cap_cells(
                 return Ok(());
             }
             cells.push(triple_cell_to_id(c, hilbert_res, cell.resolution)?);
-            let triple = Triple::new(c[2], c[3], c[4]);
-            let face = get_pentagon_center(
-                hilbert_res as i32,
-                c[1] as usize,
-                &triple,
-                triple_flavor(&triple, max_row),
-            );
-            if haversine(center, dodecahedron.inverse(face, c[0] as u8)?) <= h_expanded {
+            if haversine(center, triple_cell_center(c, hilbert_res, max_row)?) <= h_expanded {
                 next.push(c);
             }
             Ok(())
