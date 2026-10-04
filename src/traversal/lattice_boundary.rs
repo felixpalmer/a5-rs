@@ -3,10 +3,8 @@
 // Copyright (c) A5 contributors
 
 use crate::core::face_adjacency::FACE_ADJACENCY;
-use crate::core::origin::{get_origins, quintant_to_segment};
-use crate::core::serialization::serialize;
-use crate::core::utils::{A5Cell, Origin};
-use crate::lattice::{triple_in_bounds, triple_to_s, Triple};
+use crate::core::utils::Origin;
+use crate::lattice::{triple_in_bounds, Triple};
 
 /// Neighbor delta: (dx, dy, dz, is_edge_sharing)
 pub type NeighborDelta = (i32, i32, i32, bool);
@@ -55,18 +53,6 @@ pub const CROSS_FACE_DELTAS: [&[NeighborDelta]; 2] = [
     // parity=1
     &[(0, 0, -1, true), (0, 0, 0, false)],
 ];
-
-/// Source-cell context shared by all boundary-neighbor cases.
-pub struct BoundaryContext<'a> {
-    pub triple: Triple,
-    pub parity: i32,
-    pub source_quintant: usize,
-    pub origin: &'a Origin,
-    pub hilbert_res: usize,
-    pub max_s: u64,
-    pub max_row: i32,
-    pub resolution: i32,
-}
 
 /// If the triple is a valid cell, append it to `out` as (origin_id, quintant, x, y, z).
 fn push_triple(out: &mut Vec<i32>, triple: Triple, origin_id: u8, quintant: usize, max_row: i32) {
@@ -208,48 +194,4 @@ pub fn get_boundary_neighbor_triples(
             max_row,
         );
     }
-}
-
-/// The neighbors outside the source cell's quintant (see
-/// `get_boundary_neighbor_triples`), as cell IDs.
-///
-/// The result may contain duplicates and the order is not stable; callers
-/// deduplicate (via Set) or accept duplicates if their downstream pipeline tolerates them.
-pub fn get_boundary_neighbors(
-    ctx: &BoundaryContext,
-    edge_only: bool,
-    skip_corners: bool,
-) -> Vec<u64> {
-    let mut triples: Vec<i32> = Vec::new();
-    get_boundary_neighbor_triples(
-        ctx.triple,
-        ctx.parity,
-        ctx.source_quintant,
-        ctx.origin,
-        ctx.max_row,
-        edge_only,
-        skip_corners,
-        &mut triples,
-    );
-    let origins = get_origins();
-    let mut out: Vec<u64> = Vec::new();
-    for t in triples.chunks_exact(5) {
-        let origin = &origins[t[0] as usize];
-        let (segment, orientation) = quintant_to_segment(t[1] as usize, origin);
-        let triple = Triple::new(t[2], t[3], t[4]);
-        if let Some(s) = triple_to_s(&triple, ctx.hilbert_res, orientation) {
-            if s >= ctx.max_s {
-                continue;
-            }
-            if let Ok(cell_id) = serialize(&A5Cell {
-                origin_id: origin.id,
-                segment,
-                s,
-                resolution: ctx.resolution,
-            }) {
-                out.push(cell_id);
-            }
-        }
-    }
-    out
 }

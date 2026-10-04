@@ -7,16 +7,16 @@ use std::collections::HashSet;
 use crate::coordinate_systems::{Face, LonLat};
 use crate::core::cell::{cell_intersects_segment, lonlat_to_cell};
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_lon_lat, to_spherical};
-use crate::core::face_adjacency::FACE_ADJACENCY;
-use crate::core::origin::{get_origins, segment_to_quintant};
+use crate::core::face_adjacency::walk_faces;
+use crate::core::origin::get_origins;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::tiling::get_pentagon_vertices;
 use crate::core::utils::A5Cell;
-use crate::lattice::{s_to_triple, triple_flavor, Triple};
+use crate::lattice::{triple_flavor, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::cap::estimate_cell_radius;
 use crate::traversal::triple_cells::{
-    for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
+    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
 };
 use crate::utils::great_circle::sample_great_circle_arc;
 
@@ -29,33 +29,27 @@ fn trace_faces(
     b: LonLat,
     mut add_cell: impl FnMut(u64),
 ) -> Result<(), String> {
-    let mut frontier = vec![
+    let seeds = [
         deserialize(cell_a)?.origin_id,
         deserialize(cell_b)?.origin_id,
     ];
-    let mut visited: HashSet<u8> = frontier.iter().copied().collect();
-    while !frontier.is_empty() {
-        let mut next: Vec<u8> = Vec::new();
-        for &id in &frontier {
-            for q in 0..5 {
-                let face = FACE_ADJACENCY[id as usize][q].0;
-                if !visited.insert(face) {
-                    continue;
-                }
-                let cell = serialize(&A5Cell {
-                    origin_id: face,
-                    segment: 0,
-                    s: 0,
-                    resolution: 0,
-                })?;
-                if cell_intersects_segment(cell, a, b)? {
-                    add_cell(cell);
-                    next.push(face);
-                }
+    walk_faces(
+        &seeds,
+        |face| {
+            let cell = serialize(&A5Cell {
+                origin_id: face,
+                segment: 0,
+                s: 0,
+                resolution: 0,
+            })?;
+            if !cell_intersects_segment(cell, a, b)? {
+                return Ok(false);
             }
-        }
-        frontier = next;
-    }
+            add_cell(cell);
+            Ok(true)
+        },
+        usize::MAX,
+    )?;
     Ok(())
 }
 
@@ -119,15 +113,10 @@ pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec
         let mut sample_cells: Vec<u64> = Vec::with_capacity(samples.len());
         let mut sample_triples: Vec<[i32; 5]> = Vec::with_capacity(samples.len());
         for s in &samples {
-            let cell_id = lonlat_to_cell(*s, resolution)?;
-            sample_cells.push(cell_id);
-            if resolution > 0 {
-                let cell = deserialize(cell_id)?;
-                let origin = &origins[cell.origin_id as usize];
-                let (quintant, orientation) = segment_to_quintant(cell.segment, origin);
-                let t = s_to_triple(cell.s, hilbert_res, orientation);
-                sample_triples.push([origin.id as i32, quintant as i32, t.x, t.y, t.z]);
-            }
+            sample_cells.push(lonlat_to_cell(*s, resolution)?);
+        }
+        if resolution > 0 {
+            cell_ids_to_triples(sample_cells.iter().copied(), &mut sample_triples)?;
         }
 
         // Walk pairwise. Each (P_j, P_{j+1}) sub-segment is short enough that its
