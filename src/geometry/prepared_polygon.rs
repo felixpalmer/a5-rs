@@ -7,7 +7,9 @@
 // the winding-number test as a robust fallback.
 
 use crate::coordinate_systems::Cartesian;
-use crate::geometry::spherical_polygon::{point_in_spherical_polygon, ring_segment_normals};
+use crate::geometry::spherical_polygon::{
+    point_in_spherical_polygon, ring_segment_normals, ring_winding_sign,
+};
 use crate::utils::vector::angle;
 
 /// Point-in-polygon for a polygon with holes: inside the outer ring and
@@ -96,6 +98,9 @@ pub struct PreparedPolygon {
     pub cap: BoundingCap,
     pub reference: Cartesian,
     pub use_fast: bool,
+    /// Reference points known to be INSIDE the polygon, for polygons whose
+    /// bounding cap reaches a hemisphere; empty otherwise (see `interior_refs`).
+    pub inside_refs: Vec<Cartesian>,
 }
 
 pub fn prepare_polygon(ring_vecs_list: Vec<Vec<Cartesian>>) -> PreparedPolygon {
@@ -135,13 +140,67 @@ pub fn prepare_polygon(ring_vecs_list: Vec<Vec<Cartesian>>) -> PreparedPolygon {
         c.y() * cos_t + perp.y() * sin_t,
         c.z() * cos_t + perp.z() * sin_t,
     );
+    let inside_refs = if cap_angle >= std::f64::consts::FRAC_PI_2 {
+        interior_refs(&ring_vecs_list[0], &ring_normals[0])
+    } else {
+        Vec::new()
+    };
     PreparedPolygon {
         ring_vecs_list,
         ring_normals,
         cap,
         reference,
         use_fast,
+        inside_refs,
     }
+}
+
+// How far the interior reference points sit from the ring edge, in radians.
+// Far above CROSSING_EPS so crossing tests against the edge stay well
+// conditioned, far below any cell size so they can't clip another edge.
+const INTERIOR_REF_OFFSET: f64 = 1e-7;
+const INTERIOR_REF_COUNT: usize = 3;
+
+/// Unit vector, scaled by the reciprocal length (same rounding as the
+/// TypeScript vec3.normalize).
+fn normalize(x: f64, y: f64, z: f64) -> Cartesian {
+    let mut len = x * x + y * y + z * z;
+    if len > 0.0 {
+        len = 1.0 / len.sqrt();
+    }
+    Cartesian::new(x * len, y * len, z * len)
+}
+
+/// Points just inside the midpoints of the outer ring's longest edges.
+///
+/// The winding-number test answers "is the point in the region that does not
+/// contain the point's own antipode", which is only containment when the
+/// polygon lies within a hemisphere. For larger polygons a crossing test is
+/// needed, and that needs a reference point whose containment is known. The
+/// interior side of each edge follows the ring's winding (`ring_winding_sign`),
+/// the same convention the boundary-cell filter uses. Several are kept in case
+/// a probe falls near-degenerately against one.
+fn interior_refs(ring: &[Cartesian], normals: &[Cartesian]) -> Vec<Cartesian> {
+    let side = ring_winding_sign(ring) as f64;
+    let n = ring.len();
+    let lengths: Vec<f64> = (0..n).map(|i| angle(ring[i], ring[(i + 1) % n])).collect();
+    // Longest first; sort_by is stable, so ties keep ring order
+    let mut edges: Vec<usize> = (0..n).collect();
+    edges.sort_by(|&a, &b| lengths[b].partial_cmp(&lengths[a]).unwrap());
+    let mut refs = Vec::with_capacity(INTERIOR_REF_COUNT);
+    for &i in edges.iter().take(INTERIOR_REF_COUNT) {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        let mid = normalize(a.x() + b.x(), a.y() + b.y(), a.z() + b.z());
+        // For a counter-clockwise ring, each edge's normal points to its interior side
+        let inward = normalize(normals[i].x(), normals[i].y(), normals[i].z());
+        let s = side * INTERIOR_REF_OFFSET;
+        refs.push(normalize(
+            mid.x() + inward.x() * s,
+            mid.y() + inward.y() * s,
+            mid.z() + inward.z() * s,
+        ));
+    }
+    refs
 }
 
 const CROSSING_EPS: f64 = 1e-14;
@@ -152,8 +211,7 @@ const CROSSING_EPS: f64 = 1e-14;
 /// free). Returns None on any near-degenerate sign (probe or a vertex on
 /// an arc plane) — the caller falls back to the winding test, which also keeps
 /// on-edge tie-breaking identical to the previous implementation.
-fn crossing_parity(p: Cartesian, prep: &PreparedPolygon) -> Option<bool> {
-    let r = prep.reference;
+fn crossing_parity(p: Cartesian, prep: &PreparedPolygon, r: Cartesian) -> Option<bool> {
     // normal of the probe->ref arc plane
     let abx = p.y() * r.z() - p.z() * r.y();
     let aby = p.z() * r.x() - p.x() * r.z();
@@ -205,8 +263,15 @@ pub fn point_in_prepared_polygon(p: Cartesian, prep: &PreparedPolygon) -> bool {
     if p.x() * cap.center.x() + p.y() * cap.center.y() + p.z() * cap.center.z() < cap.min_dot {
         return false;
     }
+    // Polygons reaching a hemisphere: crossing parity against a point known to
+    // be inside (even parity = same side = inside)
+    for inside_ref in &prep.inside_refs {
+        if let Some(result) = crossing_parity(p, prep, *inside_ref) {
+            return !result;
+        }
+    }
     if prep.use_fast {
-        if let Some(result) = crossing_parity(p, prep) {
+        if let Some(result) = crossing_parity(p, prep, prep.reference) {
             return result;
         }
     }
