@@ -9,8 +9,10 @@ use crate::core::cell::{cell_to_spherical, lonlat_to_cell, spherical_to_cell};
 use crate::core::compact::compact;
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_spherical};
 use crate::core::serialization::{
-    cell_to_children, cell_to_parent, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
+    cell_to_children, cell_to_parent, deserialize, serialize, FIRST_HILBERT_RESOLUTION,
+    MAX_RESOLUTION, WORLD_CELL,
 };
+use crate::core::utils::A5Cell;
 use crate::geometry::prepared_polygon::{
     point_in_prepared_polygon, prepare_polygon, PreparedPolygon,
 };
@@ -315,6 +317,59 @@ fn flood_interior(
     Ok(interior_cells)
 }
 
+/// Quintants the polygon swallows whole. The flood fill never crosses a
+/// quintant edge, so such a quintant gets no seeds from the boundary shell and
+/// would be left empty. A quintant holding none of the boundary or shell cells
+/// has none of the polygon's edge passing through it: its cells lie wholly
+/// inside or wholly outside, and a single probe cell decides which. Inside
+/// quintants are emitted as their resolution 1 cell (resolution 0 when that is
+/// the target), which `compact` merges with the rest of the output.
+fn swallowed_quintants(
+    boundary_cells: &[u64],
+    shell_cells: &[u64],
+    resolution: i32,
+    prep: &PreparedPolygon,
+) -> Result<Vec<u64>, String> {
+    // A swallowed quintant lies inside the polygon's bounding cap, so the cap
+    // must have at least a quintant's area (4π/60: cells are equal-area)
+    let pi = std::f64::consts::PI;
+    if 2.0 * pi * (1.0 - prep.cap.min_dot) < (4.0 * pi) / 60.0 {
+        return Ok(Vec::new());
+    }
+    let level = resolution.min(FIRST_HILBERT_RESOLUTION - 1);
+    let mut touched: HashSet<u64> = HashSet::new();
+    for cells in [boundary_cells, shell_cells] {
+        for &cell in cells {
+            touched.insert(if resolution == level {
+                cell
+            } else {
+                cell_to_parent(cell, Some(level))?
+            });
+        }
+    }
+
+    let mut out: Vec<u64> = Vec::new();
+    for quintant in cell_to_children(WORLD_CELL, Some(level))? {
+        if touched.contains(&quintant) {
+            continue;
+        }
+        // Any cell of the quintant at the target resolution will do
+        let probe = if resolution == level {
+            quintant
+        } else {
+            serialize(&A5Cell {
+                s: 0,
+                resolution,
+                ..deserialize(quintant)?
+            })?
+        };
+        if point_in_prepared_polygon(to_cartesian(cell_to_spherical(probe)?), prep) {
+            out.push(quintant);
+        }
+    }
+    Ok(out)
+}
+
 /// How a cell is judged to belong to the polygon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Containment {
@@ -425,8 +480,11 @@ pub fn polygon_to_cells(
 
     // Dense sampling can leave gaps; the shell catches them, classifying each cell.
     let shell_cells = expand_shell(&boundary_cells, &boundary_set);
+    let swallowed = swallowed_quintants(&boundary_cells, &shell_cells, resolution, &prep)?;
     if shell_cells.is_empty() {
-        return compact(&boundary_out);
+        let mut combined = boundary_out;
+        combined.extend(swallowed);
+        return compact(&combined);
     }
 
     let mut interior_seeds: Vec<u64> = Vec::new();
@@ -440,7 +498,9 @@ pub fn polygon_to_cells(
         }
     }
     if interior_seeds.is_empty() {
-        return compact(&boundary_out);
+        let mut combined = boundary_out;
+        combined.extend(swallowed);
+        return compact(&combined);
     }
 
     let interior_cells = flood_interior(
@@ -450,8 +510,10 @@ pub fn polygon_to_cells(
         resolution,
     )?;
 
-    let mut combined: Vec<u64> = Vec::with_capacity(boundary_out.len() + interior_cells.len());
+    let mut combined: Vec<u64> =
+        Vec::with_capacity(boundary_out.len() + interior_cells.len() + swallowed.len());
     combined.extend(boundary_out);
     combined.extend(interior_cells);
+    combined.extend(swallowed);
     compact(&combined)
 }
