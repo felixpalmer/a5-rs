@@ -9,8 +9,8 @@ use crate::core::cell::{cell_to_spherical, lonlat_to_cell, spherical_to_cell};
 use crate::core::compact::compact;
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_spherical};
 use crate::core::serialization::{
-    cell_to_children, cell_to_parent, deserialize, serialize, FIRST_HILBERT_RESOLUTION,
-    MAX_RESOLUTION, WORLD_CELL,
+    cell_to_children, cell_to_parent, deserialize, get_resolution, serialize,
+    FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 };
 use crate::core::utils::A5Cell;
 use crate::geometry::prepared_polygon::{
@@ -19,7 +19,10 @@ use crate::geometry::prepared_polygon::{
 use crate::geometry::spherical_polygon::ring_winding_sign;
 use crate::traversal::cap::estimate_cell_radius;
 use crate::traversal::lattice_flood_fill::{triple_space_flood_fill, FloodInput};
-use crate::traversal::lattice_neighbors::get_lattice_neighbors;
+use crate::traversal::triple_cells::{
+    cell_ids_to_triples, for_each_lattice_neighbor, triple_cell_center, triple_cell_key,
+    triple_cell_to_id,
+};
 use crate::utils::great_circle::sample_great_circle_arc;
 
 /// Maps each boundary cell to the indices of the ring segments that produced it.
@@ -162,78 +165,81 @@ fn filter_boundary_cells(
     Ok(out)
 }
 
-/// Buffer the boundary by one cell using 3-edge lattice neighbors. The shell
-/// matches the connectivity of `triple_space_flood_fill` so the firewall (boundary
-/// + exterior shell) is a tight topological barrier for the subsequent flood.
-fn expand_shell(boundary_cells: &[u64], boundary_set: &HashSet<u64>) -> Vec<u64> {
-    let mut shell_cells: Vec<u64> = Vec::new();
-    let mut shell_set: HashSet<u64> = HashSet::new();
-    for &cell in boundary_cells {
-        for neighbor in get_lattice_neighbors(cell) {
-            if boundary_set.contains(&neighbor) {
-                continue;
+/// Buffer the boundary by one cell using lattice neighbors, in triple space
+/// (cells as (origin_id, quintant, x, y, z)). The shell matches the
+/// connectivity of `triple_space_flood_fill` so the firewall (boundary + exterior
+/// shell) is a tight topological barrier for the subsequent flood.
+fn expand_shell(boundary: &[[i32; 5]], max_row: i32) -> Result<Vec<[i32; 5]>, String> {
+    let mut seen: HashSet<i64> = boundary.iter().map(|&c| triple_cell_key(c)).collect();
+    let mut shell: Vec<[i32; 5]> = Vec::new();
+    for &cell in boundary {
+        for_each_lattice_neighbor(cell, max_row, |n| {
+            if seen.insert(triple_cell_key(n)) {
+                shell.push(n);
             }
-            if shell_set.insert(neighbor) {
-                shell_cells.push(neighbor);
-            }
-        }
+            Ok(())
+        })?;
     }
-    shell_cells
+    Ok(shell)
 }
 
 /// Hierarchical flood fill from interior seed cells. Runs a few fine BFS layers
 /// to clear the boundary, then a coarse-resolution BFS through the bulk, then
 /// resumes fine BFS to fill gaps near the boundary. The coarse phase is skipped
 /// when the polygon is too small to amortize its setup overhead.
+///
+/// The seeds, boundary and exterior shell come in triple space (cells as
+/// (origin_id, quintant, x, y, z)); the boundary also as cell IDs.
 fn flood_interior(
-    interior_seeds: &[u64],
-    visited: &mut HashSet<u64>,
-    boundary_size: usize,
+    seeds: &[[i32; 5]],
+    boundary_cells: &[u64],
+    boundary: &[[i32; 5]],
+    exterior_shell: &[[i32; 5]],
     resolution: i32,
 ) -> Result<Vec<u64>, String> {
-    for &cell in interior_seeds {
-        visited.insert(cell);
-    }
+    let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
+    let seed_ids: Vec<u64> = seeds
+        .iter()
+        .map(|&c| triple_cell_to_id(c, hilbert_res, resolution))
+        .collect::<Result<_, _>>()?;
+    let firewall: Vec<[i32; 5]> = boundary.iter().chain(exterior_shell).copied().collect();
 
     // Isoperimetric bound: B² / (4π) is the max interior for B boundary cells.
-    let max_interior =
-        (boundary_size as f64) * (boundary_size as f64) / (4.0 * std::f64::consts::PI);
+    let boundary_size = boundary_cells.len() as f64;
+    let max_interior = boundary_size * boundary_size / (4.0 * std::f64::consts::PI);
     // res 30 has a different encoding the parent-emit optimization can't use.
     let use_coarse_phase = resolution > FIRST_HILBERT_RESOLUTION
         && resolution < MAX_RESOLUTION
         && max_interior > 1000.0;
 
     if !use_coarse_phase {
-        let result = triple_space_flood_fill(
-            FloodInput::Firewall(visited),
-            interior_seeds,
-            resolution,
-            None,
-        );
-        let mut out: Vec<u64> =
-            Vec::with_capacity(interior_seeds.len() + result.interior_cells.len());
-        out.extend_from_slice(interior_seeds);
+        let result =
+            triple_space_flood_fill(FloodInput::Firewall(&firewall), seeds, resolution, None)?;
+        let mut out = seed_ids;
         out.extend(result.interior_cells);
         return Ok(out);
     }
 
     let parent_res = resolution - 1;
     let mut coarse_firewall: HashSet<u64> = HashSet::new();
-    for &cell in visited.iter() {
+    for &cell in boundary_cells {
+        coarse_firewall.insert(cell_to_parent(cell, Some(parent_res))?);
+    }
+    for &cell in exterior_shell {
+        let cell_id = triple_cell_to_id(cell, hilbert_res, resolution)?;
+        coarse_firewall.insert(cell_to_parent(cell_id, Some(parent_res))?);
+    }
+    for &cell in &seed_ids {
         coarse_firewall.insert(cell_to_parent(cell, Some(parent_res))?);
     }
 
     // Phase 1: short fine BFS to move the frontier off the boundary.
-    let phase1 = triple_space_flood_fill(
-        FloodInput::Firewall(visited),
-        interior_seeds,
-        resolution,
-        Some(3),
-    );
+    let phase1 =
+        triple_space_flood_fill(FloodInput::Firewall(&firewall), seeds, resolution, Some(3))?;
 
     // Phase 2: coarse BFS through the bulk interior.
     let mut coarse_interior_set: Option<HashSet<u64>> = None;
-    let mut phase3_delta: Vec<u64> = Vec::new();
+    let mut phase3_delta: Vec<[i32; 5]> = Vec::new();
     let mut coarse_interior_cells: Vec<u64> = Vec::new();
     if !phase1.frontier_cell_ids.is_empty() {
         let mut coarse_seeds: HashSet<u64> = HashSet::new();
@@ -250,12 +256,16 @@ fn flood_interior(
                 coarse_visited.insert(seed);
             }
             let coarse_seed_vec: Vec<u64> = coarse_seeds.iter().copied().collect();
+            let mut coarse_firewall_cells: Vec<[i32; 5]> = Vec::new();
+            cell_ids_to_triples(coarse_visited, &mut coarse_firewall_cells)?;
+            let mut coarse_seed_cells: Vec<[i32; 5]> = Vec::new();
+            cell_ids_to_triples(coarse_seed_vec.iter().copied(), &mut coarse_seed_cells)?;
             let coarse_result = triple_space_flood_fill(
-                FloodInput::Firewall(&mut coarse_visited),
-                &coarse_seed_vec,
+                FloodInput::Firewall(&coarse_firewall_cells),
+                &coarse_seed_cells,
                 parent_res,
                 None,
-            );
+            )?;
             let mut coarse_interior: Vec<u64> =
                 Vec::with_capacity(coarse_seed_vec.len() + coarse_result.interior_cells.len());
             coarse_interior.extend(coarse_seed_vec);
@@ -270,12 +280,10 @@ fn flood_interior(
             // Children become firewall for phase 3; the coarse parent represents
             // them in the output, so we don't emit them individually.
             for coarse_cell in coarse_interior {
-                for child in cell_to_children(coarse_cell, Some(resolution))? {
-                    if !visited.contains(&child) {
-                        visited.insert(child);
-                        phase3_delta.push(child);
-                    }
-                }
+                cell_ids_to_triples(
+                    cell_to_children(coarse_cell, Some(resolution))?,
+                    &mut phase3_delta,
+                )?;
             }
         }
     }
@@ -283,11 +291,11 @@ fn flood_interior(
     // Emit fine cells only when not already covered by a coarse parent.
     let mut interior_cells: Vec<u64> = Vec::new();
     if coarse_interior_set.is_none() {
-        interior_cells.extend_from_slice(interior_seeds);
+        interior_cells.extend_from_slice(&seed_ids);
         interior_cells.extend(phase1.interior_cells.iter().copied());
     } else {
         let coarse_set = coarse_interior_set.as_ref().unwrap();
-        for &cell in interior_seeds {
+        for &cell in &seed_ids {
             let parent = cell_to_parent(cell, Some(parent_res))?;
             if !coarse_set.contains(&parent) {
                 interior_cells.push(cell);
@@ -302,16 +310,16 @@ fn flood_interior(
         interior_cells.extend(coarse_interior_cells);
     }
 
-    // Phase 3: resume fine BFS, reusing phase 1's packed state.
+    // Phase 3: resume fine BFS, reusing phase 1's state.
     let phase3 = triple_space_flood_fill(
         FloodInput::Reuse {
             state: phase1.state,
             delta: phase3_delta,
         },
-        &phase1.frontier_cell_ids,
+        &phase1.frontier,
         resolution,
         None,
-    );
+    )?;
     interior_cells.extend(phase3.interior_cells);
 
     Ok(interior_cells)
@@ -325,8 +333,8 @@ fn flood_interior(
 /// quintants are emitted as their resolution 1 cell (resolution 0 when that is
 /// the target), which `compact` merges with the rest of the output.
 fn swallowed_quintants(
-    boundary_cells: &[u64],
-    shell_cells: &[u64],
+    boundary: &[[i32; 5]],
+    shell: &[[i32; 5]],
     resolution: i32,
     prep: &PreparedPolygon,
 ) -> Result<Vec<u64>, String> {
@@ -336,35 +344,29 @@ fn swallowed_quintants(
     if 2.0 * pi * (1.0 - prep.cap.min_dot) < (4.0 * pi) / 60.0 {
         return Ok(Vec::new());
     }
-    let level = resolution.min(FIRST_HILBERT_RESOLUTION - 1);
-    let mut touched: HashSet<u64> = HashSet::new();
-    for cells in [boundary_cells, shell_cells] {
-        for &cell in cells {
-            touched.insert(if resolution == level {
-                cell
-            } else {
-                cell_to_parent(cell, Some(level))?
-            });
-        }
-    }
+    // Quintants by origin.id * 5 + quintant, as the triples carry them
+    let touched: HashSet<i32> = boundary
+        .iter()
+        .chain(shell)
+        .map(|c| c[0] * 5 + c[1])
+        .collect();
 
     let mut out: Vec<u64> = Vec::new();
-    for quintant in cell_to_children(WORLD_CELL, Some(level))? {
-        if touched.contains(&quintant) {
+    let quintant_cells = cell_to_children(WORLD_CELL, Some(FIRST_HILBERT_RESOLUTION - 1))?;
+    let mut quintants: Vec<[i32; 5]> = Vec::with_capacity(quintant_cells.len());
+    cell_ids_to_triples(quintant_cells.iter().copied(), &mut quintants)?;
+    for (&quintant_cell, q) in quintant_cells.iter().zip(&quintants) {
+        if touched.contains(&(q[0] * 5 + q[1])) {
             continue;
         }
         // Any cell of the quintant at the target resolution will do
-        let probe = if resolution == level {
-            quintant
-        } else {
-            serialize(&A5Cell {
-                s: 0,
-                resolution,
-                ..deserialize(quintant)?
-            })?
-        };
+        let probe = serialize(&A5Cell {
+            s: 0,
+            resolution,
+            ..deserialize(quintant_cell)?
+        })?;
         if point_in_prepared_polygon(to_cartesian(cell_to_spherical(probe)?), prep) {
-            out.push(quintant);
+            out.push(quintant_cell);
         }
     }
     Ok(out)
@@ -450,6 +452,17 @@ pub fn polygon_to_cells(
         segment_map,
     } = dense_sample_boundary(&rings, &ring_vecs_list, resolution)?;
 
+    // Res 30 covers only quintants 0-41 (elsewhere A5 answers at res 29, see
+    // serialize), so a polygon reaching past them is filled at res 29: mixing the
+    // two lattices would leave the fill without a consistent grid.
+    if resolution == MAX_RESOLUTION
+        && boundary_cells
+            .iter()
+            .any(|&cell| get_resolution(cell) != resolution)
+    {
+        return polygon_to_cells(polygon, resolution - 1, Some(options));
+    }
+
     // The boundary contribution to the output. In `Overlapping` mode every
     // densely-sampled boundary cell contains a point on the polygon boundary, so
     // it overlaps the polygon — keep them all, unfiltered. In `Center` mode we
@@ -478,35 +491,57 @@ pub fn polygon_to_cells(
         )?
     };
 
+    // Resolutions 0 and 1 have no lattice to flood (a quintant is a single
+    // cell): every cell off the boundary is in or out by its center, and there
+    // are at most 60 of them.
+    if resolution < FIRST_HILBERT_RESOLUTION {
+        let mut out = boundary_out;
+        for cell in cell_to_children(WORLD_CELL, Some(resolution))? {
+            if !boundary_set.contains(&cell)
+                && point_in_prepared_polygon(to_cartesian(cell_to_spherical(cell)?), &prep)
+            {
+                out.push(cell);
+            }
+        }
+        return compact(&out);
+    }
+
+    // The rest runs in triple space: cells as (origin_id, quintant, x, y, z)
+    let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
+    let max_row = (1i32 << hilbert_res) - 1;
+    let mut boundary: Vec<[i32; 5]> = Vec::with_capacity(boundary_cells.len());
+    cell_ids_to_triples(boundary_cells.iter().copied(), &mut boundary)?;
+
     // Dense sampling can leave gaps; the shell catches them, classifying each cell.
-    let shell_cells = expand_shell(&boundary_cells, &boundary_set);
-    let swallowed = swallowed_quintants(&boundary_cells, &shell_cells, resolution, &prep)?;
-    if shell_cells.is_empty() {
+    let shell = expand_shell(&boundary, max_row)?;
+    let swallowed = swallowed_quintants(&boundary, &shell, resolution, &prep)?;
+    if shell.is_empty() {
         let mut combined = boundary_out;
         combined.extend(swallowed);
         return compact(&combined);
     }
 
-    let mut interior_seeds: Vec<u64> = Vec::new();
-    let mut visited: HashSet<u64> = boundary_set.clone();
-    for cell in shell_cells {
-        let cv = to_cartesian(cell_to_spherical(cell)?);
-        if point_in_prepared_polygon(cv, &prep) {
-            interior_seeds.push(cell);
+    let mut seeds: Vec<[i32; 5]> = Vec::new();
+    let mut exterior_shell: Vec<[i32; 5]> = Vec::new(); // exterior shell (and hole interiors) join the firewall
+    for cell in shell {
+        let center = triple_cell_center(cell, hilbert_res, max_row)?;
+        if point_in_prepared_polygon(to_cartesian(center), &prep) {
+            seeds.push(cell);
         } else {
-            visited.insert(cell); // exterior shell (and hole interiors) join the firewall
+            exterior_shell.push(cell);
         }
     }
-    if interior_seeds.is_empty() {
+    if seeds.is_empty() {
         let mut combined = boundary_out;
         combined.extend(swallowed);
         return compact(&combined);
     }
 
     let interior_cells = flood_interior(
-        &interior_seeds,
-        &mut visited,
-        boundary_set.len(),
+        &seeds,
+        &boundary_cells,
+        &boundary,
+        &exterior_shell,
         resolution,
     )?;
 

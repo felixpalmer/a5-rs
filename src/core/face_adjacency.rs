@@ -22,3 +22,41 @@ pub const FACE_ADJACENCY: [[(u8, usize); 5]; 12] = [
     [(2, 4), (1, 4), (11, 4), (7, 4), (9, 3)],  // origin 10
     [(1, 3), (0, 4), (6, 4), (7, 0), (10, 2)],  // origin 11
 ];
+
+/// Breadth-first walk over the 12 dodecahedron faces (the resolution 0 cells),
+/// adjacent across their edges. Starts from `seeds`, which are always expanded;
+/// every other face is visited once and expanded only if `expand(face)` is true.
+/// Stops after `max_rings` rings.
+///
+/// Returns every face reached, seeds first.
+pub fn walk_faces(
+    seeds: &[u8],
+    mut expand: impl FnMut(u8) -> Result<bool, String>,
+    max_rings: usize,
+) -> Result<Vec<u8>, String> {
+    let mut reached: Vec<u8> = Vec::with_capacity(12);
+    for &seed in seeds {
+        if !reached.contains(&seed) {
+            reached.push(seed);
+        }
+    }
+    let mut frontier = reached.clone();
+    let mut ring = 0;
+    while ring < max_rings && !frontier.is_empty() {
+        let mut next: Vec<u8> = Vec::new();
+        for &id in &frontier {
+            for &(face, _) in &FACE_ADJACENCY[id as usize] {
+                if reached.contains(&face) {
+                    continue;
+                }
+                reached.push(face);
+                if expand(face)? {
+                    next.push(face);
+                }
+            }
+        }
+        frontier = next;
+        ring += 1;
+    }
+    Ok(reached)
+}

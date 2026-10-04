@@ -5,13 +5,11 @@
 use std::collections::HashSet;
 
 use crate::core::compact::compact;
-use crate::core::face_adjacency::FACE_ADJACENCY;
-use crate::core::origin::{get_origins, segment_to_quintant};
+use crate::core::face_adjacency::walk_faces;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::A5Cell;
-use crate::lattice::s_to_triple;
 use crate::traversal::triple_cells::{
-    for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
+    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
 };
 
 /// One BFS ring: its dedup keys, and its cells as flat (origin_id, quintant, x, y, z).
@@ -47,35 +45,6 @@ fn push_cell_ids(
     Ok(())
 }
 
-/// Resolution 0: the cells are the 12 dodecahedron faces, adjacent across their edges.
-fn grid_disk_faces(origin_id: u8, k: usize) -> Result<Vec<u64>, String> {
-    let mut disk: Vec<u8> = vec![origin_id];
-    let mut ring = 0;
-    while ring < k && disk.len() < 12 {
-        for i in 0..disk.len() {
-            for q in 0..5 {
-                let face = FACE_ADJACENCY[disk[i] as usize][q].0;
-                if !disk.contains(&face) {
-                    disk.push(face);
-                }
-            }
-        }
-        ring += 1;
-    }
-    let cells = disk
-        .iter()
-        .map(|&id| {
-            serialize(&A5Cell {
-                origin_id: id,
-                segment: 0,
-                s: 0,
-                resolution: 0,
-            })
-        })
-        .collect::<Result<Vec<u64>, String>>()?;
-    compact(&cells)
-}
-
 /// BFS grid disk in triple space, with progressive compaction.
 ///
 /// Neighbors come from the per-flavor triple deltas, plus the boundary delta
@@ -92,25 +61,31 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
     }
     let cell = deserialize(cell_id)?;
     if cell.resolution == 0 {
-        return grid_disk_faces(cell.origin_id, k);
+        // The cells are the 12 dodecahedron faces
+        let faces = walk_faces(&[cell.origin_id], |_| Ok(true), k)?;
+        let cells = faces
+            .into_iter()
+            .map(|face| {
+                serialize(&A5Cell {
+                    origin_id: face,
+                    segment: 0,
+                    s: 0,
+                    resolution: 0,
+                })
+            })
+            .collect::<Result<Vec<u64>, String>>()?;
+        return compact(&cells);
     }
-    let origins = get_origins();
-    let origin = &origins[cell.origin_id as usize];
     let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
     let max_row = (1i32 << hilbert_res) - 1;
-    let (quintant, orientation) = segment_to_quintant(cell.segment, origin);
-    let seed = s_to_triple(cell.s, hilbert_res, orientation);
+    let mut seed: Vec<[i32; 5]> = Vec::with_capacity(1);
+    cell_ids_to_triples([cell_id], &mut seed)?;
 
     // The seed is `cell_id` already, so it goes straight to the output
     let mut interior: Vec<u64> = vec![cell_id];
     let mut prev_frontier = Ring::default();
     let mut frontier = Ring::default();
-    add_cell(
-        &mut frontier,
-        &Ring::default(),
-        &Ring::default(),
-        [origin.id as i32, quintant as i32, seed.x, seed.y, seed.z],
-    );
+    add_cell(&mut frontier, &Ring::default(), &Ring::default(), seed[0]);
 
     for ring in 1..=k {
         let mut next_frontier = Ring::default();
