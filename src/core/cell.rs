@@ -18,7 +18,7 @@ use crate::core::tiling::{
     get_quintant_polar,
 };
 use crate::core::utils::{A5Cell, Origin, OriginId};
-use crate::geometry::pentagon::PentagonShape;
+use crate::geometry::pentagon::{Pentagon, PentagonShape};
 use crate::lattice::curve::round_to_triple;
 use crate::lattice::{s_to_cell, triple_flavor, triple_in_bounds, triple_to_s, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
@@ -44,9 +44,10 @@ thread_local! {
 }
 
 /// A cell's pentagon and origin, as `spherical_to_cell` built them.
+#[derive(Clone, Copy)]
 pub struct CellShape {
     pub origin_id: OriginId,
-    pub pentagon: PentagonShape,
+    pub pentagon: Pentagon,
 }
 
 /// The pentagon and origin of `cell_id` when it is the cell the most recent
@@ -59,7 +60,7 @@ pub fn last_cell_shape(cell_id: u64) -> Option<CellShape> {
             .filter(|l| l.cell_id == cell_id)
             .map(|l| CellShape {
                 origin_id: l.origin_id,
-                pentagon: l.pentagon.clone(),
+                pentagon: l.pentagon.get_vertices(),
             })
     })
 }

@@ -14,6 +14,7 @@ use crate::core::face_adjacency::walk_faces;
 use crate::core::origin::get_origins;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::tiling::get_pentagon_vertices;
+use crate::geometry::pentagon::clip_segment;
 use crate::core::utils::A5Cell;
 use crate::lattice::{triple_flavor, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
@@ -176,13 +177,15 @@ pub fn trace_path(
     }
     let point_end = |i: usize| SubsegmentEnd {
         point: point_spherical[i],
-        shape: point_ends[i].0.as_ref().map(|s| CellShape {
-            origin_id: s.origin_id,
-            pentagon: s.pentagon.clone(),
-        }),
+        shape: point_ends[i].0,
         face: point_ends[i].1,
     };
 
+    let mut sub = Subsegment {
+        a: point_end(0),
+        b: point_end(0),
+        faces: vec![None; origins.len()],
+    };
     let arcs = if closed { n } else { n - 1 };
     for arc in 0..arcs {
         let end = (arc + 1) % n;
@@ -191,15 +194,8 @@ pub fn trace_path(
         let last = interior.len() + 1;
 
         let mut cell_a = point_cells[arc];
-        let mut sub = Subsegment {
-            a: SubsegmentEnd {
-                point: point_spherical[arc],
-                shape: None,
-                face: None,
-            },
-            b: point_end(arc),
-            faces: vec![None; origins.len()],
-        };
+        // The first step moves this end to `a`
+        sub.b = point_end(arc);
         visit(cell_a, arc);
         // Walk pairwise. Each (P_j, P_{j+1}) sub-segment is short enough that its
         // projection onto any nearby cell's Face is essentially straight, so we
@@ -210,16 +206,7 @@ pub fn trace_path(
             } else {
                 let point = to_spherical(interior[j - 1]);
                 let cell = spherical_to_cell(point, resolution)?;
-                // Still in A's cell: keep its shape rather than copy it again
-                let (shape, face) = if cell == cell_a && sub.b.shape.is_some() {
-                    let shape = sub.b.shape.take();
-                    let face = shape
-                        .as_ref()
-                        .and_then(|s| last_projection(point, s.origin_id));
-                    (shape, face)
-                } else {
-                    capture(cell, point)
-                };
+                let (shape, face) = capture(cell, point);
                 (cell, SubsegmentEnd { point, shape, face })
             };
             sub.a = std::mem::replace(&mut sub.b, next_b);
@@ -267,35 +254,16 @@ fn settle(
     arc: usize,
     visit: &mut impl FnMut(u64, usize),
 ) -> Result<bool, String> {
-    let (Some(shape_a), Some(shape_b)) = (sub.a.shape.take(), sub.b.shape.take()) else {
+    let (Some(shape_a), Some(shape_b)) = (sub.a.shape, sub.b.shape) else {
         return Ok(false);
     };
-    let settled = settle_shapes(
-        sub, &shape_a, cell_a, &shape_b, cell_b, resolution, arc, visit,
-    );
-    sub.a.shape = Some(shape_a);
-    sub.b.shape = Some(shape_b);
-    settled
-}
-
-#[allow(clippy::too_many_arguments)]
-fn settle_shapes(
-    sub: &mut Subsegment,
-    shape_a: &CellShape,
-    cell_a: u64,
-    shape_b: &CellShape,
-    cell_b: u64,
-    resolution: i32,
-    arc: usize,
-    visit: &mut impl FnMut(u64, usize),
-) -> Result<bool, String> {
     let origin_id = shape_a.origin_id;
     if shape_b.origin_id != origin_id {
         return Ok(false);
     }
     let (fa, fb) = sub.project(origin_id)?;
-    let in_a = shape_a.pentagon.clip_segment(fa, fb);
-    let in_b = shape_b.pentagon.clip_segment(fa, fb);
+    let in_a = clip_segment(&shape_a.pentagon, fa, fb);
+    let in_b = clip_segment(&shape_b.pentagon, fa, fb);
     if hands_over(&[in_a, in_b]) {
         return Ok(true);
     }
@@ -322,7 +290,7 @@ fn settle_shapes(
     if shape_c.origin_id != origin_id || cell_c == cell_a || cell_c == cell_b {
         return Ok(false);
     }
-    if !hands_over(&[in_a, shape_c.pentagon.clip_segment(fa, fb), in_b]) {
+    if !hands_over(&[in_a, clip_segment(&shape_c.pentagon, fa, fb), in_b]) {
         return Ok(false);
     }
     visit(cell_c, arc);

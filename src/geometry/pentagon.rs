@@ -38,6 +38,50 @@ fn segments_2d_intersect(p1: Face, p2: Face, p3: Face, p4: Face) -> bool {
     (0.0..=1.0).contains(&t) && u > VERTEX_MARGIN && u < 1.0 - VERTEX_MARGIN
 }
 
+/// `PentagonShape::clip_segment` for a convex polygon given by its vertices
+/// (counter-clockwise), so callers holding a plain vertex array need no shape.
+pub fn clip_segment(vertices: &[Face], a: Face, b: Face) -> Option<(f64, f64, f64)> {
+    let n = vertices.len();
+    let sx = b.x() - a.x();
+    let sy = b.y() - a.y();
+    let mut start = f64::NEG_INFINITY;
+    let mut end = f64::INFINITY;
+    let mut exit_edge = usize::MAX;
+    for i in 0..n {
+        let v1 = vertices[i];
+        let v2 = vertices[(i + 1) % n];
+        // Inside the edge where (v1 - v2) × (p - v1) >= 0, along p = a + t·(b - a)
+        let ex = v1.x() - v2.x();
+        let ey = v1.y() - v2.y();
+        let f = ex * (a.y() - v1.y()) - ey * (a.x() - v1.x());
+        let g = ex * sy - ey * sx;
+        if g == 0.0 {
+            if f < 0.0 {
+                return None;
+            }
+        } else if g > 0.0 {
+            start = start.max(-f / g);
+        } else {
+            let t = -f / g;
+            if t < end {
+                end = t;
+                exit_edge = i;
+            }
+        }
+    }
+    if start > end || exit_edge == usize::MAX {
+        return None;
+    }
+    // Where the exit point falls along the exit edge, from its first vertex
+    let v1 = vertices[exit_edge];
+    let v2 = vertices[(exit_edge + 1) % n];
+    let px = a.x() + end * sx - v1.x();
+    let py = a.y() + end * sy - v1.y();
+    let ex = v2.x() - v1.x();
+    let ey = v2.y() - v1.y();
+    Some((start, end, (px * ex + py * ey) / (ex * ex + ey * ey)))
+}
+
 #[derive(Debug, Clone)]
 pub struct PentagonShape {
     vertices: Vec<Face>,
@@ -187,45 +231,7 @@ impl PentagonShape {
     /// edge it leaves through (0..1 from the edge's first vertex); `None` when the
     /// line misses the pentagon. Uses the same edge sides as `contains_point`.
     pub fn clip_segment(&self, a: Face, b: Face) -> Option<(f64, f64, f64)> {
-        let n = self.vertices.len();
-        let sx = b.x() - a.x();
-        let sy = b.y() - a.y();
-        let mut start = f64::NEG_INFINITY;
-        let mut end = f64::INFINITY;
-        let mut exit_edge = usize::MAX;
-        for i in 0..n {
-            let v1 = self.vertices[i];
-            let v2 = self.vertices[(i + 1) % n];
-            // Inside the edge where (v1 - v2) × (p - v1) >= 0, along p = a + t·(b - a)
-            let ex = v1.x() - v2.x();
-            let ey = v1.y() - v2.y();
-            let f = ex * (a.y() - v1.y()) - ey * (a.x() - v1.x());
-            let g = ex * sy - ey * sx;
-            if g == 0.0 {
-                if f < 0.0 {
-                    return None;
-                }
-            } else if g > 0.0 {
-                start = start.max(-f / g);
-            } else {
-                let t = -f / g;
-                if t < end {
-                    end = t;
-                    exit_edge = i;
-                }
-            }
-        }
-        if start > end || exit_edge == usize::MAX {
-            return None;
-        }
-        // Where the exit point falls along the exit edge, from its first vertex
-        let v1 = self.vertices[exit_edge];
-        let v2 = self.vertices[(exit_edge + 1) % n];
-        let px = a.x() + end * sx - v1.x();
-        let py = a.y() + end * sy - v1.y();
-        let ex = v2.x() - v1.x();
-        let ey = v2.y() - v1.y();
-        Some((start, end, (px * ex + py * ey) / (ex * ex + ey * ey)))
+        clip_segment(&self.vertices, a, b)
     }
 
     /// Tests whether a 2D segment intersects this pentagon.
