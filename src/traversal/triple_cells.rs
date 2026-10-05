@@ -212,6 +212,9 @@ pub fn triple_children(cell: [i32; 5], max_row: i32, out: &mut Vec<[i32; 5]>) {
 /// parent's). The child's coordinates mod 2 fix child − 2·parent, but for two
 /// classes, where the two candidate parents differ in flavor — and so, sharing
 /// x and z, in apex colour (see `triple_flavor`).
+///
+/// Not used by the library: kept for completeness, as the inverse of
+/// `triple_children`, for traversals that coarsen in triple space.
 pub fn triple_parent(cell: [i32; 5], parent_max_row: i32) -> [i32; 5] {
     let [origin_id, quintant, x, y, z] = cell;
     let dx = -(x & 1);
