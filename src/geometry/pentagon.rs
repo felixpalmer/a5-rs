@@ -7,15 +7,22 @@ use crate::coordinate_systems::Face;
 pub type Pentagon = [Face; 5];
 pub type Triangle = [Face; 3];
 
+/// How close (as a fraction of its length) to either end of the p3→p4 segment
+/// a crossing counts as touching only that endpoint
+const VERTEX_MARGIN: f64 = 1e-9;
+
 /// 2D segment-vs-segment intersection test.
-/// Returns true iff the closed segments p1→p2 and p3→p4 share at least one point.
+/// Returns true iff the closed segment p1→p2 crosses p3→p4 away from p3 and p4.
 fn segments_2d_intersect(p1: Face, p2: Face, p3: Face, p4: Face) -> bool {
     let d1x = p2.x() - p1.x();
     let d1y = p2.y() - p1.y();
     let d2x = p4.x() - p3.x();
     let d2y = p4.y() - p3.y();
     let denom = d1x * d2y - d1y * d2x;
-    if denom.abs() < 1e-12 {
+    // Parallel (or degenerate) when the sine of the angle between them is ~0.
+    // Relative to the segment lengths: an absolute threshold swallows every
+    // crossing once cells are small (res 20+, where |d1|·|d2| < 1e-12).
+    if denom * denom <= 1e-24 * (d1x * d1x + d1y * d1y) * (d2x * d2x + d2y * d2y) {
         return false;
     }
 
@@ -23,7 +30,56 @@ fn segments_2d_intersect(p1: Face, p2: Face, p3: Face, p4: Face) -> bool {
     let dy = p3.y() - p1.y();
     let t = (dx * d2y - dy * d2x) / denom;
     let u = (dx * d1y - dy * d1x) / denom;
-    (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u)
+    // A crossing within float noise of p3 or p4 (a pentagon vertex, as
+    // `intersects_segment` passes them) only grazes the corner: no shared area,
+    // and which side of the vertex it falls on is a last-bit decision that
+    // differs between languages. A segment that truly enters through a corner
+    // also crosses another edge or ends inside, so it is still found.
+    (0.0..=1.0).contains(&t) && u > VERTEX_MARGIN && u < 1.0 - VERTEX_MARGIN
+}
+
+/// `PentagonShape::clip_segment` for a convex polygon given by its vertices
+/// (counter-clockwise), so callers holding a plain vertex array need no shape.
+pub fn clip_segment(vertices: &[Face], a: Face, b: Face) -> Option<(f64, f64, f64)> {
+    let n = vertices.len();
+    let sx = b.x() - a.x();
+    let sy = b.y() - a.y();
+    let mut start = f64::NEG_INFINITY;
+    let mut end = f64::INFINITY;
+    let mut exit_edge = usize::MAX;
+    for i in 0..n {
+        let v1 = vertices[i];
+        let v2 = vertices[(i + 1) % n];
+        // Inside the edge where (v1 - v2) × (p - v1) >= 0, along p = a + t·(b - a)
+        let ex = v1.x() - v2.x();
+        let ey = v1.y() - v2.y();
+        let f = ex * (a.y() - v1.y()) - ey * (a.x() - v1.x());
+        let g = ex * sy - ey * sx;
+        if g == 0.0 {
+            if f < 0.0 {
+                return None;
+            }
+        } else if g > 0.0 {
+            start = start.max(-f / g);
+        } else {
+            let t = -f / g;
+            if t < end {
+                end = t;
+                exit_edge = i;
+            }
+        }
+    }
+    if start > end || exit_edge == usize::MAX {
+        return None;
+    }
+    // Where the exit point falls along the exit edge, from its first vertex
+    let v1 = vertices[exit_edge];
+    let v2 = vertices[(exit_edge + 1) % n];
+    let px = a.x() + end * sx - v1.x();
+    let py = a.y() + end * sy - v1.y();
+    let ex = v2.x() - v1.x();
+    let ey = v2.y() - v1.y();
+    Some((start, end, (px * ex + py * ey) / (ex * ex + ey * ey)))
 }
 
 #[derive(Debug, Clone)]
@@ -168,6 +224,14 @@ impl PentagonShape {
         }
 
         d_max
+    }
+
+    /// The part of the segment a→b inside this (convex) pentagon, as parameters
+    /// `(start, end)` along the segment's line, start ≤ end, with where along the
+    /// edge it leaves through (0..1 from the edge's first vertex); `None` when the
+    /// line misses the pentagon. Uses the same edge sides as `contains_point`.
+    pub fn clip_segment(&self, a: Face, b: Face) -> Option<(f64, f64, f64)> {
+        clip_segment(&self.vertices, a, b)
     }
 
     /// Tests whether a 2D segment intersects this pentagon.

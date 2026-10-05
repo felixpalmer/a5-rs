@@ -26,6 +26,20 @@ fn bench_polygon(c: &mut Criterion) {
                 black_box(a5::polygon_to_cells(black_box(&polygon), resolution, None).unwrap())
             })
         });
+        // The same polygon with containment overlapping, which traces the boundary exactly
+        let overlapping = Some(a5::PolygonToCellsOptions {
+            containment: a5::Containment::Overlapping,
+        });
+        g.bench_function(
+            format!("polygonToCells overlapping {name} res {resolution}"),
+            |b| {
+                b.iter(|| {
+                    black_box(
+                        a5::polygon_to_cells(black_box(&polygon), resolution, overlapping).unwrap(),
+                    )
+                })
+            },
+        );
     }
     g.finish();
 }
