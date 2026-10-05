@@ -208,6 +208,8 @@ pub fn serialize(cell: &A5Cell) -> Result<u64, String> {
     Ok(index)
 }
 
+/// The children of a cell at `child_resolution` (default: the next resolution),
+/// in ascending ID order.
 pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec<u64>, String> {
     let cell = deserialize(index)?;
     let A5Cell {
@@ -238,15 +240,12 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
     }
 
     let mut new_origin_ids = vec![origin_id];
-    let mut new_segments = vec![segment];
 
     if current_resolution == -1 {
         new_origin_ids = (0..12).collect();
     }
 
-    if (current_resolution == -1 && new_resolution > 0) || current_resolution == 0 {
-        new_segments = vec![0, 1, 2, 3, 4];
-    }
+    let all_segments = (current_resolution == -1 && new_resolution > 0) || current_resolution == 0;
 
     let resolution_diff =
         new_resolution - std::cmp::max(current_resolution, FIRST_HILBERT_RESOLUTION - 1);
@@ -265,7 +264,15 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
         s
     };
 
+    let origins = get_origins();
     for &new_origin_id in &new_origin_ids {
+        // An origin's quintants in ID order: the n-th is segment (n + first_quintant) % 5
+        let first_quintant = origins[new_origin_id as usize].first_quintant;
+        let new_segments: Vec<usize> = if all_segments {
+            (0..5).map(|n| (n + first_quintant) % 5).collect()
+        } else {
+            vec![segment]
+        };
         for &new_segment in &new_segments {
             for i in 0..children_count {
                 let new_s = shifted_s + i as u64;

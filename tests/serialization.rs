@@ -1,7 +1,7 @@
 use a5::core::origin::get_origins;
 use a5::core::serialization::{
     cell_to_children, cell_to_parent, deserialize, get_res0_cells, get_resolution, get_stride,
-    is_child_of, is_first_child, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
+    is_child_of, is_first_child, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 };
 use a5::core::utils::A5Cell;
 use serde_json::Value;
@@ -248,6 +248,19 @@ fn test_cell_to_parent_with_same_resolution_returns_original_cell() {
         let current_resolution = get_resolution(cell);
         let parent = cell_to_parent(cell, Some(current_resolution)).unwrap();
         assert_eq!(parent, cell);
+    }
+}
+
+#[test]
+fn test_cell_to_children_ascending_id_order() {
+    let ascending = |cells: &[u64]| cells.windows(2).all(|w| w[0] < w[1]);
+    for res in [0, 1, 2] {
+        assert!(ascending(&cell_to_children(WORLD_CELL, Some(res)).unwrap()));
+    }
+    for cell in get_res0_cells().unwrap() {
+        for res in [1, 2, 3] {
+            assert!(ascending(&cell_to_children(cell, Some(res)).unwrap()));
+        }
     }
 }
 
