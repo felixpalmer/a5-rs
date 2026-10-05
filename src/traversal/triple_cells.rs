@@ -189,19 +189,6 @@ fn visit_boundary(
     Ok(())
 }
 
-/// Encode cells given in triple space (all at one resolution), appending their IDs to `out`.
-pub fn triple_cells_to_ids(
-    cells: &[[i32; 5]],
-    hilbert_res: usize,
-    resolution: i32,
-    out: &mut Vec<u64>,
-) -> Result<(), String> {
-    for &cell in cells {
-        out.push(triple_cell_to_id(cell, hilbert_res, resolution)?);
-    }
-    Ok(())
-}
-
 /// The cell hierarchy in triple space. A cell's 4 children are 2·triple + the
 /// offsets for its flavor (each level of A5 refines the square grid R of
 /// g o^r D into 4); only their curve order depends on the orientation.
