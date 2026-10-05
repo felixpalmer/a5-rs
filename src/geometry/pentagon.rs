@@ -7,15 +7,22 @@ use crate::coordinate_systems::Face;
 pub type Pentagon = [Face; 5];
 pub type Triangle = [Face; 3];
 
+/// How close (as a fraction of its length) to either end of the p3→p4 segment
+/// a crossing counts as touching only that endpoint
+const VERTEX_MARGIN: f64 = 1e-9;
+
 /// 2D segment-vs-segment intersection test.
-/// Returns true iff the closed segments p1→p2 and p3→p4 share at least one point.
+/// Returns true iff the closed segment p1→p2 crosses p3→p4 away from p3 and p4.
 fn segments_2d_intersect(p1: Face, p2: Face, p3: Face, p4: Face) -> bool {
     let d1x = p2.x() - p1.x();
     let d1y = p2.y() - p1.y();
     let d2x = p4.x() - p3.x();
     let d2y = p4.y() - p3.y();
     let denom = d1x * d2y - d1y * d2x;
-    if denom.abs() < 1e-12 {
+    // Parallel (or degenerate) when the sine of the angle between them is ~0.
+    // Relative to the segment lengths: an absolute threshold swallows every
+    // crossing once cells are small (res 20+, where |d1|·|d2| < 1e-12).
+    if denom * denom <= 1e-24 * (d1x * d1x + d1y * d1y) * (d2x * d2x + d2y * d2y) {
         return false;
     }
 
@@ -23,7 +30,12 @@ fn segments_2d_intersect(p1: Face, p2: Face, p3: Face, p4: Face) -> bool {
     let dy = p3.y() - p1.y();
     let t = (dx * d2y - dy * d2x) / denom;
     let u = (dx * d1y - dy * d1x) / denom;
-    (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u)
+    // A crossing within float noise of p3 or p4 (a pentagon vertex, as
+    // `intersects_segment` passes them) only grazes the corner: no shared area,
+    // and which side of the vertex it falls on is a last-bit decision that
+    // differs between languages. A segment that truly enters through a corner
+    // also crosses another edge or ends inside, so it is still found.
+    (0.0..=1.0).contains(&t) && u > VERTEX_MARGIN && u < 1.0 - VERTEX_MARGIN
 }
 
 #[derive(Debug, Clone)]

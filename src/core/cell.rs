@@ -39,6 +39,38 @@ struct LastResult {
 
 thread_local! {
     static LAST_RESULT: RefCell<Option<LastResult>> = const { RefCell::new(None) };
+    // The most recent point spherical_to_cell projected onto a face, and where it landed
+    static LAST_POINT: RefCell<Option<(Spherical, OriginId, Face)>> = const { RefCell::new(None) };
+}
+
+/// A cell's pentagon and origin, as `spherical_to_cell` built them.
+pub struct CellShape {
+    pub origin_id: OriginId,
+    pub pentagon: PentagonShape,
+}
+
+/// The pentagon and origin of `cell_id` when it is the cell the most recent
+/// `spherical_to_cell` call (on this thread) returned, else `None`: lets
+/// dense-sample loops reuse the geometry that lookup already built.
+pub fn last_cell_shape(cell_id: u64) -> Option<CellShape> {
+    LAST_RESULT.with(|c| {
+        c.borrow()
+            .as_ref()
+            .filter(|l| l.cell_id == cell_id)
+            .map(|l| CellShape {
+                origin_id: l.origin_id,
+                pentagon: l.pentagon.clone(),
+            })
+    })
+}
+
+/// Where `spherical` lands on `origin_id`'s face, when the most recent
+/// `spherical_to_cell` call (on this thread) already projected it there.
+pub fn last_projection(spherical: Spherical, origin_id: OriginId) -> Option<Face> {
+    LAST_POINT.with(|c| match *c.borrow() {
+        Some((point, origin, face)) if point == spherical && origin == origin_id => Some(face),
+        _ => None,
+    })
 }
 
 /// Convert lon/lat coordinates to A5 cell ID
@@ -82,6 +114,7 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
         };
         let dodecahedron = DodecahedronProjection::get_thread_local();
         let projected = dodecahedron.forward(spherical, last.origin_id)?;
+        LAST_POINT.with(|p| *p.borrow_mut() = Some((spherical, last.origin_id, projected)));
         if last.pentagon.contains_point(projected) > 0.0 {
             Ok(Some(last.cell_id))
         } else {
@@ -101,6 +134,7 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
     let origin = find_nearest_origin(spherical);
     let dodecahedron = DodecahedronProjection::get_thread_local();
     let dodec_point = dodecahedron.forward(spherical, origin.id)?;
+    LAST_POINT.with(|p| *p.borrow_mut() = Some((spherical, origin.id, dodec_point)));
     let quintant = get_quintant_polar(to_polar(dodec_point));
     let best = lookup_in_quintant(dodec_point, origin, quintant, resolution)?;
     if let Some(candidate) = &best {

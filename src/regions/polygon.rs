@@ -89,7 +89,11 @@ pub fn polygon_to_cells(
     }
 
     let prep = prepare_polygon(ring_vecs_list.clone());
-    let sampled = sample_boundary(&rings, &ring_vecs_list, resolution)?;
+    // `Overlapping` output is the boundary itself, so it needs every cell the
+    // boundary touches; `Center` only needs a boundary the fill can't step past
+    // (the curve runs' ring covers any cell the sampling skips).
+    let overlapping = options.containment == Containment::Overlapping;
+    let sampled = sample_boundary(&rings, resolution, overlapping)?;
 
     // Res 30 covers only quintants 0-41 (elsewhere A5 answers at res 29, see
     // serialize), so a polygon reaching past them is filled at res 29: mixing the
@@ -104,7 +108,6 @@ pub fn polygon_to_cells(
     }
 
     let boundary = classify_boundary(sampled, &ring_vecs_list, &prep)?;
-    let overlapping = options.containment == Containment::Overlapping;
 
     // Resolutions 0 and 1 have no lattice (a quintant is a single cell): every
     // cell off the boundary is in or out by its center, and there are at most 60

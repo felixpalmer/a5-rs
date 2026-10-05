@@ -9,13 +9,12 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::coordinate_systems::{Cartesian, LonLat};
-use crate::core::cell::{cell_to_spherical, lonlat_to_cell, spherical_to_cell};
-use crate::core::coordinate_transforms::{to_cartesian, to_spherical};
+use crate::core::cell::cell_to_spherical;
+use crate::core::coordinate_transforms::to_cartesian;
 use crate::geometry::prepared_polygon::{point_in_prepared_polygon, PreparedPolygon};
 use crate::geometry::spherical_polygon::{ring_winding_sign, spherical_triangle_area};
-use crate::traversal::cap::estimate_cell_radius;
+use crate::traversal::line::trace_path;
 use crate::traversal::triple_cells::triple_cell_key;
-use crate::utils::great_circle::sample_great_circle_arc;
 
 /// Maps each boundary cell to the indices of the ring segments that produced it.
 /// Segment indices are global across rings (outer ring first, then holes).
@@ -52,56 +51,40 @@ pub(super) struct Boundary<'a> {
     pub prep: &'a PreparedPolygon,
 }
 
-/// Dense-sample boundary cells along every closed ring (outer + holes) at
-/// `cell_radius * 0.4` spacing, calling `spherical_to_cell` per sample.
+/// The boundary cells, each recorded with the ring segments (outer ring and
+/// holes) that reached it: with `exact`, every cell a segment touches; without,
+/// the cells holding samples along the segments at half-cell-radius spacing,
+/// which can miss a cell whose corner a segment clips between samples.
 pub(super) fn sample_boundary(
     rings: &[&[LonLat]],
-    ring_vecs_list: &[Vec<Cartesian>],
     resolution: i32,
+    exact: bool,
 ) -> Result<SampledBoundary, String> {
     let mut sampled = SampledBoundary {
         cells: Vec::new(),
         set: HashSet::new(),
         segment_map: HashMap::new(),
     };
-    let cell_radius = estimate_cell_radius(resolution);
-    let sample_interval = cell_radius * 0.4;
-
-    let record_cell = |sampled: &mut SampledBoundary, cell: u64, seg_idx: usize| {
-        if sampled.set.insert(cell) {
-            sampled.cells.push(cell);
-        }
-        let entry = sampled.segment_map.entry(cell).or_default();
-        if entry.last() != Some(&seg_idx) {
-            entry.push(seg_idx);
-        }
-    };
-
     let mut seg_offset = 0;
-    for (r, ring) in rings.iter().enumerate() {
-        let ring_vecs = &ring_vecs_list[r];
-        let n = ring.len();
-
-        let mut vertex_cells: Vec<u64> = Vec::with_capacity(n);
-        for v in ring.iter() {
-            vertex_cells.push(lonlat_to_cell(*v, resolution)?);
-        }
-
-        for i in 0..n {
-            let next_i = (i + 1) % n;
-            record_cell(&mut sampled, vertex_cells[i], seg_offset + i);
-
-            // Skip the lonLat round-trip: samples are authalic-Cartesian already.
-            let samples = sample_great_circle_arc(ring_vecs[i], ring_vecs[next_i], sample_interval);
-            for s in samples {
-                let cell = spherical_to_cell(to_spherical(s), resolution)?;
-                record_cell(&mut sampled, cell, seg_offset + i);
-            }
-            record_cell(&mut sampled, vertex_cells[next_i], seg_offset + i);
-        }
-        seg_offset += n;
+    for ring in rings {
+        trace_path(
+            ring,
+            true,
+            resolution,
+            |cell, arc| {
+                let seg_idx = seg_offset + arc;
+                if sampled.set.insert(cell) {
+                    sampled.cells.push(cell);
+                }
+                let entry = sampled.segment_map.entry(cell).or_default();
+                if entry.last() != Some(&seg_idx) {
+                    entry.push(seg_idx);
+                }
+            },
+            exact,
+        )?;
+        seg_offset += ring.len();
     }
-
     Ok(sampled)
 }
 
