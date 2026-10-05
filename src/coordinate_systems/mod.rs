@@ -13,7 +13,7 @@ mod lonlat;
 pub use lonlat::LonLat;
 
 mod coords;
-pub use coords::{Barycentric, Cartesian, Face, FaceTriangle, SphericalTriangle, IJ, KJ};
+pub use coords::{Barycentric, Cartesian, Face, FaceTriangle, SphericalTriangle, IJ};
 
 pub mod vec2;
 pub mod vec3;

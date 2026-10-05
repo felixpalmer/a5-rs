@@ -188,3 +188,46 @@ fn visit_boundary(
     }
     Ok(())
 }
+
+/// The cell hierarchy in triple space. A cell's 4 children are 2·triple + the
+/// offsets for its flavor (each level of A5 refines the square grid R of
+/// g o^r D into 4); only their curve order depends on the orientation.
+const CHILD_OFFSETS: [[(i32, i32, i32); 4]; 4] = [
+    [(0, 0, 0), (0, 1, -1), (0, 1, 0), (0, 2, -1)], // flavor 0
+    [(-1, -1, 0), (-1, 0, -1), (-1, 0, 0), (-1, 1, -1)], // flavor 1
+    [(-1, 1, 0), (0, 0, 0), (0, 1, -1), (0, 1, 0)], // flavor 2
+    [(-1, 0, -1), (-1, 0, 0), (-1, 1, -1), (0, 0, -1)], // flavor 3
+];
+
+/// The 4 children of a cell given in triple space (`max_row` is its own), appended to `out`.
+pub fn triple_children(cell: [i32; 5], max_row: i32, out: &mut Vec<[i32; 5]>) {
+    let [origin_id, quintant, x, y, z] = cell;
+    let flavor = triple_flavor(&Triple::new(x, y, z), max_row) as usize;
+    for (dx, dy, dz) in CHILD_OFFSETS[flavor] {
+        out.push([origin_id, quintant, 2 * x + dx, 2 * y + dy, 2 * z + dz]);
+    }
+}
+
+/// The parent of a cell given in triple space (`parent_max_row` is the
+/// parent's). The child's coordinates mod 2 fix child − 2·parent, but for two
+/// classes, where the two candidate parents differ in flavor — and so, sharing
+/// x and z, in apex colour (see `triple_flavor`).
+///
+/// Not used by the library: kept for completeness, as the inverse of
+/// `triple_children`, for traversals that coarsen in triple space.
+pub fn triple_parent(cell: [i32; 5], parent_max_row: i32) -> [i32; 5] {
+    let [origin_id, quintant, x, y, z] = cell;
+    let dx = -(x & 1);
+    let dz = -(z & 1);
+    let mut dy = y & 1;
+    let px = (x - dx) >> 1;
+    let pz = (z - dz) >> 1;
+    let colour = (parent_max_row + 1 + px + pz) & 1;
+    if dx == 0 && dy == 0 && dz == -1 {
+        dy = if colour == 0 { 2 } else { 0 }; // flavor 0 or 3 parent
+    }
+    if dx == -1 && dy == 1 && dz == 0 {
+        dy = if colour == 1 { 1 } else { -1 }; // flavor 2 or 1 parent
+    }
+    [origin_id, quintant, px, (y - dy) >> 1, pz]
+}
