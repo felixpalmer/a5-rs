@@ -1,6 +1,6 @@
 use crate::coordinate_systems::{
     Barycentric, Cartesian, Degrees, Face, FaceTriangle, LonLat, Polar, Radians, Spherical,
-    SphericalTriangle, IJ, KJ,
+    SphericalTriangle, IJ,
 };
 use approx::assert_relative_eq;
 use std::f64::consts::PI;
@@ -115,14 +115,10 @@ fn test_cartesian_coordinate_operations() {
 }
 
 #[test]
-fn test_ij_kj_coordinates() {
+fn test_ij_coordinates() {
     let ij = IJ::new(5.0, 6.0);
     assert_eq!(ij.x(), 5.0);
     assert_eq!(ij.y(), 6.0);
-
-    let kj = KJ::new(7.0, 8.0);
-    assert_eq!(kj.x(), 7.0);
-    assert_eq!(kj.y(), 8.0);
 }
 
 #[test]

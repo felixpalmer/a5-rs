@@ -56,24 +56,6 @@ impl IJ {
     }
 }
 
-/// 2D planar coordinate system formed by the transformation K -> I + J
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub struct KJ(pub Vec2);
-
-impl KJ {
-    pub fn new(x: f64, y: f64) -> Self {
-        KJ(Vec2::new(x, y))
-    }
-
-    pub fn x(&self) -> f64 {
-        self.0.x
-    }
-
-    pub fn y(&self) -> f64 {
-        self.0.y
-    }
-}
-
 // 3D coordinate systems
 
 /// 3D cartesian system centered on unit sphere/dodecahedron
