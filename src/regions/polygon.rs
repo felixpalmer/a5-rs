@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 
 use crate::coordinate_systems::{Cartesian, LonLat};
 use crate::core::cell::{cell_to_spherical, lonlat_to_cell, spherical_to_cell};
+use crate::core::cell_info::get_num_cells;
 use crate::core::compact::compact;
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_spherical};
 use crate::core::origin::{get_origins, quintant_to_segment, segment_to_quintant};
@@ -18,12 +19,14 @@ use crate::core::utils::A5Cell;
 use crate::geometry::prepared_polygon::{
     point_in_prepared_polygon, prepare_polygon, PreparedPolygon,
 };
-use crate::geometry::spherical_polygon::ring_winding_sign;
+use crate::geometry::spherical_polygon::{ring_winding_sign, spherical_triangle_area};
 use crate::lattice::{s_to_triple, triple_flavor, triple_to_s, Orientation, Triple};
 use crate::traversal::cap::estimate_cell_radius;
+use crate::traversal::lattice_flood_fill::{triple_space_flood_fill, FloodInput};
 use crate::traversal::neighbors::NEIGHBOR_DELTAS;
 use crate::traversal::triple_cells::{
-    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_center, triple_cell_key,
+    cell_ids_to_triples, for_each_lattice_neighbor, for_each_triple_neighbor, triple_cell_center,
+    triple_cell_key, triple_cell_to_id,
 };
 use crate::utils::great_circle::sample_great_circle_arc;
 
@@ -350,6 +353,24 @@ fn grow_ring(boundary: &[[i32; 5]], max_row: i32) -> Result<Vec<([i32; 5], usize
     Ok(ring)
 }
 
+/// Area of the polygon (outer ring minus holes) on the unit sphere, in steradians.
+fn polygon_area(ring_vecs_list: &[Vec<Cartesian>]) -> f64 {
+    let mut total = 0.0;
+    for (r, ring) in ring_vecs_list.iter().enumerate() {
+        // Signed fan from the first vertex: concave rings come out right too
+        let mut area = 0.0;
+        for i in 1..ring.len().saturating_sub(1) {
+            area += spherical_triangle_area(ring[0], ring[i], ring[i + 1]).get();
+        }
+        total += if r == 0 { area.abs() } else { -area.abs() };
+    }
+    total
+}
+
+/// Below this many estimated interior cells per boundary cell, flooding the
+/// interior beats splitting the curve into runs (measured crossover: ~3.3).
+const FLOOD_INTERIOR_PER_BOUNDARY: f64 = 3.0;
+
 /// Compact cells that are already sorted and disjoint, in one pass: a stack
 /// whose top is merged into its parent whenever it ends in a full sibling group.
 fn compact_sorted(cells: &[u64]) -> Result<Vec<u64>, String> {
@@ -535,6 +556,62 @@ pub fn polygon_to_cells(
     let max_row = (1i32 << hilbert_res) - 1;
     let mut boundary: Vec<[i32; 5]> = Vec::with_capacity(boundary_cells.len());
     cell_ids_to_triples(boundary_cells.iter().copied(), &mut boundary)?;
+
+    // A quintant without band cells is wholly inside or outside; it can only be
+    // inside when the polygon's bounding cap holds a quintant's area (4π/60)
+    let pi = std::f64::consts::PI;
+    let cap_holds_quintant = 2.0 * pi * (1.0 - prep.cap.min_dot) >= (4.0 * pi) / 60.0;
+
+    // A small interior is cheaper to flood than to split into curve runs: the
+    // flood costs about boundary + interior cells, the runs a sorted band of
+    // boundary plus ring keys. The flood can't reach a quintant the polygon
+    // swallows whole, which a polygon smaller than its bounding cap never does.
+    if !cap_holds_quintant
+        && polygon_area(&ring_vecs_list) / (4.0 * pi) * (get_num_cells(resolution) as f64)
+            < FLOOD_INTERIOR_PER_BOUNDARY * boundary_cells.len() as f64
+    {
+        let mut out: Vec<u64> = Vec::new();
+        for (c, &cell) in boundary_cells.iter().enumerate() {
+            if overlapping || boundary_inside[c] {
+                out.push(cell);
+            }
+        }
+        // The shell: the flood's own moves out of the boundary, each cell classified
+        // from the boundary cell it was found from (they share an edge)
+        let mut seen: HashSet<i64> = boundary.iter().map(|&c| triple_cell_key(c)).collect();
+        let mut seeds: Vec<[i32; 5]> = Vec::new();
+        let mut firewall: Vec<[i32; 5]> = boundary.clone();
+        for (parent, &cell) in boundary.iter().enumerate() {
+            for_each_lattice_neighbor(cell, max_row, |n| {
+                if !seen.insert(triple_cell_key(n)) {
+                    return Ok(());
+                }
+                let center = to_cartesian(triple_cell_center(n, hilbert_res, max_row)?);
+                let segments = &segment_map[&boundary_cells[parent]];
+                let inside =
+                    match arc_crossing_parity(center, boundary_centers[parent], segments, &segs) {
+                        Some(odd) => boundary_inside[parent] != odd,
+                        None => point_in_prepared_polygon(center, &prep),
+                    };
+                if inside {
+                    seeds.push(n);
+                } else {
+                    firewall.push(n);
+                }
+                Ok(())
+            })?;
+        }
+        if !seeds.is_empty() {
+            for &seed in &seeds {
+                out.push(triple_cell_to_id(seed, hilbert_res, resolution)?);
+            }
+            let flood =
+                triple_space_flood_fill(FloodInput::Firewall(&firewall), &seeds, resolution, None)?;
+            out.extend(flood.interior_cells);
+        }
+        return compact(&out);
+    }
+
     let ring = grow_ring(&boundary, max_row)?;
 
     let unit_shift = 58 - 2 * hilbert_res as u32;
@@ -569,11 +646,6 @@ pub fn polygon_to_cells(
         ring_by_key.insert(key, r);
     }
     keys.sort_unstable();
-
-    // A quintant without band cells is wholly inside or outside; it can only be
-    // inside when the polygon's bounding cap holds a quintant's area (4π/60)
-    let pi = std::f64::consts::PI;
-    let cap_holds_quintant = 2.0 * pi * (1.0 - prep.cap.min_dot) >= (4.0 * pi) / 60.0;
 
     // The class of a run cell from a ring cell next to it on the curve, when the
     // two are lattice neighbors: any boundary cell near the run cell would have
