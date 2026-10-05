@@ -13,10 +13,8 @@ use crate::core::serialization::{
 };
 use crate::core::utils::A5Cell;
 use crate::traversal::triple_cells::{
-    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_center, triple_cell_key,
-    triple_cell_to_id, triple_children,
+    cell_ids_to_triples, triple_cell_center, triple_cell_to_id, triple_children, walk_triple_cells,
 };
-use std::collections::HashSet;
 
 /// Safety factor applied to equal-area circle radius to get conservative circumradius estimate
 const CELL_RADIUS_SAFETY_FACTOR: f64 = 2.0;
@@ -97,26 +95,10 @@ fn coarse_cap_cells(
     let max_row = (1i32 << hilbert_res) - 1;
     let mut cells: Vec<[i32; 5]> = Vec::new();
     cell_ids_to_triples([start_cell], &mut cells)?;
-    let mut visited: HashSet<i64> = HashSet::from([triple_cell_key(cells[0])]);
-    let mut frontier = cells.clone();
-
-    while !frontier.is_empty() {
-        let mut next: Vec<[i32; 5]> = Vec::new();
-        let mut visit = |c: [i32; 5]| -> Result<(), String> {
-            if !visited.insert(triple_cell_key(c)) {
-                return Ok(());
-            }
-            cells.push(c);
-            if haversine(center, triple_cell_center(c, hilbert_res, max_row)?) <= h_expanded {
-                next.push(c);
-            }
-            Ok(())
-        };
-        for &cell in &frontier {
-            for_each_triple_neighbor(cell, max_row, false, &mut visit)?;
-        }
-        frontier = next;
-    }
+    walk_triple_cells(cells.clone(), max_row, |c| {
+        cells.push(c);
+        Ok(haversine(center, triple_cell_center(c, hilbert_res, max_row)?) <= h_expanded)
+    })?;
     Ok(cells)
 }
 

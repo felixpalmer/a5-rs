@@ -15,13 +15,10 @@ use crate::core::origin::get_origins;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::tiling::get_pentagon_vertices;
 use crate::core::utils::A5Cell;
-use crate::geometry::pentagon::PentagonShape;
 use crate::lattice::{triple_flavor, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::cap::estimate_cell_radius;
-use crate::traversal::triple_cells::{
-    cell_ids_to_triples, for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
-};
+use crate::traversal::triple_cells::{cell_ids_to_triples, triple_cell_to_id, walk_triple_cells};
 use crate::utils::great_circle::sample_great_circle_arc;
 
 /// Resolution 0 version of the sub-segment BFS below: the cells are the 12
@@ -63,51 +60,6 @@ fn trace_faces(
 const SHARED_EDGE_EPS: f64 = 1e-9;
 const SHARED_EDGE_MARGIN: f64 = 1e-6;
 
-/// The part of the segment a→b inside a convex pentagon, as parameters
-/// `(start, end)` along it, start ≤ end, with where along the edge it leaves
-/// through (0..1, from the edge's first vertex); `None` when it misses the pentagon.
-fn clip_to_pentagon(pentagon: &PentagonShape, a: Face, b: Face) -> Option<(f64, f64, f64)> {
-    let vertices = pentagon.get_vertices_vec();
-    let sx = b.x() - a.x();
-    let sy = b.y() - a.y();
-    let mut start = f64::NEG_INFINITY;
-    let mut end = f64::INFINITY;
-    let mut exit_edge = usize::MAX;
-    for i in 0..5 {
-        let v1 = vertices[i];
-        let v2 = vertices[(i + 1) % 5];
-        // Inside an edge where (v1 - v2) × (p - v1) >= 0 (as contains_point)
-        let ex = v1.x() - v2.x();
-        let ey = v1.y() - v2.y();
-        let f = ex * (a.y() - v1.y()) - ey * (a.x() - v1.x());
-        let g = ex * sy - ey * sx;
-        if g == 0.0 {
-            if f < 0.0 {
-                return None;
-            }
-        } else if g > 0.0 {
-            start = start.max(-f / g);
-        } else {
-            let t = -f / g;
-            if t < end {
-                end = t;
-                exit_edge = i;
-            }
-        }
-    }
-    if start > end || exit_edge == usize::MAX {
-        return None;
-    }
-    // Where the exit point falls along the exit edge, from its first vertex
-    let v1 = vertices[exit_edge];
-    let v2 = vertices[(exit_edge + 1) % 5];
-    let px = a.x() + end * sx - v1.x();
-    let py = a.y() + end * sy - v1.y();
-    let ex = v2.x() - v1.x();
-    let ey = v2.y() - v1.y();
-    Some((start, end, (px * ex + py * ey) / (ex * ex + ey * ey)))
-}
-
 /// One end of the current sub-segment: the point, its cell's shape and the
 /// point's own projection onto that cell's face, as the cell's lookup made them.
 struct SubsegmentEnd {
@@ -140,40 +92,35 @@ impl Subsegment {
         self.faces[origin_id as usize] = Some(projected);
         Ok(projected)
     }
+}
 
-    /// Whether the sub-segment runs through the cells of `shapes` in turn, all on
-    /// one origin, and through nothing else: from a (in the first) to b (in the
-    /// last), the part inside each cell ends where the next one's begins, at a
-    /// point well inside an edge, so no third cell meets it there.
-    fn covers_exactly(&mut self, shapes: &[&CellShape]) -> Result<bool, String> {
-        let origin_id = shapes[0].origin_id;
-        let (fa, fb) = self.project(origin_id)?;
-        let mut prev_end = 0.0;
-        for (i, shape) in shapes.iter().enumerate() {
-            if shape.origin_id != origin_id {
-                return Ok(false);
-            }
-            let Some((start, end, exit_edge_t)) = clip_to_pentagon(&shape.pentagon, fa, fb) else {
-                return Ok(false);
-            };
-            let mismatch = if i == 0 {
-                start > SHARED_EDGE_EPS
-            } else {
-                (start - prev_end).abs() > SHARED_EDGE_EPS
-            };
-            if mismatch {
-                return Ok(false);
-            }
-            if i == shapes.len() - 1 {
-                return Ok(end >= 1.0 - SHARED_EDGE_EPS);
-            }
-            if exit_edge_t <= SHARED_EDGE_MARGIN || exit_edge_t >= 1.0 - SHARED_EDGE_MARGIN {
-                return Ok(false);
-            }
-            prev_end = end;
+/// Whether the sub-segment, clipped to each cell it passes through in turn (see
+/// `PentagonShape::clip_segment`), hands over cleanly: from a (in the first part)
+/// to b (in the last), each part ends where the next begins, at a point well
+/// inside an edge, so no other cell meets the sub-segment there.
+fn hands_over(parts: &[Option<(f64, f64, f64)>]) -> bool {
+    let mut prev_end = 0.0;
+    for (i, part) in parts.iter().enumerate() {
+        let Some((start, end, exit_edge_t)) = *part else {
+            return false;
+        };
+        let mismatch = if i == 0 {
+            start > SHARED_EDGE_EPS
+        } else {
+            (start - prev_end).abs() > SHARED_EDGE_EPS
+        };
+        if mismatch {
+            return false;
         }
-        Ok(false)
+        if i == parts.len() - 1 {
+            return end >= 1.0 - SHARED_EDGE_EPS;
+        }
+        if exit_edge_t <= SHARED_EDGE_MARGIN || exit_edge_t >= 1.0 - SHARED_EDGE_MARGIN {
+            return false;
+        }
+        prev_end = end;
     }
+    false
 }
 
 /// Visit every cell a path of great-circle arcs touches, arc by arc and in order
@@ -187,10 +134,10 @@ impl Subsegment {
 /// sub-segment between them is short enough to be straight (projected onto the
 /// cell's Face). Between two cells, clipping the sub-segment to their pentagons
 /// usually shows it crossing straight from one into the other, or clipping one
-/// cell between them; otherwise a strict local BFS finds every cell whose
+/// cell between them; otherwise a strict local search finds every cell whose
 /// pentagon it touches.
 ///
-/// The BFS runs in triple space: a cell's neighbors come from its flavor's
+/// The search runs in triple space: a cell's neighbors come from its flavor's
 /// triple deltas plus the boundary delta tables, and its pentagon straight from
 /// its triple, so a candidate is never decoded and only touched cells are
 /// encoded.
@@ -325,23 +272,23 @@ fn settle_shapes(
     arc: usize,
     visit: &mut impl FnMut(u64, usize),
 ) -> Result<bool, String> {
-    if shape_a.origin_id != shape_b.origin_id {
+    let origin_id = shape_a.origin_id;
+    if shape_b.origin_id != origin_id {
         return Ok(false);
     }
-    if sub.covers_exactly(&[shape_a, shape_b])? {
+    let (fa, fb) = sub.project(origin_id)?;
+    let in_a = shape_a.pentagon.clip_segment(fa, fb);
+    let in_b = shape_b.pentagon.clip_segment(fa, fb);
+    if hands_over(&[in_a, in_b]) {
         return Ok(true);
     }
-    let (fa, fb) = sub.project(shape_a.origin_id)?;
-    let (Some(in_a), Some(in_b)) = (
-        clip_to_pentagon(&shape_a.pentagon, fa, fb),
-        clip_to_pentagon(&shape_b.pentagon, fa, fb),
-    ) else {
+    let (Some(a_part), Some(b_part)) = (in_a, in_b) else {
         return Ok(false);
     };
-    if in_b.0 <= in_a.1 {
+    if b_part.0 <= a_part.1 {
         return Ok(false);
     }
-    let t = (in_a.1 + in_b.0) / 2.0;
+    let t = (a_part.1 + b_part.0) / 2.0;
     let av = to_cartesian(sub.a.point);
     let bv = to_cartesian(sub.b.point);
     let m = [
@@ -355,18 +302,20 @@ fn settle_shapes(
     let Some(shape_c) = last_cell_shape(cell_c) else {
         return Ok(false);
     };
-    if cell_c == cell_a || cell_c == cell_b || !sub.covers_exactly(&[shape_a, &shape_c, shape_b])? {
+    if shape_c.origin_id != origin_id || cell_c == cell_a || cell_c == cell_b {
+        return Ok(false);
+    }
+    if !hands_over(&[in_a, shape_c.pentagon.clip_segment(fa, fb), in_b]) {
         return Ok(false);
     }
     visit(cell_c, arc);
     Ok(true)
 }
 
-/// Strict local BFS: expand neighbors of every cell known to touch the
-/// sub-segment, keeping anything whose pentagon the sub-segment crosses.
-/// Terminates as soon as no new touching cells are found — typically 1–2
-/// hops, since a sub-segment ≤ cell_radius/2 reaches at most a couple of
-/// cells beyond its endpoint cells.
+/// Strict local search: walk out from A and B, keeping every cell whose
+/// pentagon the sub-segment crosses. Terminates as soon as no new touching
+/// cells are found — typically 1–2 hops, since a sub-segment ≤ cell_radius/2
+/// reaches at most a couple of cells beyond its endpoint cells.
 #[allow(clippy::too_many_arguments)]
 fn search_subsegment(
     sub: &mut Subsegment,
@@ -380,35 +329,22 @@ fn search_subsegment(
 ) -> Result<(), String> {
     let mut ends: Vec<[i32; 5]> = Vec::with_capacity(2);
     cell_ids_to_triples([cell_a, cell_b], &mut ends)?;
-    let mut visited: HashSet<i64> = ends.iter().map(|&c| triple_cell_key(c)).collect();
-    let mut frontier = ends;
-    while !frontier.is_empty() {
-        let mut next: Vec<[i32; 5]> = Vec::new();
-        let mut visit_neighbor = |cell: [i32; 5]| -> Result<(), String> {
-            if !visited.insert(triple_cell_key(cell)) {
-                return Ok(());
-            }
-            let [origin_id, quintant, x, y, z] = cell;
-            let (a_face, b_face) = sub.project(origin_id as u8)?;
-            let triple = Triple::new(x, y, z);
-            let pentagon = get_pentagon_vertices(
-                hilbert_res as i32,
-                quintant as usize,
-                &triple,
-                triple_flavor(&triple, max_row),
-            );
-            if pentagon.intersects_segment(a_face, b_face) {
-                visit(triple_cell_to_id(cell, hilbert_res, resolution)?, arc);
-                next.push(cell);
-            }
-            Ok(())
-        };
-        for &cell in &frontier {
-            for_each_triple_neighbor(cell, max_row, false, &mut visit_neighbor)?;
+    walk_triple_cells(ends, max_row, |cell| {
+        let [origin_id, quintant, x, y, z] = cell;
+        let (a_face, b_face) = sub.project(origin_id as u8)?;
+        let triple = Triple::new(x, y, z);
+        let pentagon = get_pentagon_vertices(
+            hilbert_res as i32,
+            quintant as usize,
+            &triple,
+            triple_flavor(&triple, max_row),
+        );
+        if !pentagon.intersects_segment(a_face, b_face) {
+            return Ok(false);
         }
-        frontier = next;
-    }
-    Ok(())
+        visit(triple_cell_to_id(cell, hilbert_res, resolution)?, arc);
+        Ok(true)
+    })
 }
 
 /// Trace cells along a polyline defined by a sequence of waypoints.

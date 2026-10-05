@@ -6,6 +6,7 @@
 // traversal algorithms that walk many neighboring cells: they key and dedup
 // cells as plain integers and encode a cell to its ID only when it is output.
 
+use std::collections::HashSet;
 use std::sync::LazyLock;
 
 use crate::coordinate_systems::Spherical;
@@ -131,6 +132,32 @@ pub fn for_each_triple_neighbor(
     // Across a quintant edge: the boundary delta tables
     if x == 0 || z == 0 || y == max_row {
         visit_boundary(cell, max_row, edge_only, false, &mut visit)?;
+    }
+    Ok(())
+}
+
+/// Breadth-first walk from `seeds` through neighbors (edge and vertex, across
+/// quintant edges too): each cell reached is passed to `expand` once, and the
+/// walk continues from those it returns `true` for. The seeds count as reached
+/// but are not passed to `expand`.
+pub fn walk_triple_cells(
+    seeds: Vec<[i32; 5]>,
+    max_row: i32,
+    mut expand: impl FnMut([i32; 5]) -> Result<bool, String>,
+) -> Result<(), String> {
+    let mut visited: HashSet<i64> = seeds.iter().map(|&c| triple_cell_key(c)).collect();
+    let mut frontier = seeds;
+    while !frontier.is_empty() {
+        let mut next: Vec<[i32; 5]> = Vec::new();
+        for &cell in &frontier {
+            for_each_triple_neighbor(cell, max_row, false, |n| {
+                if visited.insert(triple_cell_key(n)) && expand(n)? {
+                    next.push(n);
+                }
+                Ok(())
+            })?;
+        }
+        frontier = next;
     }
     Ok(())
 }
