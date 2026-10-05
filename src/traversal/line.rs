@@ -160,12 +160,19 @@ pub fn trace_path(
     let point_vecs: Vec<Cartesian> = point_spherical.iter().map(|&p| to_cartesian(p)).collect();
     let mut point_cells: Vec<u64> = Vec::with_capacity(n);
     let mut point_ends: Vec<(Option<CellShape>, Option<Face>)> = Vec::with_capacity(n);
+    // Only the exact trace uses the shapes, so only it pays to copy them
+    let capture = |cell: u64, point: Spherical| {
+        if !exact {
+            return (None, None);
+        }
+        let shape = last_cell_shape(cell);
+        let face = shape.as_ref().and_then(|s| last_projection(point, s.origin_id));
+        (shape, face)
+    };
     for &p in &point_spherical {
         let cell = spherical_to_cell(p, resolution)?;
-        let shape = last_cell_shape(cell);
-        let face = shape.as_ref().and_then(|s| last_projection(p, s.origin_id));
         point_cells.push(cell);
-        point_ends.push((shape, face));
+        point_ends.push(capture(cell, p));
     }
     let point_end = |i: usize| SubsegmentEnd {
         point: point_spherical[i],
@@ -185,7 +192,11 @@ pub fn trace_path(
 
         let mut cell_a = point_cells[arc];
         let mut sub = Subsegment {
-            a: point_end(arc),
+            a: SubsegmentEnd {
+                point: point_spherical[arc],
+                shape: None,
+                face: None,
+            },
             b: point_end(arc),
             faces: vec![None; origins.len()],
         };
@@ -199,10 +210,16 @@ pub fn trace_path(
             } else {
                 let point = to_spherical(interior[j - 1]);
                 let cell = spherical_to_cell(point, resolution)?;
-                let shape = last_cell_shape(cell);
-                let face = shape
-                    .as_ref()
-                    .and_then(|s| last_projection(point, s.origin_id));
+                // Still in A's cell: keep its shape rather than copy it again
+                let (shape, face) = if cell == cell_a && sub.b.shape.is_some() {
+                    let shape = sub.b.shape.take();
+                    let face = shape
+                        .as_ref()
+                        .and_then(|s| last_projection(point, s.origin_id));
+                    (shape, face)
+                } else {
+                    capture(cell, point)
+                };
                 (cell, SubsegmentEnd { point, shape, face })
             };
             sub.a = std::mem::replace(&mut sub.b, next_b);
