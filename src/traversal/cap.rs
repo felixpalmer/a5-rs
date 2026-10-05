@@ -9,13 +9,12 @@ use crate::core::constants::AUTHALIC_RADIUS_EARTH;
 use crate::core::face_adjacency::walk_faces;
 use crate::core::origin::haversine;
 use crate::core::serialization::{
-    cell_to_children, cell_to_parent, deserialize, get_resolution, serialize,
-    FIRST_HILBERT_RESOLUTION,
+    cell_to_parent, deserialize, get_resolution, serialize, FIRST_HILBERT_RESOLUTION,
 };
 use crate::core::utils::A5Cell;
 use crate::traversal::triple_cells::{
     cell_ids_to_triples, for_each_triple_neighbor, triple_cell_center, triple_cell_key,
-    triple_cell_to_id,
+    triple_cell_to_id, triple_children,
 };
 use std::collections::HashSet;
 
@@ -81,43 +80,25 @@ pub fn pick_coarse_resolution(radius: f64, target_res: i32) -> i32 {
     target_res // No coarsening benefit
 }
 
-/// BFS at the cap's coarse resolution from `start_cell` through every cell whose
-/// center lies within `h_expanded` of `center`, returning every cell reached: the
-/// cells within, plus the ring just outside (the subdivision classifies them).
+/// BFS at the cap's coarse resolution (1 or above) from `start_cell` through
+/// every cell whose center lies within `h_expanded` of `center`, returning every
+/// cell reached: the cells within, plus the ring just outside (the subdivision
+/// classifies them).
 ///
-/// Runs in triple space: neighbors (edge and vertex) come from the per-flavor
-/// triple deltas plus the boundary delta tables, and a cell's center straight
-/// from its triple, so no cell is decoded and each is encoded once.
+/// Runs in triple space (cells as (origin_id, quintant, x, y, z)): neighbors
+/// (edge and vertex) come from the per-flavor triple deltas plus the boundary
+/// delta tables, and a cell's center straight from its triple.
 fn coarse_cap_cells(
     start_cell: u64,
     center: Spherical,
     h_expanded: f64,
-) -> Result<Vec<u64>, String> {
-    let cell = deserialize(start_cell)?;
-    if cell.resolution == 0 {
-        // The cells are the 12 dodecahedron faces
-        let face_cell = |id: u8| {
-            serialize(&A5Cell {
-                origin_id: id,
-                segment: 0,
-                s: 0,
-                resolution: 0,
-            })
-        };
-        let faces = walk_faces(
-            &[cell.origin_id],
-            |face| Ok(haversine(center, cell_to_spherical(face_cell(face)?)?) <= h_expanded),
-            usize::MAX,
-        )?;
-        return faces.into_iter().map(face_cell).collect();
-    }
-
-    let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
+) -> Result<Vec<[i32; 5]>, String> {
+    let hilbert_res = (get_resolution(start_cell) - FIRST_HILBERT_RESOLUTION + 1) as usize;
     let max_row = (1i32 << hilbert_res) - 1;
-    let mut frontier: Vec<[i32; 5]> = Vec::with_capacity(1);
-    cell_ids_to_triples([start_cell], &mut frontier)?;
-    let mut visited: HashSet<i64> = HashSet::from([triple_cell_key(frontier[0])]);
-    let mut cells: Vec<u64> = vec![start_cell];
+    let mut cells: Vec<[i32; 5]> = Vec::new();
+    cell_ids_to_triples([start_cell], &mut cells)?;
+    let mut visited: HashSet<i64> = HashSet::from([triple_cell_key(cells[0])]);
+    let mut frontier = cells.clone();
 
     while !frontier.is_empty() {
         let mut next: Vec<[i32; 5]> = Vec::new();
@@ -125,7 +106,7 @@ fn coarse_cap_cells(
             if !visited.insert(triple_cell_key(c)) {
                 return Ok(());
             }
-            cells.push(triple_cell_to_id(c, hilbert_res, cell.resolution)?);
+            cells.push(c);
             if haversine(center, triple_cell_center(c, hilbert_res, max_row)?) <= h_expanded {
                 next.push(c);
             }
@@ -150,53 +131,73 @@ pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
     let coarse_res = pick_coarse_resolution(radius, target_res);
     let center = cell_to_spherical(cell_id)?;
 
-    // Pre-compute haversine threshold for the exact radius
+    // Pre-compute haversine thresholds: the exact radius, and the radius expanded
+    // so the coarse BFS captures every overlapping cell
     let h_radius = meters_to_h(radius);
-
-    // BFS at coarse resolution with expanded radius to capture all overlapping cells.
+    let h_expanded = meters_to_h(radius + estimate_cell_radius(coarse_res));
     let start_cell = if coarse_res < target_res {
         cell_to_parent(cell_id, Some(coarse_res))?
     } else {
         cell_id
     };
-    let coarse_cell_radius = estimate_cell_radius(coarse_res);
-    let h_expanded = meters_to_h(radius + coarse_cell_radius);
-    let coarse_cells = coarse_cap_cells(start_cell, center, h_expanded)?;
-
-    // Recursive subdivision from coarseRes to targetRes.
     let mut result: Vec<u64> = Vec::new();
-    let mut boundary: Vec<u64> = coarse_cells;
 
-    for res in coarse_res..target_res {
-        let cell_radius_val = estimate_cell_radius(res);
-        let h_inner = if radius > cell_radius_val {
-            meters_to_h(radius - cell_radius_val)
-        } else {
-            -1.0
+    if coarse_res == 0 {
+        // The target is resolution 0: the cells are the 12 dodecahedron faces
+        let face_cell = |face: u8| {
+            serialize(&A5Cell {
+                origin_id: face,
+                segment: 0,
+                s: 0,
+                resolution: 0,
+            })
         };
-        let h_outer = meters_to_h(radius + cell_radius_val);
-        let mut next_boundary: Vec<u64> = Vec::new();
-
-        for &cell in &boundary {
-            let h = haversine(center, cell_to_spherical(cell)?);
-            if h <= h_inner {
-                result.push(cell);
-            } else if h > h_outer {
-                // Cell's entire extent is outside the cap -- discard
-            } else {
-                for child in cell_to_children(cell, Some(res + 1))? {
-                    next_boundary.push(child);
-                }
+        let near = |face: u8, h: f64| -> Result<bool, String> {
+            Ok(haversine(center, cell_to_spherical(face_cell(face)?)?) <= h)
+        };
+        let seed = deserialize(start_cell)?.origin_id;
+        for face in walk_faces(&[seed], |face| near(face, h_expanded), usize::MAX)? {
+            if near(face, h_radius)? {
+                result.push(face_cell(face)?);
             }
         }
-
-        boundary = next_boundary;
-    }
-
-    // Final target resolution: strict haversine check
-    for &cell in &boundary {
-        if haversine(center, cell_to_spherical(cell)?) <= h_radius {
-            result.push(cell);
+    } else {
+        // Recursive subdivision from coarse_res to target_res, in triple space.
+        //
+        // Each cell is classified by comparing haversine(center, cell) against
+        // pre-computed h thresholds:
+        // - Interior (h <= h_inner): keep compacted, all descendants inside
+        // - Outside  (h > h_outer): discard, no descendants inside
+        // - Boundary: subdivide children to next level
+        // At the target resolution both thresholds are the exact radius.
+        let mut cells = coarse_cap_cells(start_cell, center, h_expanded)?;
+        for res in coarse_res..=target_res {
+            let hilbert_res = (res - FIRST_HILBERT_RESOLUTION + 1) as usize;
+            let max_row = (1i32 << hilbert_res) - 1;
+            let cell_radius = estimate_cell_radius(res);
+            let last = res == target_res;
+            let h_inner = if last {
+                h_radius
+            } else if radius > cell_radius {
+                meters_to_h(radius - cell_radius)
+            } else {
+                -1.0
+            };
+            let h_outer = if last {
+                h_radius
+            } else {
+                meters_to_h(radius + cell_radius)
+            };
+            let mut children: Vec<[i32; 5]> = Vec::new();
+            for &cell in &cells {
+                let h = haversine(center, triple_cell_center(cell, hilbert_res, max_row)?);
+                if h <= h_inner {
+                    result.push(triple_cell_to_id(cell, hilbert_res, res)?);
+                } else if h <= h_outer {
+                    triple_children(cell, max_row, &mut children);
+                }
+            }
+            cells = children;
         }
     }
 

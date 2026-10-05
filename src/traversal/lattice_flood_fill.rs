@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use crate::core::serialization::FIRST_HILBERT_RESOLUTION;
 use crate::lattice::{triple_in_bounds, Triple};
-use crate::traversal::triple_cells::{triple_cell_key, triple_cell_to_id};
+use crate::traversal::triple_cells::triple_cell_key;
 
 /// Flood state, reusable across calls at one resolution: the keys of every cell visited so far.
 #[derive(Debug, Clone, Default)]
@@ -28,9 +28,8 @@ pub enum FloodInput<'a> {
 /// Result of `triple_space_flood_fill`.
 pub struct FloodResult {
     /// The cells discovered by this call (seeds excluded)
-    pub interior_cells: Vec<u64>,
-    /// The final frontier, as cell IDs and in triple space
-    pub frontier_cell_ids: Vec<u64>,
+    pub interior: Vec<[i32; 5]>,
+    /// The final frontier
     pub frontier: Vec<[i32; 5]>,
     /// State for a follow-up call
     pub state: FloodState,
@@ -49,9 +48,8 @@ pub fn triple_space_flood_fill(
     seeds: &[[i32; 5]],
     resolution: i32,
     max_layers: Option<usize>,
-) -> Result<FloodResult, String> {
-    let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
-    let max_row = (1i32 << hilbert_res) - 1;
+) -> FloodResult {
+    let max_row = (1i32 << (resolution - FIRST_HILBERT_RESOLUTION + 1)) - 1;
 
     let (mut state, delta) = match firewall {
         FloodInput::Firewall(cells) => (FloodState::default(), cells.to_vec()),
@@ -85,16 +83,9 @@ pub fn triple_space_flood_fill(
         layers += 1;
     }
 
-    let to_ids = |cells: &[[i32; 5]]| -> Result<Vec<u64>, String> {
-        cells
-            .iter()
-            .map(|&c| triple_cell_to_id(c, hilbert_res, resolution))
-            .collect()
-    };
-    Ok(FloodResult {
-        interior_cells: to_ids(&discovered)?,
-        frontier_cell_ids: to_ids(&frontier)?,
+    FloodResult {
+        interior: discovered,
         frontier,
         state,
-    })
+    }
 }
