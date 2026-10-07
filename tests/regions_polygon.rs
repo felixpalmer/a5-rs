@@ -1,5 +1,7 @@
+use a5::collections::compact::uncompact;
+use a5::collections::measures::count;
+use a5::collections::resolution::get_compaction_resolution;
 use a5::coordinate_systems::LonLat;
-use a5::core::compact::uncompact;
 use a5::core::hex::u64_to_hex;
 use a5::regions::polygon::{polygon_to_cells, Containment, PolygonToCellsOptions};
 use serde::Deserialize;
@@ -48,42 +50,12 @@ fn test_polygon_to_cells_fixtures() {
     for f in &fixtures.polygon {
         let rings = to_rings(&f.polygon);
         let result = polygon_to_cells(&rings, f.resolution, None).expect("polygon_to_cells");
-        let expanded = uncompact(&result, f.resolution).expect("uncompact");
+        let expanded = uncompact(&result).expect("uncompact");
         let mut sorted = expanded;
         sorted.sort();
         let result_hex: Vec<String> = sorted.into_iter().map(u64_to_hex).collect();
         assert_eq!(result_hex, f.cells, "{}: cells mismatch", f.name);
     }
-}
-
-#[test]
-fn test_polygon_to_cells_empty_for_too_few_vertices() {
-    assert_eq!(polygon_to_cells(&[], 5, None).unwrap().len(), 0);
-    assert_eq!(
-        polygon_to_cells(
-            &[vec![LonLat::new(0.0, 0.0), LonLat::new(1.0, 1.0)]],
-            5,
-            None
-        )
-        .unwrap()
-        .len(),
-        0
-    );
-    // Closed ring with only 2 distinct vertices
-    assert_eq!(
-        polygon_to_cells(
-            &[vec![
-                LonLat::new(0.0, 0.0),
-                LonLat::new(1.0, 1.0),
-                LonLat::new(0.0, 0.0)
-            ]],
-            5,
-            None
-        )
-        .unwrap()
-        .len(),
-        0
-    );
 }
 
 #[test]
@@ -108,6 +80,23 @@ fn test_polygon_to_cells_accepts_closed_rings() {
     let open_result = polygon_to_cells(&[ring.clone(), hole.clone()], 6, None).unwrap();
     let closed_result = polygon_to_cells(&[closed(&ring), closed(&hole)], 6, None).unwrap();
     assert_eq!(closed_result, open_result);
+}
+
+#[test]
+fn test_polygon_to_cells_empty_collection_for_less_than_3_vertices() {
+    let p = |lon: f64, lat: f64| LonLat::new(lon, lat);
+    let degenerate: Vec<Vec<Vec<LonLat>>> = vec![
+        vec![],
+        vec![vec![p(0.0, 0.0), p(1.0, 1.0)]],
+        // Closed ring with only 2 distinct vertices
+        vec![vec![p(0.0, 0.0), p(1.0, 1.0), p(0.0, 0.0)]],
+    ];
+    for polygon in &degenerate {
+        let cells = polygon_to_cells(polygon, 5, None).unwrap();
+        assert_eq!(count(&cells).unwrap(), 0);
+        // The empty collection still records its resolution
+        assert_eq!(get_compaction_resolution(&cells), 5);
+    }
 }
 
 #[test]
@@ -136,7 +125,7 @@ fn test_polygon_to_cells_overlapping_fixtures() {
     for f in &fixtures.overlapping {
         let rings = to_rings(&f.polygon);
         let result = polygon_to_cells(&rings, f.resolution, options).expect("polygon_to_cells");
-        let expanded = uncompact(&result, f.resolution).expect("uncompact");
+        let expanded = uncompact(&result).expect("uncompact");
         let mut sorted = expanded;
         sorted.sort();
         let result_hex: Vec<String> = sorted.into_iter().map(u64_to_hex).collect();
@@ -165,9 +154,8 @@ fn test_polygon_to_cells_overlapping_is_superset_of_center() {
         }),
     )
     .unwrap();
-    let center_expanded: HashSet<u64> = uncompact(&center, 6).unwrap().into_iter().collect();
-    let overlapping_expanded: HashSet<u64> =
-        uncompact(&overlapping, 6).unwrap().into_iter().collect();
+    let center_expanded: HashSet<u64> = uncompact(&center).unwrap().into_iter().collect();
+    let overlapping_expanded: HashSet<u64> = uncompact(&overlapping).unwrap().into_iter().collect();
     assert!(center_expanded.is_subset(&overlapping_expanded));
     assert!(overlapping_expanded.len() > center_expanded.len());
 }
@@ -181,7 +169,7 @@ fn test_polygon_to_cells_country_fixtures() {
     for f in &fixtures.country {
         let rings = to_rings(&f.polygon);
         let result = polygon_to_cells(&rings, f.resolution, None).expect("polygon_to_cells");
-        let expanded = uncompact(&result, f.resolution).expect("uncompact");
+        let expanded = uncompact(&result).expect("uncompact");
         let unique: HashSet<u64> = expanded.into_iter().collect();
         assert_eq!(
             unique.len(),

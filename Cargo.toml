@@ -44,6 +44,10 @@ name = "cell"
 harness = false
 
 [[bench]]
+name = "collection"
+harness = false
+
+[[bench]]
 name = "compact"
 harness = false
 

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
+use crate::collections::slot_runs::{slot_runs_to_collection, to_collection};
 use crate::coordinate_systems::{Cartesian, LonLat};
 use crate::core::cell::cell_to_spherical;
-use crate::core::compact::compact;
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian};
 use crate::core::serialization::{
     cell_to_children, get_resolution, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
@@ -35,8 +35,8 @@ pub struct PolygonToCellsOptions {
     pub containment: Containment,
 }
 
-/// Find all cells within a polygon. The result is compacted — use `uncompact`
-/// to expand to the input resolution.
+/// Find all cells within a polygon. The result is compacted, with a compaction marker
+/// recording the resolution — use `uncompact` to expand it.
 ///
 /// `polygon` is GeoJSON-style rings `[outer, ...holes]` of `[longitude, latitude]`
 /// vertices; cells inside a hole are excluded. Rings may be open or closed
@@ -46,7 +46,7 @@ pub struct PolygonToCellsOptions {
 /// Pass `None` for `options` to use the defaults. `options.containment` selects
 /// [`Containment::Center`] (default, cell center inside the polygon) or
 /// [`Containment::Overlapping`] (any cell touching the polygon, for gap-free
-/// coverage). Returns sorted, compacted cell IDs.
+/// coverage). Returns compacted cells sorted in curve order, then the compaction marker.
 pub fn polygon_to_cells(
     polygon: &[Vec<LonLat>],
     resolution: i32,
@@ -63,11 +63,11 @@ pub fn polygon_to_cells(
     }
 
     if polygon.is_empty() {
-        return Ok(Vec::new());
+        return to_collection(&[], resolution);
     }
     let outer = strip_closing(&polygon[0]);
     if outer.len() < 3 {
-        return Ok(Vec::new());
+        return to_collection(&[], resolution);
     }
     let mut rings: Vec<&[LonLat]> = vec![outer];
     for hole in &polygon[1..] {
@@ -121,7 +121,7 @@ pub fn polygon_to_cells(
                 out.push(cell);
             }
         }
-        return compact(&out);
+        return to_collection(&out, resolution);
     }
 
     // A quintant holding no boundary cells is wholly inside or outside; it can
@@ -136,14 +136,15 @@ pub fn polygon_to_cells(
         resolution,
         cap_holds_quintant,
     ) {
-        fill_by_flood(&boundary, &triples, resolution, overlapping)
-    } else {
-        fill_by_curve_runs(
-            &boundary,
-            &triples,
-            resolution,
-            overlapping,
-            cap_holds_quintant,
-        )
+        let cells = fill_by_flood(&boundary, &triples, resolution, overlapping)?;
+        return to_collection(&cells, resolution);
     }
+    let runs = fill_by_curve_runs(
+        &boundary,
+        &triples,
+        resolution,
+        overlapping,
+        cap_holds_quintant,
+    )?;
+    Ok(slot_runs_to_collection(&runs, resolution))
 }

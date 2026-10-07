@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
+use crate::collections::slot_runs::to_collection;
 use crate::coordinate_systems::Spherical;
 use crate::core::cell::cell_to_spherical;
 use crate::core::cell_info::cell_area;
@@ -102,8 +103,9 @@ fn coarse_cap_cells(
     Ok(cells)
 }
 
-/// Compute all cells within a great-circle radius, returning a naturally
-/// compacted result (mix of resolutions).
+/// Compute all cells within a great-circle radius, returning a compacted result
+/// (mix of resolutions), sorted in curve order, then a compaction marker recording
+/// the resolution.
 ///
 /// Uses hierarchical BFS: starts at a coarse resolution and recursively
 /// subdivides boundary cells, keeping interior cells at coarser resolutions.
@@ -183,6 +185,5 @@ pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
         }
     }
 
-    result.sort();
-    Ok(result)
+    to_collection(&result, target_res)
 }
