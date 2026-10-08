@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use crate::core::compact::compact;
+use crate::collections::slot_runs::{compact_cells, to_covering};
 use crate::core::face_adjacency::walk_faces;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::A5Cell;
@@ -56,10 +56,10 @@ fn push_cell_ids(
 /// behind the frontier can never be re-discovered). Evicted interior cells are
 /// periodically compacted to reduce memory pressure.
 fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, String> {
-    if k == 0 {
-        return Ok(vec![cell_id]);
-    }
     let cell = deserialize(cell_id)?;
+    if k == 0 {
+        return to_covering(&[cell_id], cell.resolution);
+    }
     if cell.resolution == 0 {
         // The cells are the 12 dodecahedron faces
         let faces = walk_faces(&[cell.origin_id], |_| Ok(true), k)?;
@@ -74,7 +74,7 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
                 })
             })
             .collect::<Result<Vec<u64>, String>>()?;
-        return compact(&cells);
+        return to_covering(&cells, 0);
     }
     let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
     let max_row = (1i32 << hilbert_res) - 1;
@@ -112,7 +112,7 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
 
         // Progressively compact interior to reduce memory pressure
         if interior.len() > 100 {
-            interior = compact(&interior)?;
+            interior = compact_cells(&interior)?;
         }
 
         prev_frontier = frontier;
@@ -128,17 +128,19 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
     )?;
     push_cell_ids(&mut interior, &frontier.cells, hilbert_res, cell.resolution)?;
 
-    compact(&interior)
+    to_covering(&interior, cell.resolution)
 }
 
 /// Compute the grid disk of edge-sharing neighbors within k hops.
-/// Returns a sorted, compacted list of cell IDs including the center cell.
+/// Returns compacted cell IDs including the center cell, sorted in curve
+/// order, then a compaction marker recording the resolution.
 pub fn grid_disk(cell_id: u64, k: usize) -> Result<Vec<u64>, String> {
     grid_disk_bfs(cell_id, k, true)
 }
 
 /// Compute the grid disk of all neighbors (edge + vertex sharing) within k hops.
-/// Returns a sorted, compacted list of cell IDs including the center cell.
+/// Returns compacted cell IDs including the center cell, sorted in curve
+/// order, then a compaction marker recording the resolution.
 pub fn grid_disk_vertex(cell_id: u64, k: usize) -> Result<Vec<u64>, String> {
     grid_disk_bfs(cell_id, k, false)
 }

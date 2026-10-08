@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5::{get_resolution, grid_disk, grid_disk_vertex, hex_to_u64, u64_to_hex, uncompact};
+use a5::{grid_disk, grid_disk_vertex, hex_to_u64, is_compaction_marker, u64_to_hex, uncompact};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -35,9 +35,8 @@ fn test_grid_disk() {
     let fixtures = load_fixtures();
     for f in &fixtures {
         let cell_id = hex_to_u64(&f.cell_id).unwrap();
-        let target_res = get_resolution(cell_id);
         let disk = grid_disk(cell_id, f.k).unwrap();
-        let uncompacted = uncompact(&disk, target_res).unwrap();
+        let uncompacted = uncompact(&disk).unwrap();
         let result: Vec<String> = uncompacted.iter().map(|n| u64_to_hex(*n)).collect();
         assert_eq!(
             sort_hex(result),
@@ -54,7 +53,6 @@ fn test_grid_disk_vertex() {
     let fixtures = load_fixtures();
     for f in &fixtures {
         let cell_id = hex_to_u64(&f.cell_id).unwrap();
-        let target_res = get_resolution(cell_id);
         let mut expected: Vec<String> = f
             .cells
             .iter()
@@ -67,7 +65,7 @@ fn test_grid_disk_vertex() {
             a_padded.cmp(&b_padded)
         });
         let disk = grid_disk_vertex(cell_id, f.k).unwrap();
-        let uncompacted = uncompact(&disk, target_res).unwrap();
+        let uncompacted = uncompact(&disk).unwrap();
         let result: Vec<String> = uncompacted.iter().map(|n| u64_to_hex(*n)).collect();
         assert_eq!(
             sort_hex(result),
@@ -83,10 +81,22 @@ fn test_grid_disk_vertex() {
 fn test_grid_disk_k0() {
     let fixtures = load_fixtures();
     let cell_id = hex_to_u64(&fixtures[0].cell_id).unwrap();
-    let result: Vec<String> = grid_disk(cell_id, 0)
-        .unwrap()
-        .iter()
-        .map(|n| u64_to_hex(*n))
-        .collect();
-    assert_eq!(result, vec![fixtures[0].cell_id.clone()]);
+    let result = grid_disk(cell_id, 0).unwrap();
+    // The cell itself, then the compaction marker recording its resolution
+    assert_eq!(result.len(), 2);
+    assert_eq!(u64_to_hex(result[0]), fixtures[0].cell_id);
+    assert!(is_compaction_marker(result[1]));
+    assert_eq!(uncompact(&result).unwrap(), vec![cell_id]);
+}
+
+#[test]
+fn test_grid_disk_vertex_k0() {
+    let fixtures = load_fixtures();
+    let cell_id = hex_to_u64(&fixtures[0].cell_id).unwrap();
+    let result = grid_disk_vertex(cell_id, 0).unwrap();
+    // The cell itself, then the compaction marker recording its resolution
+    assert_eq!(result.len(), 2);
+    assert_eq!(u64_to_hex(result[0]), fixtures[0].cell_id);
+    assert!(is_compaction_marker(result[1]));
+    assert_eq!(uncompact(&result).unwrap(), vec![cell_id]);
 }

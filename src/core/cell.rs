@@ -3,6 +3,7 @@
 // Copyright (c) A5 contributors
 
 use crate::coordinate_systems::{Face, LonLat, Spherical};
+use crate::core::compaction_marker::is_compaction_marker;
 use crate::core::constants::PI_OVER_5;
 use crate::core::coordinate_transforms::{
     face_to_ij, from_lon_lat, normalize_longitudes, to_lon_lat, to_polar,
@@ -413,8 +414,9 @@ pub fn cell_to_boundary(
     cell_id: u64,
     options: Option<CellToBoundaryOptions>,
 ) -> Result<Vec<LonLat>, String> {
-    // WORLD_CELL represents the entire world and is unbounded
-    if cell_id == WORLD_CELL {
+    if cell_id == WORLD_CELL || is_compaction_marker(cell_id) {
+        // WORLD_CELL represents the entire world and is unbounded; a compaction marker
+        // (recording a covering's resolution) is not a cell at all
         return Ok(Vec::new());
     }
 

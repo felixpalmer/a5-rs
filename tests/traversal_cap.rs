@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use a5::traversal::cap::{estimate_cell_radius, meters_to_h, pick_coarse_resolution};
-use a5::{get_resolution, hex_to_u64, spherical_cap, u64_to_hex, uncompact};
+use a5::{hex_to_u64, spherical_cap, u64_to_hex, uncompact};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -75,9 +75,8 @@ fn test_spherical_cap() {
     let fixtures = load_fixtures();
     for f in &fixtures.spherical_cap {
         let cell_id = hex_to_u64(&f.cell_id).unwrap();
-        let target_res = get_resolution(cell_id);
         let cap = spherical_cap(cell_id, f.radius).unwrap();
-        let uncompacted = uncompact(&cap, target_res).unwrap();
+        let uncompacted = uncompact(&cap).unwrap();
         let mut result_hex: Vec<String> = uncompacted.iter().map(|n| u64_to_hex(*n)).collect();
         result_hex.sort();
         let mut expected = f.cells.clone();

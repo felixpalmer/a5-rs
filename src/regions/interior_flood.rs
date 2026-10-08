@@ -4,11 +4,10 @@
 
 // Polygon fill by flooding the interior: cheaper than curve runs when the
 // interior is small, as the flood costs about boundary + interior cells while
-// the runs sort a band of boundary plus ring keys.
+// the runs sort a band of boundary plus ring slots.
 
 use crate::coordinate_systems::Cartesian;
 use crate::core::cell_info::get_num_cells;
-use crate::core::compact::compact;
 use crate::core::coordinate_transforms::to_cartesian;
 use crate::core::serialization::FIRST_HILBERT_RESOLUTION;
 use crate::traversal::lattice_flood_fill::{triple_space_flood_fill, FloodInput};
@@ -38,7 +37,8 @@ pub(super) fn prefers_flood(
 }
 
 /// Fill a polygon by flooding its interior, given its classified boundary and
-/// the boundary cells in triple space.
+/// the boundary cells in triple space. Returns the cells inside, uncompacted and
+/// unsorted.
 pub(super) fn fill_by_flood(
     boundary: &Boundary,
     triples: &[[i32; 5]],
@@ -73,5 +73,5 @@ pub(super) fn fill_by_flood(
             triple_space_flood_fill(FloodInput::Firewall(&firewall), &seeds, resolution, None)?;
         out.extend(flood.interior_cells);
     }
-    compact(&out)
+    Ok(out)
 }

@@ -1,7 +1,7 @@
 use a5::core::origin::get_origins;
 use a5::core::serialization::{
-    cell_to_children, cell_to_parent, deserialize, get_res0_cells, get_resolution, get_stride,
-    is_child_of, is_first_child, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
+    cell_to_children, cell_to_parent, deserialize, get_res0_cells, get_resolution, is_child_of,
+    serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 };
 use a5::core::utils::A5Cell;
 use serde_json::Value;
@@ -413,7 +413,7 @@ fn test_res30_round_trip_valid_quintants() {
         let serialized = serialize(&cell).unwrap();
         assert_eq!(get_resolution(serialized), 30, "Failed for quintant {}", q);
 
-        // Verify correct marker pattern
+        // Verify correct tag pattern
         if q <= 31 {
             assert_eq!(serialized & 1, 1); // ...1 encoding
         } else if q <= 39 {
@@ -704,125 +704,6 @@ fn test_res30_children_parent_round_trip() {
     for child in children {
         assert_eq!(cell_to_parent(child, None).unwrap(), parent);
     }
-}
-
-#[test]
-fn test_res30_get_stride() {
-    assert_eq!(get_stride(30), 2);
-}
-
-#[test]
-fn test_res30_is_first_child_1_encoding() {
-    let origins = get_origins();
-    let origin = &origins[0];
-    let segment = origin.first_quintant % 5;
-
-    assert!(is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 0,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
-    assert!(!is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 1,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
-    assert!(is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 4,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
-}
-
-#[test]
-fn test_res30_is_first_child_100_encoding() {
-    let origins = get_origins();
-    let origin = &origins[7]; // quintant 35, uses ...100
-    let segment = origin.first_quintant % 5;
-
-    assert!(is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 0,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
-    assert!(!is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 1,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
-    assert!(is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 4,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
-}
-
-#[test]
-fn test_res30_is_first_child_10000_encoding() {
-    let origins = get_origins();
-    let origin = &origins[8]; // quintant 40, uses ...10000
-    let segment = origin.first_quintant % 5;
-
-    assert!(is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 0,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
-    assert!(!is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 1,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
-    assert!(is_first_child(
-        serialize(&A5Cell {
-            origin_id: origin.id,
-            segment,
-            s: 4,
-            resolution: 30,
-        })
-        .unwrap(),
-        None
-    ));
 }
 
 #[test]

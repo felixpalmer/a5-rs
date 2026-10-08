@@ -25,16 +25,16 @@ pub fn get_num_cells(resolution: i32) -> u64 {
     60 * (4_u64.pow((resolution - 1) as u32))
 }
 
-/// Returns the number of children between two resolutions.
+/// Returns the number of descendants a cell has at a finer resolution.
 ///
 /// # Arguments
 ///
-/// * `parent_resolution` - The parent resolution level
-/// * `child_resolution` - The child resolution level
+/// * `parent_resolution` - The cell's resolution (-1 for the world cell)
+/// * `child_resolution` - The resolution of the descendants
 ///
 /// # Returns
 ///
-/// Number of children
+/// Number of descendants (1 at the same resolution, 0 if coarser)
 pub fn get_num_children(parent_resolution: i32, child_resolution: i32) -> usize {
     if child_resolution < parent_resolution {
         return 0;
