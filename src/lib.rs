@@ -49,9 +49,9 @@ pub use core::serialization::{
 pub use collections::compact::{compact, uncompact};
 pub use core::compaction_marker::is_compaction_marker;
 
-// Collections
+// Coverings
 pub use collections::measures::{area, count};
-pub use collections::resolution::get_compaction_resolution;
+pub use collections::resolution::covering_resolution;
 pub use collections::set_operations::{contains, difference, intersect, overlaps, union};
 
 // Migration

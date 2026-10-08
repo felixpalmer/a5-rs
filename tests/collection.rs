@@ -4,7 +4,7 @@
 
 use a5::collections::compact::{compact, uncompact};
 use a5::collections::measures::{area, count};
-use a5::collections::resolution::get_compaction_resolution;
+use a5::collections::resolution::covering_resolution;
 use a5::collections::set_operations::{contains, difference, intersect, overlaps, union};
 use a5::core::cell::cell_to_boundary;
 use a5::core::compaction_marker::is_compaction_marker;
@@ -111,7 +111,7 @@ fn test_set_operations() {
         assert_eq!(overlaps(&a, &b).unwrap(), f.overlaps, "{}", f.name);
         assert_eq!(overlaps(&b, &a).unwrap(), f.overlaps, "{}", f.name);
         assert_eq!(
-            get_compaction_resolution(&union(&a, &b).unwrap()),
+            covering_resolution(&union(&a, &b).unwrap()),
             f.resolution,
             "{}",
             f.name
@@ -160,7 +160,7 @@ fn test_measures() {
     for f in load_fixtures().measures {
         let cells = to_cells(&f.cells);
         assert_eq!(
-            get_compaction_resolution(&cells),
+            covering_resolution(&cells),
             f.resolution,
             "{}",
             f.name
@@ -241,7 +241,7 @@ fn test_is_compaction_marker() {
         if f.expected {
             // Records its resolution, and has an empty boundary
             assert_eq!(
-                get_compaction_resolution(&[value]),
+                covering_resolution(&[value]),
                 f.resolution.unwrap(),
                 "{}",
                 f.value

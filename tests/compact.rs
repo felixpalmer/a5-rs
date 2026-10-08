@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use a5::collections::compact::{compact, uncompact};
-use a5::collections::resolution::get_compaction_resolution;
+use a5::collections::resolution::covering_resolution;
 use a5::core::hex::hex_to_u64;
 use a5::core::serialization::get_resolution;
 use serde::Deserialize;
@@ -72,13 +72,13 @@ fn test_uncompact_all_fixtures() {
             test_case.name
         );
         assert_eq!(
-            get_compaction_resolution(&input),
+            covering_resolution(&input),
             test_case.expected_resolution,
             "{}",
             test_case.name
         );
 
-        // All results should be at the collection's resolution
+        // All results should be at the covering's resolution
         for &cell in &result {
             assert_eq!(
                 get_resolution(cell),

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-// The collection engine. Each cell covers a block of leaf slots (see
+// The covering engine. Each cell covers a block of leaf slots (see
 // core/serialization), so a set of cells is a list of sorted, disjoint slot runs:
 // cells are turned into slot runs, set operations merge runs, and runs are
 // turned back into the coarsest cells covering them. Nothing is uncompacted.
@@ -70,7 +70,7 @@ fn sort_cells(cells: &[u64]) -> Result<Vec<u64>, String> {
 /// The slot runs covered by a set of cells, sorted and merged. Compaction
 /// markers are skipped.
 ///
-/// Collections come sorted in curve order, so the cells are first merged as
+/// Coverings come sorted in curve order, so the cells are first merged as
 /// given, checking the order as they go; only input found out of order is
 /// sorted, and merged again. Errors if a value is neither an A5 cell ID nor a
 /// compaction marker.
@@ -139,7 +139,7 @@ pub fn slot_runs_to_cells(runs: &[u64]) -> Vec<u64> {
 }
 
 /// The coarsest cells covering slot runs, in curve order, then the compaction marker for `resolution`.
-pub fn slot_runs_to_collection(runs: &[u64], resolution: i32) -> Vec<u64> {
+pub fn slot_runs_to_covering(runs: &[u64], resolution: i32) -> Vec<u64> {
     let mut cells = slot_runs_to_cells(runs);
     if resolution >= 0 {
         cells.push(compaction_marker(resolution));
@@ -153,10 +153,10 @@ pub fn compact_cells(cells: &[u64]) -> Result<Vec<u64>, String> {
     Ok(slot_runs_to_cells(&to_slot_runs(cells)?))
 }
 
-/// Compact cells, at resolution `resolution` or coarser, into a collection: the
+/// Compact cells, at resolution `resolution` or coarser, into a covering: the
 /// coarsest cells covering them, sorted in curve order, then the compaction
 /// marker for `resolution`. The resolution is given, so an empty fill still
 /// records it.
-pub fn to_collection(cells: &[u64], resolution: i32) -> Result<Vec<u64>, String> {
-    Ok(slot_runs_to_collection(&to_slot_runs(cells)?, resolution))
+pub fn to_covering(cells: &[u64], resolution: i32) -> Result<Vec<u64>, String> {
+    Ok(slot_runs_to_covering(&to_slot_runs(cells)?, resolution))
 }

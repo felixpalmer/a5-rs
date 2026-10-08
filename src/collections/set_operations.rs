@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use super::resolution::get_compaction_resolution;
-use super::slot_runs::{append_slot_run, slot_runs_to_collection, to_slot_runs};
+use super::resolution::covering_resolution;
+use super::slot_runs::{append_slot_run, slot_runs_to_covering, to_slot_runs};
 use super::SlotRuns;
 use crate::core::compaction_marker::is_compaction_marker;
 use crate::core::serialization::{
@@ -74,8 +74,8 @@ fn difference_slot_runs(a: &[u64], b: &[u64]) -> SlotRuns {
 /// The resolution of two sets of cells, which must be the same: A5 resolutions
 /// don't nest geometrically, so combining sets at different ones has no meaning.
 fn same_resolution(a: &[u64], b: &[u64]) -> Result<i32, String> {
-    let resolution_a = get_compaction_resolution(a);
-    let resolution_b = get_compaction_resolution(b);
+    let resolution_a = covering_resolution(a);
+    let resolution_b = covering_resolution(b);
     if resolution_a != resolution_b {
         return Err(format!(
             "Cannot combine cells at resolution {} with cells at resolution {}",
@@ -92,7 +92,7 @@ fn combine(
     operation: fn(&[u64], &[u64]) -> SlotRuns,
 ) -> Result<Vec<u64>, String> {
     let resolution = same_resolution(a, b)?;
-    Ok(slot_runs_to_collection(
+    Ok(slot_runs_to_covering(
         &operation(&to_slot_runs(a)?, &to_slot_runs(b)?),
         resolution,
     ))
@@ -166,7 +166,7 @@ pub fn overlaps(a: &[u64], b: &[u64]) -> Result<bool, String> {
 /// If the cell is at a different resolution from the set, or the cell, or the
 /// one the search lands on, is not an A5 cell ID. Only those two are checked
 pub fn contains(cells: &[u64], cell: u64) -> Result<bool, String> {
-    let resolution = get_compaction_resolution(cells);
+    let resolution = covering_resolution(cells);
     let cell_resolution = checked_resolution(cell)?;
     if cell_resolution != resolution {
         return Err(format!(

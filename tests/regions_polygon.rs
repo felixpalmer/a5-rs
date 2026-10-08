@@ -1,6 +1,6 @@
 use a5::collections::compact::uncompact;
 use a5::collections::measures::count;
-use a5::collections::resolution::get_compaction_resolution;
+use a5::collections::resolution::covering_resolution;
 use a5::coordinate_systems::LonLat;
 use a5::core::hex::u64_to_hex;
 use a5::regions::polygon::{polygon_to_cells, Containment, PolygonToCellsOptions};
@@ -83,7 +83,7 @@ fn test_polygon_to_cells_accepts_closed_rings() {
 }
 
 #[test]
-fn test_polygon_to_cells_empty_collection_for_less_than_3_vertices() {
+fn test_polygon_to_cells_empty_covering_for_less_than_3_vertices() {
     let p = |lon: f64, lat: f64| LonLat::new(lon, lat);
     let degenerate: Vec<Vec<Vec<LonLat>>> = vec![
         vec![],
@@ -94,8 +94,8 @@ fn test_polygon_to_cells_empty_collection_for_less_than_3_vertices() {
     for polygon in &degenerate {
         let cells = polygon_to_cells(polygon, 5, None).unwrap();
         assert_eq!(count(&cells).unwrap(), 0);
-        // The empty collection still records its resolution
-        assert_eq!(get_compaction_resolution(&cells), 5);
+        // The empty covering still records its resolution
+        assert_eq!(covering_resolution(&cells), 5);
     }
 }
 

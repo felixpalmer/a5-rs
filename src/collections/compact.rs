@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-//! compact/uncompact for A5 DGGS. A compacted set of cells is a collection: its
+//! compact/uncompact for A5 DGGS. A compacted set of cells is a covering: its
 //! cells sorted in curve order, then a compaction marker recording the resolution
 //! they stand for (see `core::compaction_marker`).
 
-use super::resolution::get_compaction_resolution;
-use super::slot_runs::to_collection;
+use super::resolution::covering_resolution;
+use super::slot_runs::to_covering;
 use crate::core::cell_info::get_num_children;
 use crate::core::compaction_marker::is_compaction_marker;
 use crate::core::serialization::{cell_to_children, checked_resolution, get_resolution};
@@ -31,7 +31,7 @@ use crate::core::serialization::{cell_to_children, checked_resolution, get_resol
 ///
 /// If a value is neither an A5 cell ID nor a compaction marker
 pub fn uncompact(cells: &[u64]) -> Result<Vec<u64>, String> {
-    let target_resolution = get_compaction_resolution(cells);
+    let target_resolution = covering_resolution(cells);
 
     // First calculate how much space is needed
     let mut n = 0;
@@ -79,5 +79,5 @@ pub fn uncompact(cells: &[u64]) -> Result<Vec<u64>, String> {
 ///
 /// If a value is neither an A5 cell ID nor a compaction marker
 pub fn compact(cells: &[u64]) -> Result<Vec<u64>, String> {
-    to_collection(cells, get_compaction_resolution(cells))
+    to_covering(cells, covering_resolution(cells))
 }

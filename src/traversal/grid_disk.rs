@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use crate::collections::slot_runs::{compact_cells, to_collection};
+use crate::collections::slot_runs::{compact_cells, to_covering};
 use crate::core::face_adjacency::walk_faces;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::A5Cell;
@@ -58,7 +58,7 @@ fn push_cell_ids(
 fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, String> {
     let cell = deserialize(cell_id)?;
     if k == 0 {
-        return to_collection(&[cell_id], cell.resolution);
+        return to_covering(&[cell_id], cell.resolution);
     }
     if cell.resolution == 0 {
         // The cells are the 12 dodecahedron faces
@@ -74,7 +74,7 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
                 })
             })
             .collect::<Result<Vec<u64>, String>>()?;
-        return to_collection(&cells, 0);
+        return to_covering(&cells, 0);
     }
     let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
     let max_row = (1i32 << hilbert_res) - 1;
@@ -128,7 +128,7 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
     )?;
     push_cell_ids(&mut interior, &frontier.cells, hilbert_res, cell.resolution)?;
 
-    to_collection(&interior, cell.resolution)
+    to_covering(&interior, cell.resolution)
 }
 
 /// Compute the grid disk of edge-sharing neighbors within k hops.

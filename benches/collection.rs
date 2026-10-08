@@ -7,7 +7,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 mod common;
 
 fn bench_set_operations(c: &mut Criterion) {
-    // Compacted collections at resolution 12: two neighboring countries and a cap overlapping both
+    // Coverings at resolution 12: two neighboring countries and a cap overlapping both
     let france = a5::polygon_to_cells(&common::load_country("France"), 12, None).unwrap();
     let uk = a5::polygon_to_cells(&common::load_country("United Kingdom"), 12, None).unwrap();
     let paris = a5::lonlat_to_cell(a5::LonLat::new(2.3522, 48.8566), 12).unwrap();

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-//! Sets of cells: compact/uncompact, set operations and measures. Depends only on `core`.
+//! Coverings (sets of cells at one resolution): compact/uncompact, set operations and measures. Depends only on `core`.
 
 pub mod compact;
 pub mod measures;

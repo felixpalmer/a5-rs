@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use super::resolution::get_compaction_resolution;
+use super::resolution::covering_resolution;
 use crate::core::cell_info::{cell_area, get_num_children};
 use crate::core::compaction_marker::is_compaction_marker;
 use crate::core::serialization::checked_resolution;
@@ -25,7 +25,7 @@ use crate::core::serialization::checked_resolution;
 /// If a value is neither an A5 cell ID nor a compaction marker, or the count
 /// exceeds `u64` (overlapping cells counted many times)
 pub fn count(cells: &[u64]) -> Result<u64, String> {
-    let resolution = get_compaction_resolution(cells);
+    let resolution = covering_resolution(cells);
     let mut total: u64 = 0;
     for &cell in cells {
         if is_compaction_marker(cell) {

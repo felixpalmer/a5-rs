@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::collections::slot_runs::{slot_runs_to_collection, to_collection};
+use crate::collections::slot_runs::{slot_runs_to_covering, to_covering};
 use crate::coordinate_systems::{Cartesian, LonLat};
 use crate::core::cell::cell_to_spherical;
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian};
@@ -63,11 +63,11 @@ pub fn polygon_to_cells(
     }
 
     if polygon.is_empty() {
-        return to_collection(&[], resolution);
+        return to_covering(&[], resolution);
     }
     let outer = strip_closing(&polygon[0]);
     if outer.len() < 3 {
-        return to_collection(&[], resolution);
+        return to_covering(&[], resolution);
     }
     let mut rings: Vec<&[LonLat]> = vec![outer];
     for hole in &polygon[1..] {
@@ -121,7 +121,7 @@ pub fn polygon_to_cells(
                 out.push(cell);
             }
         }
-        return to_collection(&out, resolution);
+        return to_covering(&out, resolution);
     }
 
     // A quintant holding no boundary cells is wholly inside or outside; it can
@@ -137,7 +137,7 @@ pub fn polygon_to_cells(
         cap_holds_quintant,
     ) {
         let cells = fill_by_flood(&boundary, &triples, resolution, overlapping)?;
-        return to_collection(&cells, resolution);
+        return to_covering(&cells, resolution);
     }
     let runs = fill_by_curve_runs(
         &boundary,
@@ -146,5 +146,5 @@ pub fn polygon_to_cells(
         overlapping,
         cap_holds_quintant,
     )?;
-    Ok(slot_runs_to_collection(&runs, resolution))
+    Ok(slot_runs_to_covering(&runs, resolution))
 }

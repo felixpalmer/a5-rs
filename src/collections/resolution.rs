@@ -6,7 +6,7 @@ use crate::core::compaction_marker::{compaction_marker_resolution, is_compaction
 use crate::core::serialization::get_resolution;
 
 /// The resolution of a set of cells: the resolution of its compaction marker, or of
-/// its finest cell when it has none. A compacted collection stands for all its
+/// its finest cell when it has none. A covering stands for all its
 /// cells at this resolution. Returns -1 for an empty set (or the world cell).
 ///
 /// # Arguments
@@ -16,8 +16,8 @@ use crate::core::serialization::get_resolution;
 /// # Returns
 ///
 /// Resolution (-1 to 30)
-pub fn get_compaction_resolution(cells: &[u64]) -> i32 {
-    // A collection ends in its compaction marker, which records the resolution
+pub fn covering_resolution(cells: &[u64]) -> i32 {
+    // A covering ends in its compaction marker, which records the resolution
     if let Some(&last) = cells.last() {
         if is_compaction_marker(last) {
             return compaction_marker_resolution(last);

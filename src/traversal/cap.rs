@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::collections::slot_runs::to_collection;
+use crate::collections::slot_runs::to_covering;
 use crate::coordinate_systems::Spherical;
 use crate::core::cell::cell_to_spherical;
 use crate::core::cell_info::cell_area;
@@ -185,5 +185,5 @@ pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
         }
     }
 
-    to_collection(&result, target_res)
+    to_covering(&result, target_res)
 }
