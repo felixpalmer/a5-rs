@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use crate::core::compaction_marker::{compaction_marker_resolution, is_compaction_marker};
-use crate::core::serialization::get_resolution;
+use crate::core::serialization::{get_resolution, MAX_RESOLUTION, RES30_TAG_BITS, RESOLUTION_TAGS};
 
 /// The resolution of a set of cells: the resolution of its compaction marker, or of
 /// its finest cell when it has none. A covering stands for all its
@@ -24,15 +24,30 @@ pub fn covering_resolution(cells: &[u64]) -> i32 {
         }
     }
 
-    // Otherwise the finest cell
-    let mut finest = -1;
+    // Otherwise the finest cell: finer cells have smaller resolution tags (the
+    // lowest set bit), except at res 30, whose tags are recognised separately
+    let mut finest_tag: u64 = 0;
     for &cell in cells {
-        let resolution = if is_compaction_marker(cell) {
-            compaction_marker_resolution(cell)
+        let tag = if is_compaction_marker(cell) {
+            let resolution = compaction_marker_resolution(cell);
+            if resolution == MAX_RESOLUTION {
+                return MAX_RESOLUTION;
+            }
+            RESOLUTION_TAGS[resolution as usize]
         } else {
-            get_resolution(cell)
+            let tag = cell & cell.wrapping_neg();
+            if tag & RES30_TAG_BITS != 0 {
+                return MAX_RESOLUTION;
+            }
+            tag
         };
-        finest = finest.max(resolution);
+        if tag != 0 && (finest_tag == 0 || tag < finest_tag) {
+            finest_tag = tag;
+        }
     }
-    finest
+    if finest_tag == 0 {
+        -1
+    } else {
+        get_resolution(finest_tag)
+    }
 }

@@ -37,8 +37,18 @@ jobs:
           echo "Baseline commit: $BASE"
           git checkout "$BASE" -- src
 
+      # Bench targets that don't compile against the baseline (they use APIs
+      # the PR adds) are skipped and reported as new benchmarks.
       - name: Run benchmarks (baseline)
-        run: cargo bench -- --save-baseline base $CRITERION_ARGS
+        run: |
+          for file in benches/*.rs; do
+            bench=$(basename "$file" .rs)
+            if cargo bench --no-run --bench "$bench"; then
+              cargo bench --bench "$bench" -- --save-baseline base $CRITERION_ARGS
+            else
+              echo "::warning::Skipping bench '$bench': does not compile against the baseline"
+            fi
+          done
 
       - name: Compare (fail on >15% regression)
         shell: bash

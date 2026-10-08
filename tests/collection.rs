@@ -159,12 +159,7 @@ fn test_set_operations_out_of_curve_order() {
 fn test_measures() {
     for f in load_fixtures().measures {
         let cells = to_cells(&f.cells);
-        assert_eq!(
-            covering_resolution(&cells),
-            f.resolution,
-            "{}",
-            f.name
-        );
+        assert_eq!(covering_resolution(&cells), f.resolution, "{}", f.name);
         assert_eq!(
             count(&cells).unwrap(),
             f.count.parse::<u64>().unwrap(),

@@ -14,8 +14,8 @@ use crate::core::face_adjacency::walk_faces;
 use crate::core::origin::get_origins;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::tiling::get_pentagon_vertices;
-use crate::geometry::pentagon::clip_segment;
 use crate::core::utils::A5Cell;
+use crate::geometry::pentagon::clip_segment;
 use crate::lattice::{triple_flavor, Triple};
 use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::cap::estimate_cell_radius;
@@ -167,7 +167,9 @@ pub fn trace_path(
             return (None, None);
         }
         let shape = last_cell_shape(cell);
-        let face = shape.as_ref().and_then(|s| last_projection(point, s.origin_id));
+        let face = shape
+            .as_ref()
+            .and_then(|s| last_projection(point, s.origin_id));
         (shape, face)
     };
     for &p in &point_spherical {
