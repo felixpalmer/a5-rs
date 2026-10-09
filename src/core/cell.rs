@@ -341,6 +341,36 @@ fn spherical_to_cell_boundary(
     }
 }
 
+/// The cell at `resolution` containing the center of `cell`:
+/// `spherical_to_cell(cell_to_spherical(cell)?, resolution)` without the round
+/// trip through the sphere. A cell's center lies on its own face, so the lookup
+/// runs in that face's frame. A center within float noise of a cell edge, where
+/// the round trip's own noise decides, goes round the sphere so ties resolve
+/// exactly as `spherical_to_cell` resolves them.
+pub fn cell_center_to_cell(cell: u64, resolution: i32) -> Result<u64, String> {
+    let cell_data = deserialize(cell)?;
+    if resolution >= FIRST_HILBERT_RESOLUTION - 1
+        && cell_data.resolution >= FIRST_HILBERT_RESOLUTION - 1
+    {
+        let (quintant, orientation) = segment_to_quintant(cell_data.segment, cell_data.origin());
+        let hilbert_resolution = cell_data.resolution - FIRST_HILBERT_RESOLUTION + 1;
+        let cell_geom = s_to_cell(cell_data.s, hilbert_resolution as usize, orientation);
+        let center = get_pentagon_center(
+            hilbert_resolution,
+            quintant,
+            &cell_geom.triple,
+            cell_geom.flavor,
+        );
+        let quintant = get_quintant_polar(to_polar(center));
+        if let Some(best) = lookup_in_quintant(center, cell_data.origin(), quintant, resolution)? {
+            if best.margin > TIE_EPS * (1u64 << best.hilbert_resolution) as f64 {
+                return Ok(best.cell_id);
+            }
+        }
+    }
+    spherical_to_cell(cell_to_spherical(cell)?, resolution)
+}
+
 /// Get the pentagon shape for a given A5 cell
 pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
     let (quintant, orientation) = segment_to_quintant(cell.segment, cell.origin());

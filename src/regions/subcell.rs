@@ -11,7 +11,7 @@
 use std::sync::LazyLock;
 
 use crate::coordinate_systems::Face;
-use crate::core::cell::{cell_to_spherical, get_pentagon, spherical_to_cell};
+use crate::core::cell::{cell_center_to_cell, get_pentagon};
 use crate::core::face_adjacency::{seam_transform, FACE_ADJACENCY};
 use crate::core::serialization::{
     deserialize, get_resolution, slot_to_cell, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
@@ -63,7 +63,7 @@ pub fn cell_to_supercell(cell: u64, resolution: i32) -> Result<u64, String> {
     if resolution == cell_resolution {
         return Ok(cell);
     }
-    spherical_to_cell(cell_to_spherical(cell)?, resolution)
+    cell_center_to_cell(cell, resolution)
 }
 
 /// The cells at a finer `resolution` whose centers lie in `cell`: the spatial
