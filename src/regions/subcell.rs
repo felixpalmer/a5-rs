@@ -12,17 +12,15 @@ use std::sync::LazyLock;
 
 use crate::collections::slot_runs::{slot_runs_to_covering, to_covering};
 use crate::collections::SlotRuns;
-use crate::coordinate_systems::{Face, Spherical};
+use crate::coordinate_systems::Face;
 use crate::core::cell::{cell_to_spherical, get_pentagon, spherical_to_cell};
-use crate::core::constants::TWO_PI_OVER_5;
-use crate::core::face_adjacency::FACE_ADJACENCY;
+use crate::core::face_adjacency::{seam_transform, FACE_ADJACENCY};
 use crate::core::serialization::{
     deserialize, get_resolution, slot_to_cell, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
     RES30_QUINTANTS, WORLD_CELL,
 };
 use crate::core::tiling::get_face_vertices;
 use crate::core::utils::OriginId;
-use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::curve_descent::{descend_in_curve_order, CurveDescentClass};
 
 // How far the center of any descendant of a cell can lie from the cell's own
@@ -106,7 +104,7 @@ pub fn cell_to_subcell(cell: u64, resolution: i32) -> Result<Vec<u64>, String> {
 
     // Cells along a dodecahedron edge interlock with the neighboring face's, so a
     // cell's subcells can come from the faces next to its own: search each face
-    // the cell's pentagon reaches into, in that face's frame.
+    // the cell's pentagon reaches into, in that face's frame (see `seam_transform`).
     let a5cell = deserialize(cell)?;
     let origin_id = a5cell.origin_id;
     let vertices = get_pentagon(&a5cell)?.get_vertices();
@@ -117,7 +115,8 @@ pub fn cell_to_subcell(cell: u64, resolution: i32) -> Result<Vec<u64>, String> {
     }
     let mut frames: Vec<(OriginId, [f64; 10])> = vec![(origin_id, own)];
     for q in 0..5 {
-        let (adjacent_id, map) = &UNFOLDS[origin_id as usize * 5 + q];
+        let adjacent_id = FACE_ADJACENCY[origin_id as usize][q].0;
+        let map = seam_transform(origin_id, q);
         let mut mapped = [0.0f64; 10];
         let mut reaches = false;
         for i in (0..10).step_by(2) {
@@ -128,7 +127,7 @@ pub fn cell_to_subcell(cell: u64, resolution: i32) -> Result<Vec<u64>, String> {
             }
         }
         if reaches {
-            frames.push((*adjacent_id, mapped));
+            frames.push((adjacent_id, mapped));
         }
     }
 
@@ -241,63 +240,3 @@ fn signed_margin(lines: &EdgeLines, x: f64, y: f64) -> f64 {
     }
     margin
 }
-
-// By origin.id * 5 + quintant: the face across that quintant's edge, and the
-// map from this face's frame into that face's, as [a, b, c, d, tx, ty] taking
-// (x, y) to (a x + c y + tx, b x + d y + ty). Beyond its edges a face's frame
-// extends into the neighboring face by unfolding the dodecahedron about the
-// shared edge, so the map is rigid; it is fitted from three points of the
-// neighbor's quintant on that edge.
-static UNFOLDS: LazyLock<Vec<(OriginId, [f64; 6])>> = LazyLock::new(|| {
-    // Its own projection rather than the thread-local one, which a caller may hold
-    let mut dodecahedron = DodecahedronProjection::new().expect("dodecahedron projection");
-    let mut unfolds = Vec::with_capacity(60);
-    for (o, adjacency) in FACE_ADJACENCY.iter().enumerate() {
-        for &(adjacent_id, adjacent_quintant) in adjacency {
-            // Points of the neighbor's quintant (in its frame), and where they land in this one
-            let mut to = [0.0f64; 6];
-            let mut from = [0.0f64; 6];
-            for (k, (r, angle)) in [(0.3, 0.0), (0.55, -0.4), (0.55, 0.4)]
-                .into_iter()
-                .enumerate()
-            {
-                let gamma = adjacent_quintant as f64 * TWO_PI_OVER_5.get() + angle;
-                let point = Face::new(r * gamma.cos(), r * gamma.sin());
-                let spherical: Spherical = dodecahedron
-                    .inverse(point, adjacent_id)
-                    .expect("unfold inverse");
-                let landed = dodecahedron
-                    .forward(spherical, o as OriginId)
-                    .expect("unfold forward");
-                to[2 * k] = point.x();
-                to[2 * k + 1] = point.y();
-                from[2 * k] = landed.x();
-                from[2 * k + 1] = landed.y();
-            }
-            // Solve [to1 - to0, to2 - to0] = M [from1 - from0, from2 - from0]
-            let f1x = from[2] - from[0];
-            let f1y = from[3] - from[1];
-            let f2x = from[4] - from[0];
-            let f2y = from[5] - from[1];
-            let det = f1x * f2y - f2x * f1y;
-            let t1x = to[2] - to[0];
-            let t1y = to[3] - to[1];
-            let t2x = to[4] - to[0];
-            let t2y = to[5] - to[1];
-            let a = (t1x * f2y - t2x * f1y) / det;
-            let c = (t2x * f1x - t1x * f2x) / det;
-            let b = (t1y * f2y - t2y * f1y) / det;
-            let d = (t2y * f1x - t1y * f2x) / det;
-            let map = [
-                a,
-                b,
-                c,
-                d,
-                to[0] - a * from[0] - c * from[1],
-                to[1] - b * from[0] - d * from[1],
-            ];
-            unfolds.push((adjacent_id, map));
-        }
-    }
-    unfolds
-});
