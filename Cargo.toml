@@ -56,10 +56,6 @@ name = "grid_disk"
 harness = false
 
 [[bench]]
-name = "hex"
-harness = false
-
-[[bench]]
 name = "hierarchy"
 harness = false
 

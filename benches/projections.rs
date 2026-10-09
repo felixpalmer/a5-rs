@@ -12,12 +12,11 @@ use a5::core::serialization::deserialize;
 use a5::projections::{AuthalicProjection, DodecahedronProjection, GnomonicProjection};
 
 mod common;
-
-const N: usize = 256;
+use common::BATCH;
 
 fn bench_projections(c: &mut Criterion) {
     // Spherical points paired with the origin of the face they fall on.
-    let cells = common::sample_cells(10, N, 42);
+    let cells = common::sample_cells(10, BATCH, 42);
     let sphericals: Vec<Spherical> = cells
         .iter()
         .map(|&cell| cell_to_spherical(cell).unwrap())
@@ -28,25 +27,27 @@ fn bench_projections(c: &mut Criterion) {
         .collect();
 
     let mut dodec = DodecahedronProjection::new().unwrap();
-    let faces: Vec<Face> = (0..N)
+    let faces: Vec<Face> = (0..BATCH)
         .map(|n| dodec.forward(sphericals[n], origin_ids[n]).unwrap())
         .collect();
 
     let mut g = c.benchmark_group("dodecahedron projection");
-    let mut i = 0usize;
-    g.bench_function("forward", |b| {
+    g.bench_function("forward ×100", |b| {
         b.iter(|| {
-            let n = i & (N - 1);
-            i += 1;
-            black_box(dodec.forward(sphericals[n], origin_ids[n]).unwrap())
+            for (&s, &origin_id) in sphericals.iter().zip(&origin_ids) {
+                black_box(dodec.forward(black_box(s), black_box(origin_id)).unwrap());
+            }
         })
     });
-    let mut j = 0usize;
-    g.bench_function("inverse", |b| {
+    g.bench_function("inverse ×100", |b| {
         b.iter(|| {
-            let n = j & (N - 1);
-            j += 1;
-            black_box(dodec.inverse(faces[n], origin_ids[n]).unwrap())
+            for (&face, &origin_id) in faces.iter().zip(&origin_ids) {
+                black_box(
+                    dodec
+                        .inverse(black_box(face), black_box(origin_id))
+                        .unwrap(),
+                );
+            }
         })
     });
     g.finish();
@@ -54,25 +55,23 @@ fn bench_projections(c: &mut Criterion) {
     let authalic = AuthalicProjection;
     let gnomonic = GnomonicProjection;
     let mut rng = common::Rng::new(7);
-    let phis: Vec<Radians> = (0..N)
+    let phis: Vec<Radians> = (0..BATCH)
         .map(|_| Radians::new_unchecked(PI * (rng.next() - 0.5)))
         .collect();
 
     let mut g = c.benchmark_group("authalic projection");
-    let mut i = 0usize;
-    g.bench_function("forward", |b| {
+    g.bench_function("forward ×100", |b| {
         b.iter(|| {
-            let phi = phis[i & (N - 1)];
-            i += 1;
-            black_box(authalic.forward(black_box(phi)))
+            for &phi in &phis {
+                black_box(authalic.forward(black_box(phi)));
+            }
         })
     });
-    let mut j = 0usize;
-    g.bench_function("inverse", |b| {
+    g.bench_function("inverse ×100", |b| {
         b.iter(|| {
-            let phi = phis[j & (N - 1)];
-            j += 1;
-            black_box(authalic.inverse(black_box(phi)))
+            for &phi in &phis {
+                black_box(authalic.inverse(black_box(phi)));
+            }
         })
     });
     g.finish();
@@ -80,20 +79,18 @@ fn bench_projections(c: &mut Criterion) {
     let polars: Vec<Polar> = sphericals.iter().map(|&s| gnomonic.forward(s)).collect();
 
     let mut g = c.benchmark_group("gnomonic projection");
-    let mut i = 0usize;
-    g.bench_function("forward", |b| {
+    g.bench_function("forward ×100", |b| {
         b.iter(|| {
-            let s = sphericals[i & (N - 1)];
-            i += 1;
-            black_box(gnomonic.forward(black_box(s)))
+            for &s in &sphericals {
+                black_box(gnomonic.forward(black_box(s)));
+            }
         })
     });
-    let mut j = 0usize;
-    g.bench_function("inverse", |b| {
+    g.bench_function("inverse ×100", |b| {
         b.iter(|| {
-            let p = polars[j & (N - 1)];
-            j += 1;
-            black_box(gnomonic.inverse(black_box(p)))
+            for &p in &polars {
+                black_box(gnomonic.inverse(black_box(p)));
+            }
         })
     });
     g.finish();
