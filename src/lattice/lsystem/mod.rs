@@ -36,7 +36,14 @@ use std::sync::LazyLock;
 use crate::lattice::types::{Orientation, Triple};
 
 use grammar::{draws, rules};
-use tables::{compile_grammar, CurveTables, BSP_EPS, POW2};
+use tables::{compile_grammar, CurveTables, POW2};
+
+// A real cell's corner sum lies exactly on a separator (0, exact in floats) or
+// at least 48 corner-sum units off it, at every level: the gap is between
+// integer points and fixed lines, so it does not shrink as the scale grows. A
+// threshold scaled with the level (as the footprints' BSP_EPS is) would swallow
+// that gap by level 28 and pick the wrong child.
+const CLASSIFY_THRESHOLD: f64 = -1.0;
 
 /// Branchless child pick: 3 separator dot products form a 3-bit pattern that
 /// indexes the per-state lookup table. No data-dependent branches (the tree
@@ -46,7 +53,7 @@ use tables::{compile_grammar, CurveTables, BSP_EPS, POW2};
 fn classify(t: &CurveTables, state: usize, rel_a: f64, rel_b: f64, scale: f64) -> usize {
     let s = &t.class_sep;
     let b = state * 9;
-    let thr = -BSP_EPS * scale;
+    let thr = CLASSIFY_THRESHOLD;
     let b0 = (s[b] * rel_a + s[b + 1] * rel_b + s[b + 2] * scale >= thr) as usize;
     let b1 = (s[b + 3] * rel_a + s[b + 4] * rel_b + s[b + 5] * scale >= thr) as usize;
     let b2 = (s[b + 6] * rel_a + s[b + 7] * rel_b + s[b + 8] * scale >= thr) as usize;
@@ -80,20 +87,22 @@ pub fn ab_to_triple(sum_a: f64, sum_b: f64) -> Triple {
     if (2 * sa + sb).rem_euclid(12) != 0 || sb.rem_euclid(4) != 0 {
         panic!("ab_to_triple: off-lattice corner sum ({},{})", sum_a, sum_b);
     }
-    let yz = (2 * sa + sb - 12) / 12; // y - z
-    let e = (sb + 4) / 4; // 2x - y - z
-    for parity in [0i64, 1] {
-        if (e + parity).rem_euclid(3) != 0 {
-            continue;
-        }
-        let x = (e + parity) / 3;
-        let r = parity - x; // = y + z
-        if (r + yz).rem_euclid(2) != 0 {
-            continue;
-        }
-        return Triple::new(x as i32, ((r + yz) / 2) as i32, ((r - yz) / 2) as i32);
+    // x = (2x - y - z + parity) / 3 is an integer, which pins the parity
+    let parity = (-(sb + 4) / 4).rem_euclid(3);
+    let triple = ab_to_triple_with_parity(sa, sb, parity);
+    if parity > 1 || (triple.x + triple.y + triple.z) as i64 != parity {
+        panic!("ab_to_triple: no integer triple for ({},{})", sum_a, sum_b);
     }
-    panic!("ab_to_triple: no integer triple for ({},{})", sum_a, sum_b);
+    triple
+}
+
+/// `ab_to_triple` for a corner sum whose parity is known: no search and no checks.
+#[inline]
+fn ab_to_triple_with_parity(sum_a: i64, sum_b: i64, parity: i64) -> Triple {
+    let x = ((sum_b + 4) / 4 + parity) / 3;
+    let r = parity - x; // y + z
+    let yz = (2 * sum_a + sum_b - 12) / 12; // y - z
+    Triple::new(x as i32, ((r + yz) / 2) as i32, ((r - yz) / 2) as i32)
 }
 
 pub fn triple_to_ab(t: &Triple) -> (f64, f64) {
@@ -153,7 +162,17 @@ pub fn axiom_leaf_cell(t: &CurveTables, s: u64, r: usize, axiom: usize) -> LeafC
 // the containing child (and the leaf resolves by exact sum match). Fractional
 // point location no longer descends at all — spherical_to_cell rounds to a triple
 // (see curve.rs round_to_triple). Internal; also used by compat.rs.
-pub fn axiom_target_to_s(t: &CurveTables, ta: f64, tb: f64, r: usize, axiom: usize) -> (u64, u8) {
+//
+// Returns (s, leaf_flavor). With `below`, also writes the descent state below
+// the leaf there (see `curve_child`).
+pub fn axiom_target_to_s(
+    t: &CurveTables,
+    ta: f64,
+    tb: f64,
+    r: usize,
+    axiom: usize,
+    below: Option<&mut CurveNode>,
+) -> (u64, u8) {
     let mut motif = axiom;
     let mut flip: u8 = 0;
     let mut pos_a = 0.0f64;
@@ -196,6 +215,9 @@ pub fn axiom_target_to_s(t: &CurveTables, ta: f64, tb: f64, r: usize, axiom: usi
             "lsystem inverse: no leaf match for corner sum ({},{})",
             ta, tb
         );
+    }
+    if let Some(below) = below {
+        *below = step_below(t, motif, flip, pos_a, pos_b, d0);
     }
     (s_val | d0 as u64, t.leaf_flavor[base * 4 + d0])
 }
@@ -309,6 +331,17 @@ pub fn s_to_triple(s: u64, resolution: usize, orientation: Orientation) -> Tripl
 
 /// Triple coordinate -> the A5 curve position `s`. Inverse of `s_to_triple`.
 pub fn triple_to_s_lattice(triple: &Triple, resolution: usize, orientation: Orientation) -> u64 {
+    triple_to_curve(triple, resolution, orientation, None).0
+}
+
+/// `triple_to_s_lattice`, also giving the leaf flavor and, with `below`, the
+/// descent state below the cell.
+fn triple_to_curve(
+    triple: &Triple,
+    resolution: usize,
+    orientation: Orientation,
+    below: Option<&mut CurveNode>,
+) -> (u64, u8) {
     let rec = &A5_ORIENT[orient_index(orientation)];
     let (ab_a, ab_b) = triple_to_ab(triple);
     let tau_sum = if rec.is_b {
@@ -316,10 +349,123 @@ pub fn triple_to_s_lattice(triple: &Triple, resolution: usize, orientation: Orie
     } else {
         0.0
     };
-    let s_axiom = axiom_target_to_s(&A5, ab_a - tau_sum, ab_b + tau_sum, resolution, rec.axiom).0;
-    if rec.reverse {
+    let (s_axiom, flavor) = axiom_target_to_s(
+        &A5,
+        ab_a - tau_sum,
+        ab_b + tau_sum,
+        resolution,
+        rec.axiom,
+        below,
+    );
+    let s = if rec.reverse {
         (1u64 << (2 * resolution)) - 1 - s_axiom
     } else {
         s_axiom
+    };
+    (s, flavor)
+}
+
+// ---------- stepwise descent: the cell hierarchy in curve order ----------
+// A walk down the hierarchy reads one digit per level, so rather than a full
+// O(resolution) descent per cell it carries each cell's descent state and
+// takes each child in O(1). The state below a cell is the one its children's
+// digits are read from: the motif, flip and turtle position after the cell's
+// own digits, the position in units of the children's level (one level down,
+// it doubles).
+
+/// The parity (x + y + z) of each leaf cell by (motif, flip, digit): a cell's
+/// position only translates its leaf by lattice vectors, which keep the parity.
+static LEAF_PARITY: LazyLock<Vec<i64>> = LazyLock::new(|| {
+    (0..A5.leaf_flavor.len())
+        .map(|i| {
+            let t = ab_to_triple(A5.leaf_sum[2 * i], A5.leaf_sum[2 * i + 1]);
+            (t.x + t.y + t.z) as i64
+        })
+        .collect()
+});
+
+/// The descent state below a cell (see `curve_child`, `triple_to_curve_node`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurveNode {
+    pub motif: usize,
+    pub flip: u8,
+    pub pos_a: f64,
+    pub pos_b: f64,
+}
+
+/// The child with curve digit `digit` (0-3, the child's last digit of s) of the
+/// cell whose descent state is `node`: its cell (triple and flavor) at
+/// `resolution` (the child's), and the descent state below it. Agrees with
+/// `s_to_cell` on the child's s.
+#[inline]
+pub fn curve_child(
+    node: &CurveNode,
+    digit: usize,
+    resolution: usize,
+    orientation: Orientation,
+) -> (Cell, CurveNode) {
+    let t = &*A5;
+    let rec = &A5_ORIENT[orient_index(orientation)];
+    // A reversed curve reads s as N - 1 - s: every digit complemented
+    let d = if rec.reverse { 3 - digit } else { digit };
+    let base = node.motif * 2 + node.flip as usize;
+    // The parity is known up front (see LEAF_PARITY): no search
+    let sum_a = 3.0 * node.pos_a + t.leaf_sum[base * 8 + d * 2];
+    let sum_b = 3.0 * node.pos_b + t.leaf_sum[base * 8 + d * 2 + 1];
+    let mut triple =
+        ab_to_triple_with_parity(sum_a as i64, sum_b as i64, LEAF_PARITY[base * 4 + d]);
+    if rec.is_b {
+        let p = POW2[resolution] as i32;
+        triple.x -= p;
+        triple.y += p;
     }
+    let below = step_below(t, node.motif, node.flip, node.pos_a, node.pos_b, d);
+    let cell = Cell {
+        triple,
+        flavor: t.leaf_flavor[base * 4 + d],
+    };
+    (cell, below)
+}
+
+/// The descent state below the child with (axiom-order) digit `d` of the cell
+/// whose descent state is (motif, flip, pos_a, pos_b).
+#[inline]
+fn step_below(
+    t: &CurveTables,
+    motif: usize,
+    flip: u8,
+    pos_a: f64,
+    pos_b: f64,
+    d: usize,
+) -> CurveNode {
+    let ci = motif * 4 + d;
+    let sign = if flip == 1 { -1.0 } else { 1.0 };
+    CurveNode {
+        motif: t.child_token[ci] as usize,
+        flip: flip ^ t.child_flip[ci],
+        pos_a: 2.0 * pos_a + t.child_off_a[ci] * sign,
+        pos_b: 2.0 * pos_b + t.child_off_b[ci] * sign,
+    }
+}
+
+/// A cell's curve position `s`, flavor and the descent state below it, from its
+/// triple: where a walk down to the cell by `curve_child` would arrive, in one
+/// descent rather than one step per level.
+pub fn triple_to_curve_node(
+    triple: &Triple,
+    resolution: usize,
+    orientation: Orientation,
+) -> (u64, u8, CurveNode) {
+    // Below the resolution-0 cell (the whole quintant) is the axiom itself
+    let mut node = CurveNode {
+        motif: A5_ORIENT[orient_index(orientation)].axiom,
+        flip: 0,
+        pos_a: 0.0,
+        pos_b: 0.0,
+    };
+    if resolution == 0 {
+        return (0, LEVEL0_FLAVOR, node);
+    }
+    let (s, flavor) = triple_to_curve(triple, resolution, orientation, Some(&mut node));
+    (s, flavor, node)
 }

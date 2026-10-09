@@ -3,6 +3,7 @@
 // Copyright (c) A5 contributors
 
 pub mod cap;
+pub mod curve_descent;
 pub mod global_neighbors;
 pub mod grid_disk;
 pub mod lattice_boundary;

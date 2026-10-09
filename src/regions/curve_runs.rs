@@ -12,59 +12,36 @@
 // O(area).
 
 use std::collections::HashMap;
-use std::sync::LazyLock;
 
 use crate::collections::slot_runs::append_slot_run;
 use crate::collections::SlotRuns;
 use crate::core::cell::cell_to_spherical;
 use crate::core::coordinate_transforms::to_cartesian;
-use crate::core::origin::{get_origins, quintant_to_segment, segment_to_quintant};
 use crate::core::serialization::{
-    cell_first_slot, slot_to_cell, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT, S_MASK,
+    cell_first_slot, slot_to_cell, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT, SLOT_COUNTS, S_MASK,
 };
 use crate::geometry::prepared_polygon::point_in_prepared_polygon;
-use crate::lattice::{s_to_triple, triple_flavor, triple_to_s, Orientation, Triple};
+use crate::lattice::{s_to_triple, triple_flavor, triple_to_s, Triple};
 use crate::traversal::neighbors::NEIGHBOR_DELTAS;
-use crate::traversal::triple_cells::{for_each_triple_neighbor, triple_cell_center};
+use crate::traversal::triple_cells::{
+    for_each_triple_neighbor, triple_cell_center, QUINTANT_TABLES,
+};
 
 use super::polygon_boundary::{boundary_neighbors, Boundary};
 
 // Cells are ordered on the curve by the leaf slots they occupy (see core/serialization).
 
-/// Curve orientation of each quintant by its 6-bit slot prefix.
-static PREFIX_ORIENTATION: LazyLock<Vec<Orientation>> = LazyLock::new(|| {
-    let origins = get_origins();
-    (0..60)
-        .map(|q| {
-            let origin = &origins[q / 5];
-            segment_to_quintant((q + origin.first_quintant) % 5, origin).1
-        })
-        .collect()
-});
-
-/// Slot prefix and curve orientation by triple quintant (origin.id * 5 + quintant).
-static TRIPLE_PREFIX: LazyLock<Vec<(u64, Orientation)>> = LazyLock::new(|| {
-    let mut out = Vec::with_capacity(60);
-    for origin in get_origins() {
-        for quintant in 0..5 {
-            let (segment, orientation) = quintant_to_segment(quintant, origin);
-            let q = 5 * origin.id as usize + (segment + 5 - origin.first_quintant) % 5;
-            out.push(((q as u64) << QUINTANT_SHIFT, orientation));
-        }
-    }
-    out
-});
-
 /// The slot of a cell given in triple space.
 fn triple_slot(cell: [i32; 5], hilbert_res: usize, unit_shift: u32) -> Result<u64, String> {
-    let (prefix, orientation) = TRIPLE_PREFIX[(cell[0] * 5 + cell[1]) as usize];
+    let tables = &*QUINTANT_TABLES;
+    let q = (cell[0] * 5 + cell[1]) as usize;
     let s = triple_to_s(
         &Triple::new(cell[2], cell[3], cell[4]),
         hilbert_res,
-        orientation,
+        tables.orientation[q],
     )
     .ok_or("triple_slot: invalid triple")?;
-    Ok(prefix | (s << unit_shift))
+    Ok(tables.prefix[q] | (s << unit_shift))
 }
 
 /// Fill a polygon by curve runs, given its classified boundary and the boundary
@@ -89,8 +66,8 @@ pub(super) fn fill_by_curve_runs(
         ],
     )?;
 
+    let unit = SLOT_COUNTS[resolution as usize];
     let unit_shift = 58 - 2 * hilbert_res as u32;
-    let unit = 1u64 << unit_shift;
 
     // Band slots carry two flags below the slot: EMIT (the cell is in the output)
     // and RING. A u128 always has room for them, at resolution 30 too.
@@ -125,11 +102,12 @@ pub(super) fn fill_by_curve_runs(
         }
         let r = ring_by_slot[&ring_slot];
         let [_, _, x, y, z] = ring[r].0;
+        let tables = &*QUINTANT_TABLES;
         let q = (slot >> QUINTANT_SHIFT) as usize;
         let t = s_to_triple(
             (slot & S_MASK) >> unit_shift,
             hilbert_res,
-            PREFIX_ORIENTATION[q],
+            tables.orientation[tables.triple_quintant_by_id_order[q]],
         );
         let flavor = triple_flavor(&Triple::new(x, y, z), max_row) as usize;
         NEIGHBOR_DELTAS[flavor]

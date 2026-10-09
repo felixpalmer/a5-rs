@@ -296,7 +296,7 @@ pub fn compat_triple_to_s(t: &Triple, resolution: usize, orientation: Orientatio
         raw = Triple::new(raw.z, raw.y, raw.x);
     }
     let (ab_a, ab_b) = triple_to_ab(&raw);
-    let s_geo = axiom_target_to_s(&ORIGINAL, ab_a, ab_b, resolution, *AXIOM_W).0;
+    let s_geo = axiom_target_to_s(&ORIGINAL, ab_a, ab_b, resolution, *AXIOM_W, None).0;
     let (mut digits, len) = digits_of(s_geo, resolution);
     inverse_shift(&mut digits[..len], rec.invert_j, rec.flip_ij);
     let v = pack_digits(&digits[..len]);
@@ -341,9 +341,9 @@ fn ij_to_quaternary(u: f64, v: f64, flips: [i32; 2]) -> u8 {
     }
 }
 
-/// Child anchor offsets in IJ units, indexed by [flip combination][digit]
+/// Child anchor offsets in IJ units, indexed by `[flip combination][digit]`
 /// (= the old engine's kj_to_ij(quaternary_to_kj(digit, flips))).
-/// Flip index = (flips[0] == YES) | (flips[1] == YES) << 1.
+/// Flip index = `(flips[0] == YES) | (flips[1] == YES) << 1`.
 const CHILD_OFFSET_IJ: [[(f64, f64); 4]; 4] = [
     [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)], // (NO, NO):  p = k, q = j
     [(0.0, 0.0), (1.0, -1.0), (0.0, -1.0), (1.0, -2.0)], // (YES, NO): p = -j, q = -k

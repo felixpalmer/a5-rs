@@ -78,3 +78,7 @@ harness = false
 [[bench]]
 name = "projections"
 harness = false
+
+[[bench]]
+name = "subcell"
+harness = false

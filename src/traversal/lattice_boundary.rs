@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::core::face_adjacency::FACE_ADJACENCY;
+use crate::core::face_adjacency::{seam_triple, FACE_ADJACENCY};
 use crate::core::utils::Origin;
-use crate::lattice::{triple_in_bounds, Triple};
+use crate::lattice::{triple_flavor, triple_in_bounds, Triple};
+use crate::traversal::neighbors::NEIGHBOR_DELTAS;
 
 /// Neighbor delta: (dx, dy, dz, is_edge_sharing)
 pub type NeighborDelta = (i32, i32, i32, bool);
@@ -43,15 +44,6 @@ pub const RIGHT_EDGE_DELTAS: [&[NeighborDelta]; 4] = [
     &[(0, -1, 0, true), (-1, 0, 0, false)],
     // parity=1, yOdd
     &[],
-];
-
-/// Cross-face base-edge deltas (source y=max_row), indexed by parity.
-/// Applied to the mirrored position [z, max_row, x] on the adjacent face.
-pub const CROSS_FACE_DELTAS: [&[NeighborDelta]; 2] = [
-    // parity=0
-    &[(0, 0, 0, true), (1, 0, 0, true), (1, 0, -1, false)],
-    // parity=1
-    &[(0, 0, -1, true), (0, 0, 0, false)],
 ];
 
 /// If the triple is a valid cell, append it to `out` as (origin_id, quintant, x, y, z).
@@ -144,19 +136,21 @@ pub fn get_boundary_neighbor_triples(
         );
     }
 
-    // Base edge (y=max_row): neighbor on adjacent face at mirrored [z, max_row, x]
+    // Base edge (y=max_row): across the face seam the lattice continues, so the
+    // neighbors on the adjacent face are those of the cell's image there
     if triple.y == max_row {
         let (adj_face_id, adj_quintant) = FACE_ADJACENCY[origin.id as usize][source_quintant];
-        let base = Triple::new(triple.z, max_row, triple.x);
-        push_deltas(
-            out,
-            &base,
-            CROSS_FACE_DELTAS[parity as usize],
-            edge_only,
-            adj_face_id,
-            adj_quintant,
-            max_row,
-        );
+        let image = seam_triple(&triple, max_row);
+        // The image's pentagon is the cell's turned half-way round: its flavor's parity bit flipped
+        let deltas = &NEIGHBOR_DELTAS[(triple_flavor(&triple, max_row) ^ 1) as usize];
+        let list: &[Triple] = if edge_only { &deltas.edge } else { &deltas.all };
+        for d in list {
+            // Only steps back towards the seam (dy < 0) can land inside the neighbor quintant
+            if d.y < 0 {
+                let neighbor = Triple::new(image.x + d.x, image.y + d.y, image.z + d.z);
+                push_triple(out, neighbor, adj_face_id, adj_quintant, max_row);
+            }
+        }
     }
 
     // Apex [0,0,0]: cells from all 5 quintants meet at the face center

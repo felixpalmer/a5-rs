@@ -70,7 +70,7 @@ cargo publish
 ```
 
 ## Benchmarks
-- Criterion benchmark suite lives in `/benches`, one file per topic (`cap`, `cell`, `collection`, `compact`, `grid_disk`, `hex`, `hierarchy`, `hilbert`, `line`, `polygon`, `projections`). It mirrors the TypeScript `/benchmarks` suite in `../a5`.
+- Criterion benchmark suite lives in `/benches`, one file per topic (`cap`, `cell`, `collection`, `compact`, `grid_disk`, `curve`, `hex`, `hierarchy`, `line`, `polygon`, `projections`, `subcell`). It mirrors the TypeScript `/benchmarks` suite in `../a5`.
 - Each file is registered as a `[[bench]]` target with `harness = false` in `Cargo.toml`. Shared helpers (deterministic mulberry32 PRNG, `sample_points`/`sample_cells`/`sample_s`, `load_country` fixture loader) are in `benches/common/mod.rs`, included via `mod common;` (the `common/` subdir is not itself a bench target).
 - Run all: `cargo bench`. Run one: `cargo bench --bench cell`. For a quick check use `cargo bench --bench cell -- --warm-up-time 0.2 --measurement-time 0.5`.
 
@@ -125,6 +125,8 @@ cargo publish --dry-run
 ```
 
 These are the same checks that run in CI (.github/workflows/test.yml). Run these to verify your changes before the user reviews the code. The CI also checks links in markdown files using lychee.
+
+The doc check (5) covers private items too, and rustdoc reads bracketed text in `///` doc comments as intra-doc links: a comment like `[flip combination][digit]` fails it with a broken-link error. Wrap such text in backticks (`` `[flip][digit]` ``).
 
 ## Git Usage
 

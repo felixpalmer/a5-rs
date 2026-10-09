@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::collections::slot_runs::to_covering;
+use crate::collections::slot_runs::{slot_runs_to_covering, to_covering};
+use crate::collections::SlotRuns;
 use crate::coordinate_systems::Spherical;
 use crate::core::cell::cell_to_spherical;
 use crate::core::cell_info::cell_area;
@@ -13,9 +14,9 @@ use crate::core::serialization::{
     cell_to_parent, deserialize, get_resolution, serialize, FIRST_HILBERT_RESOLUTION,
 };
 use crate::core::utils::A5Cell;
-use crate::traversal::triple_cells::{
-    cell_ids_to_triples, triple_cell_center, triple_cell_to_id, triple_children, walk_triple_cells,
-};
+use crate::projections::dodecahedron::DodecahedronProjection;
+use crate::traversal::curve_descent::{descend_in_curve_order, CurveDescentClass};
+use crate::traversal::triple_cells::{cell_ids_to_triples, triple_cell_center, walk_triple_cells};
 
 /// Safety factor applied to equal-area circle radius to get conservative circumradius estimate
 const CELL_RADIUS_SAFETY_FACTOR: f64 = 2.0;
@@ -80,9 +81,8 @@ pub fn pick_coarse_resolution(radius: f64, target_res: i32) -> i32 {
 }
 
 /// BFS at the cap's coarse resolution (1 or above) from `start_cell` through
-/// every cell whose center lies within `h_expanded` of `center`, returning every
-/// cell reached: the cells within, plus the ring just outside (the subdivision
-/// classifies them).
+/// every cell whose center lies within `h_expanded` of `center`, returning those
+/// cells (the ring just outside lies beyond every threshold the descent applies).
 ///
 /// Runs in triple space (cells as (origin_id, quintant, x, y, z)): neighbors
 /// (edge and vertex) come from the per-flavor triple deltas plus the boundary
@@ -97,8 +97,11 @@ fn coarse_cap_cells(
     let mut cells: Vec<[i32; 5]> = Vec::new();
     cell_ids_to_triples([start_cell], &mut cells)?;
     walk_triple_cells(cells.clone(), max_row, |c| {
-        cells.push(c);
-        Ok(haversine(center, triple_cell_center(c, hilbert_res, max_row)?) <= h_expanded)
+        let within = haversine(center, triple_cell_center(c, hilbert_res, max_row)?) <= h_expanded;
+        if within {
+            cells.push(c);
+        }
+        Ok(within)
     })?;
     Ok(cells)
 }
@@ -107,7 +110,7 @@ fn coarse_cap_cells(
 /// (mix of resolutions), sorted in curve order, then a compaction marker recording
 /// the resolution.
 ///
-/// Uses hierarchical BFS: starts at a coarse resolution and recursively
+/// Descends the hierarchy (see curve_descent): starts at a coarse resolution and
 /// subdivides boundary cells, keeping interior cells at coarser resolutions.
 /// Only cells whose centers fall within the radius are included.
 pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
@@ -124,10 +127,9 @@ pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
     } else {
         cell_id
     };
-    let mut result: Vec<u64> = Vec::new();
-
     if coarse_res == 0 {
         // The target is resolution 0: the cells are the 12 dodecahedron faces
+        let mut result: Vec<u64> = Vec::new();
         let face_cell = |face: u8| {
             serialize(&A5Cell {
                 origin_id: face,
@@ -145,45 +147,50 @@ pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
                 result.push(face_cell(face)?);
             }
         }
-    } else {
-        // Recursive subdivision from coarse_res to target_res, in triple space.
-        //
-        // Each cell is classified by comparing haversine(center, cell) against
-        // pre-computed h thresholds:
-        // - Interior (h <= h_inner): keep compacted, all descendants inside
-        // - Outside  (h > h_outer): discard, no descendants inside
-        // - Boundary: subdivide children to next level
-        // At the target resolution both thresholds are the exact radius.
-        let mut cells = coarse_cap_cells(start_cell, center, h_expanded)?;
-        for res in coarse_res..=target_res {
-            let hilbert_res = (res - FIRST_HILBERT_RESOLUTION + 1) as usize;
-            let max_row = (1i32 << hilbert_res) - 1;
-            let cell_radius = estimate_cell_radius(res);
-            let last = res == target_res;
-            let h_inner = if last {
-                h_radius
-            } else if radius > cell_radius {
-                meters_to_h(radius - cell_radius)
-            } else {
-                -1.0
-            };
-            let h_outer = if last {
-                h_radius
-            } else {
-                meters_to_h(radius + cell_radius)
-            };
-            let mut children: Vec<[i32; 5]> = Vec::new();
-            for &cell in &cells {
-                let h = haversine(center, triple_cell_center(cell, hilbert_res, max_row)?);
-                if h <= h_inner {
-                    result.push(triple_cell_to_id(cell, hilbert_res, res)?);
-                } else if h <= h_outer {
-                    triple_children(cell, max_row, &mut children);
-                }
-            }
-            cells = children;
-        }
+        return to_covering(&result, target_res);
     }
 
-    to_covering(&result, target_res)
+    // Descend from the coarse cells to target_res, classifying each cell by
+    // comparing haversine(center, cell) against pre-computed h thresholds:
+    // - Interior (h <= h_inner): keep whole, all descendants inside
+    // - Outside  (h > h_outer): discard, no descendants inside
+    // - Boundary: split into children
+    // At the target resolution both thresholds are the exact radius.
+    let mut h_inner = [0.0f64; 31];
+    let mut h_outer = [0.0f64; 31];
+    for res in coarse_res..=target_res {
+        let cell_radius = estimate_cell_radius(res);
+        let last = res == target_res;
+        h_inner[res as usize] = if last {
+            h_radius
+        } else if radius > cell_radius {
+            meters_to_h(radius - cell_radius)
+        } else {
+            -1.0
+        };
+        h_outer[res as usize] = if last {
+            h_radius
+        } else {
+            meters_to_h(radius + cell_radius)
+        };
+    }
+    let mut runs = SlotRuns::new();
+    descend_in_curve_order(
+        &coarse_cap_cells(start_cell, center, h_expanded)?,
+        (coarse_res - FIRST_HILBERT_RESOLUTION + 1) as usize,
+        target_res,
+        |origin_id, res, face, _slot| {
+            let dodecahedron = DodecahedronProjection::get_thread_local();
+            let h = haversine(center, dodecahedron.inverse(face, origin_id)?);
+            Ok(if h <= h_inner[res as usize] {
+                CurveDescentClass::Inside
+            } else if h <= h_outer[res as usize] {
+                CurveDescentClass::Split
+            } else {
+                CurveDescentClass::Outside
+            })
+        },
+        &mut runs,
+    )?;
+    Ok(slot_runs_to_covering(&runs, target_res))
 }
