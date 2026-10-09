@@ -42,7 +42,8 @@ pub use core::hex::{hex_to_u64, u64_to_hex};
 // Hierarchy
 pub use core::cell_info::{cell_area, cell_edge_length_avg, get_num_cells, get_num_children};
 pub use core::serialization::{
-    cell_to_children, cell_to_parent, get_res0_cells, get_resolution, MAX_RESOLUTION, WORLD_CELL,
+    cell_to_children, cell_to_parent, get_res0_cells, get_resolution, is_valid_cell,
+    MAX_RESOLUTION, WORLD_CELL,
 };
 pub use regions::subcell::{cell_to_subcell, cell_to_supercell};
 

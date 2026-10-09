@@ -165,8 +165,31 @@ pub fn cell_first_slot_unchecked(cell: u64) -> u64 {
     cell - tag
 }
 
+/// Check whether a 64-bit value is an A5 cell ID: its tag (lowest set bit) must
+/// be a resolution tag, and its origin (res 0) or quintant (res 1-29) must exist.
+/// The world cell counts as a cell: it has no boundary, but `cell_to_parent` gives
+/// it as the parent of the res-0 cells. A compaction marker is not a cell.
+#[inline]
+pub fn is_valid_cell(cell: u64) -> bool {
+    if cell == WORLD_CELL {
+        return true;
+    }
+    let bit = cell.trailing_zeros();
+    // Resolutions 2-29 (odd bits 55-1), in quintants 0-59, or 30 (bits 4, 2, 0)
+    if bit < 56 {
+        return if bit % 2 == 1 {
+            cell < WORLD_SLOTS
+        } else {
+            bit <= 4
+        };
+    }
+    // Resolution 0 (bit 57) of origins 0-11, or 1 (bit 56) of quintants 0-59
+    let top = cell >> QUINTANT_SHIFT;
+    (bit == 57 && top < 12) || (bit == 56 && top < 60)
+}
+
 /// The resolution of a cell, as `get_resolution` gives it, but an error if the
-/// value is not an A5 cell ID (see `cell_first_slot` for what that requires).
+/// value is not an A5 cell ID (see `is_valid_cell`).
 #[inline]
 pub fn checked_resolution(cell: u64) -> Result<i32, String> {
     if cell == 0 {
