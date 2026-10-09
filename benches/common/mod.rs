@@ -10,6 +10,15 @@
 use a5::LonLat;
 use std::fs;
 
+/// Calls per criterion iteration for benchmarks of functions that take under
+/// ~1µs. Timed one call per iteration, such a function is dominated by
+/// criterion's per-iteration overhead and by code-alignment effects that shift
+/// between builds: a 1-2ns wobble reads as a 15-80% regression. These
+/// benchmarks make BATCH calls per iteration, over BATCH different inputs, so
+/// the time reported (per batch, marked "×100" in the name) is the work being
+/// measured.
+pub const BATCH: usize = 100;
+
 /// Deterministic PRNG (mulberry32) so every run benchmarks identical inputs.
 /// Mirrors the TypeScript `createRandom` (see tests/zz_bench_ea.rs).
 pub struct Rng {
