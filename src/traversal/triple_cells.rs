@@ -11,7 +11,9 @@ use std::sync::LazyLock;
 
 use crate::coordinate_systems::Spherical;
 use crate::core::origin::{get_origins, quintant_to_segment, segment_to_quintant};
-use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
+use crate::core::serialization::{
+    deserialize, serialize, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT,
+};
 use crate::core::tiling::get_pentagon_center;
 use crate::core::utils::A5Cell;
 use crate::lattice::{
@@ -30,15 +32,37 @@ const KEY_BITS: u32 = 22;
 const KEY_MASK: i64 = (1 << KEY_BITS) - 1;
 const KEY_SIDE: i64 = 1 << KEY_BITS;
 
-/// Segment and curve orientation of each of the 60 quintants, by origin.id * 5 + quintant.
-static QUINTANT_SEGMENTS: LazyLock<Vec<(usize, Orientation)>> = LazyLock::new(|| {
-    let mut out = Vec::with_capacity(60);
+/// Each of the 60 quintants, by triple quintant (origin.id * 5 + quintant): its
+/// segment, curve orientation and slot prefix (its place in ID order, shifted
+/// into the top bits of a slot); and the triple quintant in each place of ID
+/// order.
+pub struct QuintantTables {
+    pub segment: [usize; 60],
+    pub orientation: [Orientation; 60],
+    pub prefix: [u64; 60],
+    pub triple_quintant_by_id_order: [usize; 60],
+}
+
+/// The quintant tables (see `QuintantTables`).
+pub static QUINTANT_TABLES: LazyLock<QuintantTables> = LazyLock::new(|| {
+    let mut tables = QuintantTables {
+        segment: [0; 60],
+        orientation: [Orientation::UV; 60],
+        prefix: [0; 60],
+        triple_quintant_by_id_order: [0; 60],
+    };
     for origin in get_origins() {
-        for q in 0..5 {
-            out.push(quintant_to_segment(q, origin));
+        for quintant in 0..5 {
+            let (segment, orientation) = quintant_to_segment(quintant, origin);
+            let id_order = 5 * origin.id as usize + (segment + 5 - origin.first_quintant) % 5;
+            let q = 5 * origin.id as usize + quintant;
+            tables.segment[q] = segment;
+            tables.orientation[q] = orientation;
+            tables.prefix[q] = (id_order as u64) << QUINTANT_SHIFT;
+            tables.triple_quintant_by_id_order[id_order] = q;
         }
     }
-    out
+    tables
 });
 
 /// The integer key of a cell, unique among the cells of any one traversal.
@@ -56,8 +80,10 @@ pub fn triple_cell_to_id(
     resolution: i32,
 ) -> Result<u64, String> {
     let [origin_id, quintant, x, y, z] = cell;
-    let (segment, orientation) = QUINTANT_SEGMENTS[(origin_id * 5 + quintant) as usize];
-    let s = triple_to_s(&Triple::new(x, y, z), hilbert_res, orientation)
+    let tables = &*QUINTANT_TABLES;
+    let q = (origin_id * 5 + quintant) as usize;
+    let segment = tables.segment[q];
+    let s = triple_to_s(&Triple::new(x, y, z), hilbert_res, tables.orientation[q])
         .ok_or("triple_cell_to_id: invalid triple")?;
     serialize(&A5Cell {
         origin_id: origin_id as u8,
@@ -214,47 +240,4 @@ fn visit_boundary(
         visit([b[0], b[1], b[2], b[3], b[4]])?;
     }
     Ok(())
-}
-
-/// The cell hierarchy in triple space. A cell's 4 children are 2·triple + the
-/// offsets for its flavor (each level of A5 refines the square grid R of
-/// g o^r D into 4); only their curve order depends on the orientation.
-const CHILD_OFFSETS: [[(i32, i32, i32); 4]; 4] = [
-    [(0, 0, 0), (0, 1, -1), (0, 1, 0), (0, 2, -1)], // flavor 0
-    [(-1, -1, 0), (-1, 0, -1), (-1, 0, 0), (-1, 1, -1)], // flavor 1
-    [(-1, 1, 0), (0, 0, 0), (0, 1, -1), (0, 1, 0)], // flavor 2
-    [(-1, 0, -1), (-1, 0, 0), (-1, 1, -1), (0, 0, -1)], // flavor 3
-];
-
-/// The 4 children of a cell given in triple space (`max_row` is its own), appended to `out`.
-pub fn triple_children(cell: [i32; 5], max_row: i32, out: &mut Vec<[i32; 5]>) {
-    let [origin_id, quintant, x, y, z] = cell;
-    let flavor = triple_flavor(&Triple::new(x, y, z), max_row) as usize;
-    for (dx, dy, dz) in CHILD_OFFSETS[flavor] {
-        out.push([origin_id, quintant, 2 * x + dx, 2 * y + dy, 2 * z + dz]);
-    }
-}
-
-/// The parent of a cell given in triple space (`parent_max_row` is the
-/// parent's). The child's coordinates mod 2 fix child − 2·parent, but for two
-/// classes, where the two candidate parents differ in flavor — and so, sharing
-/// x and z, in apex colour (see `triple_flavor`).
-///
-/// Not used by the library: kept for completeness, as the inverse of
-/// `triple_children`, for traversals that coarsen in triple space.
-pub fn triple_parent(cell: [i32; 5], parent_max_row: i32) -> [i32; 5] {
-    let [origin_id, quintant, x, y, z] = cell;
-    let dx = -(x & 1);
-    let dz = -(z & 1);
-    let mut dy = y & 1;
-    let px = (x - dx) >> 1;
-    let pz = (z - dz) >> 1;
-    let colour = (parent_max_row + 1 + px + pz) & 1;
-    if dx == 0 && dy == 0 && dz == -1 {
-        dy = if colour == 0 { 2 } else { 0 }; // flavor 0 or 3 parent
-    }
-    if dx == -1 && dy == 1 && dz == 0 {
-        dy = if colour == 1 { 1 } else { -1 }; // flavor 2 or 1 parent
-    }
-    [origin_id, quintant, px, (y - dy) >> 1, pz]
 }

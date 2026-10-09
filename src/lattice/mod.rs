@@ -15,7 +15,7 @@ pub mod triple;
 pub mod types;
 
 pub use curve::round_to_triple;
-pub use lsystem::{s_to_cell, s_to_triple, Cell};
+pub use lsystem::{curve_child, s_to_cell, s_to_triple, triple_to_curve_node, Cell, CurveNode};
 
 pub use triple::{triple_flavor, triple_in_bounds, triple_parity, triple_to_s};
 pub use types::{Orientation, Triple};

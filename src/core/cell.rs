@@ -12,7 +12,7 @@ use crate::core::origin::{
     find_nearest_origin, find_nearest_origins, quintant_to_segment, segment_to_quintant,
 };
 use crate::core::serialization::{
-    deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
+    deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
 };
 use crate::core::tiling::{
     cell_margin_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices,
@@ -181,11 +181,12 @@ fn lookup_in_quintant(
     // serialize, which swapped in the res-29 parent of a res-30 search result —
     // a cell that fails to contain the query point ~44% of the time there.)
     let segment_n = (segment + 5 - origin.first_quintant) % 5;
-    let resolution = if resolution == MAX_RESOLUTION && 5 * origin.id as usize + segment_n > 41 {
-        MAX_RESOLUTION - 1
-    } else {
-        resolution
-    };
+    let resolution =
+        if resolution == MAX_RESOLUTION && 5 * origin.id as usize + segment_n >= RES30_QUINTANTS {
+            MAX_RESOLUTION - 1
+        } else {
+            resolution
+        };
 
     let (mut px, mut py) = (dodec_point.x(), dodec_point.y());
     if quintant != 0 {

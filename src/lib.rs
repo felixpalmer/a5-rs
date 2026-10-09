@@ -44,6 +44,7 @@ pub use core::cell_info::{cell_area, cell_edge_length_avg, get_num_cells, get_nu
 pub use core::serialization::{
     cell_to_children, cell_to_parent, get_res0_cells, get_resolution, MAX_RESOLUTION, WORLD_CELL,
 };
+pub use regions::subcell::{cell_to_subcell, cell_to_supercell};
 
 // Compaction
 pub use collections::compact::{compact, uncompact};
