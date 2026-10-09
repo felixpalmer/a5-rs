@@ -106,6 +106,9 @@ When porting features to Rust:
 5. **Test patterns**: Use `#[test]` functions in `/tests` directory with descriptive names
 
 ## CI Checks (run as a final verification)
+
+**ALWAYS run `cargo fmt` after finishing any chunk of Rust work** — including mechanical edits like renames or `sed` rewrites (they reorder `use`/`mod` lines). This is easy to forget, and an unformatted tree fails CI.
+
 ```bash
 # 1. Build
 cargo build --verbose
