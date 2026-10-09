@@ -10,8 +10,8 @@
 
 use std::sync::LazyLock;
 
-use crate::collections::slot_runs::{slot_runs_to_covering, to_covering};
-use crate::collections::SlotRuns;
+use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
+use crate::coverings::SlotRuns;
 use crate::coordinate_systems::Face;
 use crate::core::cell::{cell_to_spherical, get_pentagon, spherical_to_cell};
 use crate::core::face_adjacency::{seam_transform, FACE_ADJACENCY};

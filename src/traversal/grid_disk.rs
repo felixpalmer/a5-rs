@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use crate::collections::slot_runs::{compact_cells, to_covering};
+use crate::coverings::slot_runs::{compact_cells, to_covering};
 use crate::core::face_adjacency::walk_faces;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::A5Cell;

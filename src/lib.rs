@@ -8,7 +8,7 @@
 // see only the curated re-exports below. Use those, not `a5::core::*` paths.
 #[doc(hidden)]
 #[cfg_attr(not(test), allow(unused))]
-pub mod collections;
+pub mod coverings;
 #[doc(hidden)]
 #[cfg_attr(not(test), allow(unused))]
 pub mod coordinate_systems;
@@ -47,13 +47,13 @@ pub use core::serialization::{
 pub use regions::subcell::{cell_to_subcell, cell_to_supercell};
 
 // Compaction
-pub use collections::compact::{compact, uncompact};
+pub use coverings::compact::{compact, uncompact};
 pub use core::compaction_marker::is_compaction_marker;
 
 // Coverings
-pub use collections::measures::{area, count};
-pub use collections::resolution::covering_resolution;
-pub use collections::set_operations::{contains, difference, intersect, overlaps, union};
+pub use coverings::measures::{area, count};
+pub use coverings::resolution::covering_resolution;
+pub use coverings::set_operations::{contains, difference, intersect, overlaps, union};
 
 // Migration
 pub use core::migrate::migrate;

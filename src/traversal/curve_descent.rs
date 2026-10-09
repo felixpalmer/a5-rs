@@ -8,8 +8,8 @@
 // stepping the curve one digit per level (see lattice curve_child), so the cells
 // come out as sorted slot runs, with no cell IDs to encode and nothing to sort.
 
-use crate::collections::slot_runs::append_slot_run;
-use crate::collections::SlotRuns;
+use crate::coverings::slot_runs::append_slot_run;
+use crate::coverings::SlotRuns;
 use crate::coordinate_systems::Face;
 use crate::core::serialization::{FIRST_HILBERT_RESOLUTION, SLOT_COUNTS};
 use crate::core::tiling::get_pentagon_center;

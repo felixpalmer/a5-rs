@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::collections::slot_runs::{slot_runs_to_covering, to_covering};
+use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
 use crate::coordinate_systems::{Cartesian, LonLat};
 use crate::core::cell::cell_to_spherical;
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian};

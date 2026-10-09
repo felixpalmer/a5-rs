@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::collections::slot_runs::{slot_runs_to_covering, to_covering};
-use crate::collections::SlotRuns;
+use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
+use crate::coverings::SlotRuns;
 use crate::coordinate_systems::Spherical;
 use crate::core::cell::cell_to_spherical;
 use crate::core::cell_info::cell_area;
