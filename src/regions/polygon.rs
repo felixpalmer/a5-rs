@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::collections::slot_runs::{slot_runs_to_covering, to_covering};
 use crate::coordinate_systems::{Cartesian, LonLat};
 use crate::core::cell::cell_to_spherical;
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian};
 use crate::core::serialization::{
     cell_to_children, get_resolution, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 };
+use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
 use crate::geometry::prepared_polygon::{point_in_prepared_polygon, prepare_polygon};
 use crate::traversal::triple_cells::cell_ids_to_triples;
 

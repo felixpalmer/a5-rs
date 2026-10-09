@@ -70,7 +70,7 @@ cargo publish
 ```
 
 ## Benchmarks
-- Criterion benchmark suite lives in `/benches`, one file per topic (`cap`, `cell`, `collection`, `compact`, `grid_disk`, `curve`, `hierarchy`, `line`, `polygon`, `projections`, `subcell`). It mirrors the TypeScript `/benchmarks` suite in `../a5`.
+- Criterion benchmark suite lives in `/benches`, one file per topic (`cap`, `cell`, `covering`, `compact`, `grid_disk`, `curve`, `hierarchy`, `line`, `polygon`, `projections`, `subcell`). It mirrors the TypeScript `/benchmarks` suite in `../a5`.
 - Each file is registered as a `[[bench]]` target with `harness = false` in `Cargo.toml`. Shared helpers (deterministic mulberry32 PRNG, `sample_points`/`sample_cells`/`sample_s`, `load_country` fixture loader) are in `benches/common/mod.rs`, included via `mod common;` (the `common/` subdir is not itself a bench target).
 - Run all: `cargo bench`. Run one: `cargo bench --bench cell`. For a quick check use `cargo bench --bench cell -- --warm-up-time 0.2 --measurement-time 0.5`.
 - On pull requests, CI (.github/workflows/bench.yml) runs the PR's `/benches` against both the PR and its merge-base `src`, and `scripts/compare_benchmarks.py` fails on a >15% regression. Write benches against the current API only, with no shims for older versions: a bench target that doesn't compile against the baseline is skipped there and its benchmarks are reported as new.
@@ -106,6 +106,9 @@ When porting features to Rust:
 5. **Test patterns**: Use `#[test]` functions in `/tests` directory with descriptive names
 
 ## CI Checks (run as a final verification)
+
+**ALWAYS run `cargo fmt` after finishing any chunk of Rust work** — including mechanical edits like renames or `sed` rewrites (they reorder `use`/`mod` lines). This is easy to forget, and an unformatted tree fails CI.
+
 ```bash
 # 1. Build
 cargo build --verbose

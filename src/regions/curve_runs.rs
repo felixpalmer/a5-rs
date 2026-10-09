@@ -8,18 +8,18 @@
 // stretch of the curve (a range of slots) into runs that lie wholly inside or
 // wholly outside the polygon: a step over the boundary would have to land in
 // the band. One probe classifies a run, and an inside run is emitted whole, as
-// a slot run (see collections/slot_runs), so the interior costs O(boundary), not
+// a slot run (see coverings/slot_runs), so the interior costs O(boundary), not
 // O(area).
 
 use std::collections::HashMap;
 
-use crate::collections::slot_runs::append_slot_run;
-use crate::collections::SlotRuns;
 use crate::core::cell::cell_to_spherical;
 use crate::core::coordinate_transforms::to_cartesian;
 use crate::core::serialization::{
     cell_first_slot, slot_to_cell, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT, SLOT_COUNTS, S_MASK,
 };
+use crate::coverings::slot_runs::append_slot_run;
+use crate::coverings::SlotRuns;
 use crate::geometry::prepared_polygon::point_in_prepared_polygon;
 use crate::lattice::{s_to_triple, triple_flavor, triple_to_s, Triple};
 use crate::traversal::neighbors::NEIGHBOR_DELTAS;

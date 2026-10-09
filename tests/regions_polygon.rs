@@ -1,8 +1,8 @@
-use a5::collections::compact::uncompact;
-use a5::collections::measures::count;
-use a5::collections::resolution::covering_resolution;
 use a5::coordinate_systems::LonLat;
 use a5::core::hex::u64_to_hex;
+use a5::coverings::compact::uncompact;
+use a5::coverings::measures::count;
+use a5::coverings::resolution::covering_resolution;
 use a5::regions::polygon::{polygon_to_cells, Containment, PolygonToCellsOptions};
 use serde::Deserialize;
 use std::collections::HashSet;

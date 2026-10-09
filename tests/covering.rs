@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5::collections::compact::{compact, uncompact};
-use a5::collections::measures::{area, count};
-use a5::collections::resolution::covering_resolution;
-use a5::collections::set_operations::{contains, difference, intersect, overlaps, union};
 use a5::core::cell::cell_to_boundary;
 use a5::core::compaction_marker::is_compaction_marker;
 use a5::core::hex::hex_to_u64;
+use a5::coverings::compact::{compact, uncompact};
+use a5::coverings::measures::{area, count};
+use a5::coverings::resolution::covering_resolution;
+use a5::coverings::set_operations::{contains, difference, intersect, overlaps, union};
 use serde::Deserialize;
 use std::fs;
 
@@ -82,8 +82,8 @@ struct Fixtures {
 }
 
 fn load_fixtures() -> Fixtures {
-    let data = fs::read_to_string("tests/fixtures/collection.json").expect("read collection.json");
-    serde_json::from_str(&data).expect("parse collection.json")
+    let data = fs::read_to_string("tests/fixtures/covering.json").expect("read covering.json");
+    serde_json::from_str(&data).expect("parse covering.json")
 }
 
 fn to_cells(hex: &[String]) -> Vec<u64> {
@@ -271,8 +271,8 @@ const OPERATIONS: [(&str, Operation); 6] = [
 ];
 
 fn load_edge_fixtures() -> EdgeFixtures {
-    let data = fs::read_to_string("tests/fixtures/collection.json").expect("read collection.json");
-    serde_json::from_str(&data).expect("parse collection.json")
+    let data = fs::read_to_string("tests/fixtures/covering.json").expect("read covering.json");
+    serde_json::from_str(&data).expect("parse covering.json")
 }
 
 #[test]
