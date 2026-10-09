@@ -19,6 +19,34 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## a5-rs
 
+#### a5-rs [v1.0.0-beta.1] - October 9 2026
+
+**BREAKING: new, permanent cell-ID system.** The grid moves to a new non-self-intersecting curve and a new face tour, so cell IDs are not compatible with 0.x — re-index from lon/lat OR use the migrate() function
+
+- feat: cellToSubcell/supercell (#82)
+- Feat: Covering + set operations (#81)
+- fix: better polygon 'overlapping' accuracy (#80)
+- fix: cellToChildren order (#79)
+- feat: Polygon fill from boundary only (#78)
+- feat: tripleChildren & tripleParent speedup (#77)
+- feat: optimize polygonToCells (#76)
+- feat: sphericalCap optimize (#75)
+- feat: optimize linestringToCells (#74)
+- feat: faster gridDisk (#73)
+- Fix: polygon fills for huge polygons (#72)
+- fix: Cleaner tripleFlavor function (#71)
+- Feat: Simpler tour through dodecahedron faces (#70)
+- feat: Cell ID migration helper (#69)
+- fix: Pentagonal cells at resolution 1 (#68)
+- fix: Remove slow spiral search (#67)
+- feat: Cutover to new non-selfintersecting curve (#56)
+
+#### a5-rs [v0.10.1] - September 16 2026
+
+- fix: correct get_num_cells for high resolutions (#65)
+- Re-export option types from the crate root (#62)
+- chore: cleanup CRS debug logging (#64)
+
 #### a5-rs [v0.10.0] - August 28 2026
 
 - Improve precision in vec3.angle function (#60)
