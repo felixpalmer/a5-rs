@@ -13,13 +13,13 @@
 
 use std::collections::HashMap;
 
-use crate::coverings::slot_runs::append_slot_run;
-use crate::coverings::SlotRuns;
 use crate::core::cell::cell_to_spherical;
 use crate::core::coordinate_transforms::to_cartesian;
 use crate::core::serialization::{
     cell_first_slot, slot_to_cell, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT, SLOT_COUNTS, S_MASK,
 };
+use crate::coverings::slot_runs::append_slot_run;
+use crate::coverings::SlotRuns;
 use crate::geometry::prepared_polygon::point_in_prepared_polygon;
 use crate::lattice::{s_to_triple, triple_flavor, triple_to_s, Triple};
 use crate::traversal::neighbors::NEIGHBOR_DELTAS;

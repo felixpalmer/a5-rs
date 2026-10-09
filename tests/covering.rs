@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
+use a5::core::cell::cell_to_boundary;
+use a5::core::compaction_marker::is_compaction_marker;
+use a5::core::hex::hex_to_u64;
 use a5::coverings::compact::{compact, uncompact};
 use a5::coverings::measures::{area, count};
 use a5::coverings::resolution::covering_resolution;
 use a5::coverings::set_operations::{contains, difference, intersect, overlaps, union};
-use a5::core::cell::cell_to_boundary;
-use a5::core::compaction_marker::is_compaction_marker;
-use a5::core::hex::hex_to_u64;
 use serde::Deserialize;
 use std::fs;
 

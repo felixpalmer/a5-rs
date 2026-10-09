@@ -10,8 +10,6 @@
 
 use std::sync::LazyLock;
 
-use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
-use crate::coverings::SlotRuns;
 use crate::coordinate_systems::Face;
 use crate::core::cell::{cell_to_spherical, get_pentagon, spherical_to_cell};
 use crate::core::face_adjacency::{seam_transform, FACE_ADJACENCY};
@@ -21,6 +19,8 @@ use crate::core::serialization::{
 };
 use crate::core::tiling::get_face_vertices;
 use crate::core::utils::OriginId;
+use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
+use crate::coverings::SlotRuns;
 use crate::traversal::curve_descent::{descend_in_curve_order, CurveDescentClass};
 
 // How far the center of any descendant of a cell can lie from the cell's own

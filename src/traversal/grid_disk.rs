@@ -4,10 +4,10 @@
 
 use std::collections::HashSet;
 
-use crate::coverings::slot_runs::{compact_cells, to_covering};
 use crate::core::face_adjacency::walk_faces;
 use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
 use crate::core::utils::A5Cell;
+use crate::coverings::slot_runs::{compact_cells, to_covering};
 use crate::traversal::triple_cells::{
     cell_ids_to_triples, for_each_triple_neighbor, triple_cell_key, triple_cell_to_id,
 };

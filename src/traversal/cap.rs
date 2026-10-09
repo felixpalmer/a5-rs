@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
-use crate::coverings::SlotRuns;
 use crate::coordinate_systems::Spherical;
 use crate::core::cell::cell_to_spherical;
 use crate::core::cell_info::cell_area;
@@ -14,6 +12,8 @@ use crate::core::serialization::{
     cell_to_parent, deserialize, get_resolution, serialize, FIRST_HILBERT_RESOLUTION,
 };
 use crate::core::utils::A5Cell;
+use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
+use crate::coverings::SlotRuns;
 use crate::projections::dodecahedron::DodecahedronProjection;
 use crate::traversal::curve_descent::{descend_in_curve_order, CurveDescentClass};
 use crate::traversal::triple_cells::{cell_ids_to_triples, triple_cell_center, walk_triple_cells};

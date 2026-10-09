@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) A5 contributors
 
-use a5::coverings::compact::{compact, uncompact};
-use a5::coverings::resolution::covering_resolution;
 use a5::core::hex::hex_to_u64;
 use a5::core::serialization::get_resolution;
+use a5::coverings::compact::{compact, uncompact};
+use a5::coverings::resolution::covering_resolution;
 use serde::Deserialize;
 use std::fs;
 
