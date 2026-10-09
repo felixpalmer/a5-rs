@@ -5,6 +5,7 @@
 use a5::core::cell::cell_to_boundary;
 use a5::core::compaction_marker::is_compaction_marker;
 use a5::core::hex::hex_to_u64;
+use a5::core::serialization::is_valid_cell;
 use a5::coverings::compact::{compact, uncompact};
 use a5::coverings::measures::{area, count};
 use a5::coverings::resolution::covering_resolution;
@@ -79,6 +80,8 @@ struct Fixtures {
     mismatched_probes: Vec<MismatchedProbeCase>,
     #[serde(rename = "isCompactionMarker")]
     is_compaction_marker: Vec<MarkerCase>,
+    #[serde(rename = "isValidCell")]
+    is_valid_cell: Vec<MarkerCase>,
 }
 
 fn load_fixtures() -> Fixtures {
@@ -247,6 +250,14 @@ fn test_is_compaction_marker() {
                 f.value
             );
         }
+    }
+}
+
+#[test]
+fn test_is_valid_cell() {
+    for f in load_fixtures().is_valid_cell {
+        let value = hex_to_u64(&f.value).unwrap();
+        assert_eq!(is_valid_cell(value), f.expected, "{}", f.value);
     }
 }
 
