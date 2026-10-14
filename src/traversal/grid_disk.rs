@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use crate::core::face_adjacency::walk_faces;
-use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
+use crate::core::serialization::{deserialize, serialize, FIRST_CURVE_RESOLUTION};
 use crate::core::utils::A5Cell;
 use crate::coverings::slot_runs::{compact_cells, to_covering};
 use crate::traversal::triple_cells::{
@@ -32,13 +32,13 @@ fn add_cell(next: &mut Ring, prev: &Ring, current: &Ring, cell: [i32; 5]) {
 fn push_cell_ids(
     out: &mut Vec<u64>,
     cells: &[i32],
-    hilbert_res: usize,
+    curve_level: usize,
     resolution: i32,
 ) -> Result<(), String> {
     for c in cells.chunks_exact(5) {
         out.push(triple_cell_to_id(
             [c[0], c[1], c[2], c[3], c[4]],
-            hilbert_res,
+            curve_level,
             resolution,
         )?);
     }
@@ -76,8 +76,8 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
             .collect::<Result<Vec<u64>, String>>()?;
         return to_covering(&cells, 0);
     }
-    let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
-    let max_row = (1i32 << hilbert_res) - 1;
+    let curve_level = (cell.resolution - FIRST_CURVE_RESOLUTION + 1) as usize;
+    let max_row = (1i32 << curve_level) - 1;
     let mut seed: Vec<[i32; 5]> = Vec::with_capacity(1);
     cell_ids_to_triples([cell_id], &mut seed)?;
 
@@ -106,7 +106,7 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
         push_cell_ids(
             &mut interior,
             &prev_frontier.cells,
-            hilbert_res,
+            curve_level,
             cell.resolution,
         )?;
 
@@ -123,10 +123,10 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
     push_cell_ids(
         &mut interior,
         &prev_frontier.cells,
-        hilbert_res,
+        curve_level,
         cell.resolution,
     )?;
-    push_cell_ids(&mut interior, &frontier.cells, hilbert_res, cell.resolution)?;
+    push_cell_ids(&mut interior, &frontier.cells, curve_level, cell.resolution)?;
 
     to_covering(&interior, cell.resolution)
 }

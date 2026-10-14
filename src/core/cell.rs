@@ -12,7 +12,7 @@ use crate::core::origin::{
     find_nearest_origin, find_nearest_origins, quintant_to_segment, segment_to_quintant,
 };
 use crate::core::serialization::{
-    deserialize, serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
+    deserialize, serialize, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
 };
 use crate::core::tiling::{
     cell_margin_scaled, get_face_vertices, get_pentagon_center, get_pentagon_vertices,
@@ -160,7 +160,7 @@ struct CellCandidate {
     triple: Triple,
     flavor: u8,
     quintant: usize,
-    hilbert_resolution: usize,
+    curve_level: usize,
     origin_id: OriginId,
     resolution: i32,
 }
@@ -198,15 +198,15 @@ fn lookup_in_quintant(
         px = rotated_x;
         py = rotated_y;
     }
-    let hilbert_resolution = (1 + resolution - FIRST_HILBERT_RESOLUTION) as usize;
-    let scale = (1u64 << hilbert_resolution) as f64;
+    let curve_level = (1 + resolution - FIRST_CURVE_RESOLUTION) as usize;
+    let scale = (1u64 << curve_level) as f64;
     px *= scale;
     py *= scale;
     let ij = face_to_ij(Face::new(px, py));
 
-    let base = round_to_triple(ij, hilbert_resolution);
+    let base = round_to_triple(ij, curve_level);
     let mut triple = base;
-    let max_row = (1i64 << hilbert_resolution) as i32 - 1;
+    let max_row = (1i64 << curve_level) as i32 - 1;
     let mut flavor = triple_flavor(&base, max_row);
     let mut margin = cell_margin_scaled(px, py, base.x, base.y, flavor);
     if margin <= 0.0 {
@@ -231,7 +231,7 @@ fn lookup_in_quintant(
             }
         }
     }
-    let s = match triple_to_s(&triple, hilbert_resolution, orientation) {
+    let s = match triple_to_s(&triple, curve_level, orientation) {
         Some(s) => s,
         None => return Ok(None),
     };
@@ -247,7 +247,7 @@ fn lookup_in_quintant(
         triple,
         flavor,
         quintant,
-        hilbert_resolution,
+        curve_level,
         origin_id: origin.id,
         resolution,
     }))
@@ -256,8 +256,7 @@ fn lookup_in_quintant(
 /// Cache the winning pentagon for the dense-sample fast accept and return its id.
 #[inline]
 fn accept_candidate(c: &CellCandidate) -> u64 {
-    let pentagon =
-        get_pentagon_vertices(c.hilbert_resolution as i32, c.quintant, &c.triple, c.flavor);
+    let pentagon = get_pentagon_vertices(c.curve_level as i32, c.quintant, &c.triple, c.flavor);
     let cell_id = c.cell_id;
     let origin_id = c.origin_id;
     let resolution = c.resolution;
@@ -273,8 +272,8 @@ fn accept_candidate(c: &CellCandidate) -> u64 {
 }
 
 // Tie margin tolerance: containment margins are cross products of unit-scale
-// pentagon edges against coordinates of magnitude up to 2^hilbert_resolution,
-// so their float noise is ~2^(hilbert_resolution - 52); 2^-44 gives a wide
+// pentagon edges against coordinates of magnitude up to 2^curve_level,
+// so their float noise is ~2^(curve_level - 52); 2^-44 gives a wide
 // safety factor while staying geometrically negligible (cells are unit-size
 // in the scaled frame).
 const TIE_EPS: f64 = 5.684341886080802e-14; // 2^-44
@@ -328,7 +327,7 @@ fn spherical_to_cell_boundary(
             best = c.margin;
         }
     }
-    let eps = TIE_EPS * (1u64 << (1 + resolution - FIRST_HILBERT_RESOLUTION)) as f64;
+    let eps = TIE_EPS * (1u64 << (1 + resolution - FIRST_CURVE_RESOLUTION)) as f64;
     let mut winner: Option<&CellCandidate> = None;
     for c in &candidates {
         if c.margin >= best - eps && winner.is_none_or(|w| c.cell_id < w.cell_id) {
@@ -349,21 +348,17 @@ fn spherical_to_cell_boundary(
 /// exactly as `spherical_to_cell` resolves them.
 pub fn cell_center_to_cell(cell: u64, resolution: i32) -> Result<u64, String> {
     let cell_data = deserialize(cell)?;
-    if resolution >= FIRST_HILBERT_RESOLUTION - 1
-        && cell_data.resolution >= FIRST_HILBERT_RESOLUTION - 1
+    if resolution >= FIRST_CURVE_RESOLUTION - 1
+        && cell_data.resolution >= FIRST_CURVE_RESOLUTION - 1
     {
         let (quintant, orientation) = segment_to_quintant(cell_data.segment, cell_data.origin());
-        let hilbert_resolution = cell_data.resolution - FIRST_HILBERT_RESOLUTION + 1;
-        let cell_geom = s_to_cell(cell_data.s, hilbert_resolution as usize, orientation);
-        let center = get_pentagon_center(
-            hilbert_resolution,
-            quintant,
-            &cell_geom.triple,
-            cell_geom.flavor,
-        );
+        let curve_level = cell_data.resolution - FIRST_CURVE_RESOLUTION + 1;
+        let cell_geom = s_to_cell(cell_data.s, curve_level as usize, orientation);
+        let center =
+            get_pentagon_center(curve_level, quintant, &cell_geom.triple, cell_geom.flavor);
         let quintant = get_quintant_polar(to_polar(center));
         if let Some(best) = lookup_in_quintant(center, cell_data.origin(), quintant, resolution)? {
-            if best.margin > TIE_EPS * (1u64 << best.hilbert_resolution) as f64 {
+            if best.margin > TIE_EPS * (1u64 << best.curve_level) as f64 {
                 return Ok(best.cell_id);
             }
         }
@@ -375,19 +370,15 @@ pub fn cell_center_to_cell(cell: u64, resolution: i32) -> Result<u64, String> {
 pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
     let (quintant, orientation) = segment_to_quintant(cell.segment, cell.origin());
 
-    if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
+    if cell.resolution == FIRST_CURVE_RESOLUTION - 2 {
         let pentagon_shape = get_face_vertices();
         return Ok(pentagon_shape);
     }
 
-    let hilbert_resolution = cell.resolution - FIRST_HILBERT_RESOLUTION + 1;
-    let cell_geom = s_to_cell(cell.s, hilbert_resolution as usize, orientation);
-    let pentagon_shape = get_pentagon_vertices(
-        hilbert_resolution,
-        quintant,
-        &cell_geom.triple,
-        cell_geom.flavor,
-    );
+    let curve_level = cell.resolution - FIRST_CURVE_RESOLUTION + 1;
+    let cell_geom = s_to_cell(cell.s, curve_level as usize, orientation);
+    let pentagon_shape =
+        get_pentagon_vertices(curve_level, quintant, &cell_geom.triple, cell_geom.flavor);
     Ok(pentagon_shape)
 }
 
@@ -395,18 +386,14 @@ pub fn get_pentagon(cell: &A5Cell) -> Result<PentagonShape, String> {
 pub fn cell_to_spherical(cell: u64) -> Result<crate::coordinate_systems::Spherical, String> {
     let cell_data = deserialize(cell)?;
     let dodecahedron = DodecahedronProjection::get_thread_local();
-    if cell_data.resolution >= FIRST_HILBERT_RESOLUTION - 1 {
+    if cell_data.resolution >= FIRST_CURVE_RESOLUTION - 1 {
         // Fast path: the pentagon center is O(1) from (triple, flavor) — no need
         // to construct the pentagon itself.
         let (quintant, orientation) = segment_to_quintant(cell_data.segment, cell_data.origin());
-        let hilbert_resolution = cell_data.resolution - FIRST_HILBERT_RESOLUTION + 1;
-        let cell_geom = s_to_cell(cell_data.s, hilbert_resolution as usize, orientation);
-        let center = get_pentagon_center(
-            hilbert_resolution,
-            quintant,
-            &cell_geom.triple,
-            cell_geom.flavor,
-        );
+        let curve_level = cell_data.resolution - FIRST_CURVE_RESOLUTION + 1;
+        let cell_geom = s_to_cell(cell_data.s, curve_level as usize, orientation);
+        let center =
+            get_pentagon_center(curve_level, quintant, &cell_geom.triple, cell_geom.flavor);
         return dodecahedron.inverse(center, cell_data.origin_id);
     }
     let pentagon = get_pentagon(&cell_data)?;
@@ -499,7 +486,7 @@ pub fn a5cell_contains_point(cell: &A5Cell, spherical: Spherical) -> Result<f64,
     let dodecahedron = DodecahedronProjection::get_thread_local();
     let projected_point = dodecahedron.forward(spherical, cell.origin_id)?;
 
-    let containment_result = if cell.resolution == FIRST_HILBERT_RESOLUTION - 2 {
+    let containment_result = if cell.resolution == FIRST_CURVE_RESOLUTION - 2 {
         // Use face vertices (pentagon)
         let pentagon_shape = get_face_vertices();
         pentagon_shape.contains_point(projected_point)

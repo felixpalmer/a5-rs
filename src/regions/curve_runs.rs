@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use crate::core::cell::cell_to_spherical;
 use crate::core::coordinate_transforms::to_cartesian;
 use crate::core::serialization::{
-    cell_first_slot, slot_to_cell, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT, SLOT_COUNTS, S_MASK,
+    cell_first_slot, slot_to_cell, FIRST_CURVE_RESOLUTION, QUINTANT_SHIFT, SLOT_COUNTS, S_MASK,
 };
 use crate::coverings::slot_runs::append_slot_run;
 use crate::coverings::SlotRuns;
@@ -32,12 +32,12 @@ use super::polygon_boundary::{boundary_neighbors, Boundary};
 // Cells are ordered on the curve by the leaf slots they occupy (see core/serialization).
 
 /// The slot of a cell given in triple space.
-fn triple_slot(cell: [i32; 5], hilbert_res: usize, unit_shift: u32) -> Result<u64, String> {
+fn triple_slot(cell: [i32; 5], curve_level: usize, unit_shift: u32) -> Result<u64, String> {
     let tables = &*QUINTANT_TABLES;
     let q = (cell[0] * 5 + cell[1]) as usize;
     let s = triple_to_s(
         &Triple::new(cell[2], cell[3], cell[4]),
-        hilbert_res,
+        curve_level,
         tables.orientation[q],
     )
     .ok_or("triple_slot: invalid triple")?;
@@ -55,8 +55,8 @@ pub(super) fn fill_by_curve_runs(
     overlapping: bool,
     cap_holds_quintant: bool,
 ) -> Result<SlotRuns, String> {
-    let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
-    let max_row = (1i32 << hilbert_res) - 1;
+    let curve_level = (resolution - FIRST_CURVE_RESOLUTION + 1) as usize;
+    let max_row = (1i32 << curve_level) - 1;
     // One ring of neighbors (edge and vertex, across quintant edges too), edge neighbors first
     let ring = boundary_neighbors(
         triples,
@@ -67,7 +67,7 @@ pub(super) fn fill_by_curve_runs(
     )?;
 
     let unit = SLOT_COUNTS[resolution as usize];
-    let unit_shift = 58 - 2 * hilbert_res as u32;
+    let unit_shift = 58 - 2 * curve_level as u32;
 
     // Band slots carry two flags below the slot: EMIT (the cell is in the output)
     // and RING. A u128 always has room for them, at resolution 30 too.
@@ -83,10 +83,10 @@ pub(super) fn fill_by_curve_runs(
     let mut ring_by_slot: HashMap<u128, usize> = HashMap::with_capacity(ring.len());
     let mut ring_inside: Vec<bool> = Vec::with_capacity(ring.len());
     for (r, &(cell, parent)) in ring.iter().enumerate() {
-        let center = to_cartesian(triple_cell_center(cell, hilbert_res, max_row)?);
+        let center = to_cartesian(triple_cell_center(cell, curve_level, max_row)?);
         let inside = boundary.inside_next_to(center, parent);
         ring_inside.push(inside);
-        let slot = (triple_slot(cell, hilbert_res, unit_shift)? as u128) << 2
+        let slot = (triple_slot(cell, curve_level, unit_shift)? as u128) << 2
             | if inside { EMIT | RING } else { RING };
         slots.push(slot);
         ring_by_slot.insert(slot, r);
@@ -106,7 +106,7 @@ pub(super) fn fill_by_curve_runs(
         let q = (slot >> QUINTANT_SHIFT) as usize;
         let t = s_to_triple(
             (slot & S_MASK) >> unit_shift,
-            hilbert_res,
+            curve_level,
             tables.orientation[tables.triple_quintant_by_id_order[q]],
         );
         let flavor = triple_flavor(&Triple::new(x, y, z), max_row) as usize;

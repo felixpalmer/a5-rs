@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use crate::core::constants::AUTHALIC_AREA_EARTH;
-use crate::core::serialization::FIRST_HILBERT_RESOLUTION;
+use crate::core::serialization::FIRST_CURVE_RESOLUTION;
 
 /// Returns the number of cells at a given resolution.
 ///
@@ -42,7 +42,7 @@ pub fn get_num_children(parent_resolution: i32, child_resolution: i32) -> usize 
     if child_resolution == parent_resolution {
         return 1;
     }
-    if parent_resolution >= FIRST_HILBERT_RESOLUTION {
+    if parent_resolution >= FIRST_CURVE_RESOLUTION {
         // Between levels of constant aperture of 4, relation simplifies
         return 4_usize.pow((child_resolution - parent_resolution) as u32);
     }

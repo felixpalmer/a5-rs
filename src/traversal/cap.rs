@@ -9,7 +9,7 @@ use crate::core::constants::AUTHALIC_RADIUS_EARTH;
 use crate::core::face_adjacency::walk_faces;
 use crate::core::origin::haversine;
 use crate::core::serialization::{
-    cell_to_parent, deserialize, get_resolution, serialize, FIRST_HILBERT_RESOLUTION,
+    cell_to_parent, deserialize, get_resolution, serialize, FIRST_CURVE_RESOLUTION,
 };
 use crate::core::utils::A5Cell;
 use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
@@ -71,7 +71,7 @@ pub fn pick_coarse_resolution(radius: f64, target_res: i32) -> i32 {
         * half_angle_sin
         * half_angle_sin;
 
-    for res in FIRST_HILBERT_RESOLUTION..=target_res {
+    for res in FIRST_CURVE_RESOLUTION..=target_res {
         let c_area = cell_area(res);
         if cap_area_m2 / c_area >= MIN_CELLS_FOR_SUBDIVISION {
             return res;
@@ -92,12 +92,12 @@ fn coarse_cap_cells(
     center: Spherical,
     h_expanded: f64,
 ) -> Result<Vec<[i32; 5]>, String> {
-    let hilbert_res = (get_resolution(start_cell) - FIRST_HILBERT_RESOLUTION + 1) as usize;
-    let max_row = (1i32 << hilbert_res) - 1;
+    let curve_level = (get_resolution(start_cell) - FIRST_CURVE_RESOLUTION + 1) as usize;
+    let max_row = (1i32 << curve_level) - 1;
     let mut cells: Vec<[i32; 5]> = Vec::new();
     cell_ids_to_triples([start_cell], &mut cells)?;
     walk_triple_cells(cells.clone(), max_row, |c| {
-        let within = haversine(center, triple_cell_center(c, hilbert_res, max_row)?) <= h_expanded;
+        let within = haversine(center, triple_cell_center(c, curve_level, max_row)?) <= h_expanded;
         if within {
             cells.push(c);
         }
@@ -177,7 +177,7 @@ pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
     let mut runs = SlotRuns::new();
     descend_in_curve_order(
         &coarse_cap_cells(start_cell, center, h_expanded)?,
-        (coarse_res - FIRST_HILBERT_RESOLUTION + 1) as usize,
+        (coarse_res - FIRST_CURVE_RESOLUTION + 1) as usize,
         target_res,
         |origin_id, res, face, _slot| {
             let dodecahedron = DodecahedronProjection::get_thread_local();

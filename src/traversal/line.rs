@@ -12,7 +12,7 @@ use crate::core::cell::{
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_lon_lat, to_spherical};
 use crate::core::face_adjacency::walk_faces;
 use crate::core::origin::get_origins;
-use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
+use crate::core::serialization::{deserialize, serialize, FIRST_CURVE_RESOLUTION};
 use crate::core::tiling::get_pentagon_vertices;
 use crate::core::utils::A5Cell;
 use crate::geometry::pentagon::clip_segment;
@@ -150,8 +150,8 @@ pub fn trace_path(
     exact: bool,
 ) -> Result<(), String> {
     let sample_interval = estimate_cell_radius(resolution) * 0.5;
-    let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1).max(0) as usize;
-    let max_row = (1i32 << hilbert_res) - 1;
+    let curve_level = (resolution - FIRST_CURVE_RESOLUTION + 1).max(0) as usize;
+    let max_row = (1i32 << curve_level) - 1;
     let origins = get_origins();
 
     // Each point once: on the sphere, as a vector, and its cell, with the cell's
@@ -229,7 +229,7 @@ pub fn trace_path(
                             &mut sub,
                             cell_a,
                             cell_b,
-                            hilbert_res,
+                            curve_level,
                             max_row,
                             resolution,
                             arc,
@@ -308,7 +308,7 @@ fn search_subsegment(
     sub: &mut Subsegment,
     cell_a: u64,
     cell_b: u64,
-    hilbert_res: usize,
+    curve_level: usize,
     max_row: i32,
     resolution: i32,
     arc: usize,
@@ -321,7 +321,7 @@ fn search_subsegment(
         let (a_face, b_face) = sub.project(origin_id as u8)?;
         let triple = Triple::new(x, y, z);
         let pentagon = get_pentagon_vertices(
-            hilbert_res as i32,
+            curve_level as i32,
             quintant as usize,
             &triple,
             triple_flavor(&triple, max_row),
@@ -329,7 +329,7 @@ fn search_subsegment(
         if !pentagon.intersects_segment(a_face, b_face) {
             return Ok(false);
         }
-        visit(triple_cell_to_id(cell, hilbert_res, resolution)?, arc);
+        visit(triple_cell_to_id(cell, curve_level, resolution)?, arc);
         Ok(true)
     })
 }

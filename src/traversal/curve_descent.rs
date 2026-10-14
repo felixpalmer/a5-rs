@@ -9,7 +9,7 @@
 // come out as sorted slot runs, with no cell IDs to encode and nothing to sort.
 
 use crate::coordinate_systems::Face;
-use crate::core::serialization::{FIRST_HILBERT_RESOLUTION, SLOT_COUNTS};
+use crate::core::serialization::{FIRST_CURVE_RESOLUTION, SLOT_COUNTS};
 use crate::core::tiling::get_pentagon_center;
 use crate::core::utils::OriginId;
 use crate::coverings::slot_runs::append_slot_run;
@@ -31,7 +31,7 @@ pub enum CurveDescentClass {
 // The descent's inputs, shared by every level of `descend`
 struct Descent<'a, F> {
     classify: F,
-    /// Hilbert level of the target resolution
+    /// Curve level of the target resolution
     target_level: usize,
     origin_id: OriginId,
     quintant: usize,
@@ -40,7 +40,7 @@ struct Descent<'a, F> {
     runs: &'a mut SlotRuns,
 }
 
-/// Descend from `starts` — non-overlapping cells at one Hilbert level, as
+/// Descend from `starts` — non-overlapping cells at one curve level, as
 /// triples (origin_id, quintant, x, y, z), in any order — to `resolution`,
 /// appending the cells of the region `classify` describes to `runs`, as slot
 /// runs in curve order.
@@ -71,7 +71,7 @@ where
 
     let mut d = Descent {
         classify,
-        target_level: (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize,
+        target_level: (resolution - FIRST_CURVE_RESOLUTION + 1) as usize,
         origin_id: 0,
         quintant: 0,
         orientation: Orientation::UV,
@@ -88,7 +88,7 @@ where
     Ok(())
 }
 
-/// Visit the cell at Hilbert `level`, with its triple, flavor, the descent state
+/// Visit the cell at curve `level`, with its triple, flavor, the descent state
 /// below it and its first slot.
 fn descend<F>(
     d: &mut Descent<F>,
@@ -101,7 +101,7 @@ fn descend<F>(
 where
     F: FnMut(OriginId, i32, Face, u64) -> Result<CurveDescentClass, String>,
 {
-    let resolution = level as i32 + FIRST_HILBERT_RESOLUTION - 1;
+    let resolution = level as i32 + FIRST_CURVE_RESOLUTION - 1;
     let center = get_pentagon_center(level as i32, d.quintant, triple, flavor);
     match (d.classify)(d.origin_id, resolution, center, slot)? {
         CurveDescentClass::Inside => {
