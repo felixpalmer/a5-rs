@@ -19,6 +19,10 @@ Ref: http://keepachangelog.com/en/0.3.0/
 
 ## a5-rs
 
+#### a5-rs [v1.0.0-beta.3] - October 14 2026
+
+- Chore: refactor to avoid using Hilbert name (#87)
+
 #### a5-rs [v1.0.0-beta.2] - October 9 2026
 
 - feat: Faster cellToSupercell (#86)
