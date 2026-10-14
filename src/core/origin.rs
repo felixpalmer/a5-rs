@@ -5,8 +5,8 @@
 use crate::coordinate_systems::{Radians, Spherical};
 use crate::core::constants::{INTERHEDRAL_ANGLE, PI_OVER_5, TWO_PI_OVER_5};
 use crate::core::dodecahedron_quaternions::QUATERNIONS;
-use crate::core::hilbert::Orientation;
 use crate::core::utils::{Origin, OriginId, Quat};
+use crate::lattice::Orientation;
 
 // Quintant layouts. Every face threads its quintants with one of two patterns,
 // entering at the vertex shared by its first two quintants and passing through
@@ -59,7 +59,7 @@ const QUINTANT_ORIENTATIONS_ARRAYS: [[Orientation; 5]; 12] = [
 // Within each face, these are the indices of the first quintant
 const QUINTANT_FIRST: [usize; 12] = [4, 2, 2, 2, 0, 4, 3, 2, 1, 0, 3, 0];
 
-// Placements of dodecahedron faces along the Hilbert curve
+// Placements of dodecahedron faces along the curve
 const ORIGIN_ORDER: [usize; 12] = [0, 1, 2, 4, 3, 5, 7, 8, 6, 11, 10, 9];
 
 use std::sync::OnceLock;
@@ -132,7 +132,7 @@ fn generate_origins() -> Vec<Origin> {
         QUATERNIONS[11],
     );
 
-    // Reorder origins to match the order of the hilbert curve
+    // Reorder origins to match the order of the curve
     let mut reordered = Vec::with_capacity(12);
     for (new_id, &original_id) in ORIGIN_ORDER.iter().enumerate() {
         let mut origin = origins[original_id].clone();

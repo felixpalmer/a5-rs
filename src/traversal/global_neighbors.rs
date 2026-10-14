@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use crate::core::face_adjacency::FACE_ADJACENCY;
-use crate::core::serialization::{deserialize, serialize, FIRST_HILBERT_RESOLUTION};
+use crate::core::serialization::{deserialize, serialize, FIRST_CURVE_RESOLUTION};
 use crate::core::utils::A5Cell;
 use crate::traversal::triple_cells::{
     cell_ids_to_triples, for_each_triple_neighbor, triple_cell_to_id,
@@ -35,11 +35,11 @@ fn try_global_cell_neighbors(cell_id: u64, edge_only: bool) -> Result<Vec<u64>, 
             })?);
         }
     } else {
-        let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
+        let curve_level = (cell.resolution - FIRST_CURVE_RESOLUTION + 1) as usize;
         let mut source: Vec<[i32; 5]> = Vec::with_capacity(1);
         cell_ids_to_triples([cell_id], &mut source)?;
-        for_each_triple_neighbor(source[0], (1i32 << hilbert_res) - 1, edge_only, |n| {
-            neighbors.insert(triple_cell_to_id(n, hilbert_res, cell.resolution)?);
+        for_each_triple_neighbor(source[0], (1i32 << curve_level) - 1, edge_only, |n| {
+            neighbors.insert(triple_cell_to_id(n, curve_level, cell.resolution)?);
             Ok(())
         })?;
     }

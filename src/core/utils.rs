@@ -3,7 +3,7 @@
 // Copyright (c) A5 contributors
 
 use crate::coordinate_systems::{Radians, Spherical};
-use crate::core::hilbert::Orientation;
+use crate::lattice::Orientation;
 
 /// Origin identifier type (0-11)
 pub type OriginId = u8;
@@ -24,7 +24,7 @@ pub struct Origin {
     pub inverse_quat: Quat,
     /// Angle in radians
     pub angle: Radians,
-    /// Orientation array for Hilbert curve
+    /// Orientation array for the curve
     pub orientation: Vec<Orientation>,
     /// First quintant index
     pub first_quintant: usize,
@@ -37,7 +37,7 @@ pub struct A5Cell {
     pub origin_id: OriginId,
     /// Index (0-4) of triangular segment within pentagonal dodecahedron face
     pub segment: usize,
-    /// Position along Hilbert curve within triangular segment
+    /// Position along the curve within triangular segment
     pub s: u64,
     /// Resolution of the cell
     pub resolution: i32,

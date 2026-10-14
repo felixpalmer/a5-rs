@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use crate::core::serialization::FIRST_HILBERT_RESOLUTION;
+use crate::core::serialization::FIRST_CURVE_RESOLUTION;
 use crate::lattice::{triple_in_bounds, Triple};
 use crate::traversal::triple_cells::{triple_cell_key, triple_cell_to_id};
 
@@ -50,8 +50,8 @@ pub fn triple_space_flood_fill(
     resolution: i32,
     max_layers: Option<usize>,
 ) -> Result<FloodResult, String> {
-    let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
-    let max_row = (1i32 << hilbert_res) - 1;
+    let curve_level = (resolution - FIRST_CURVE_RESOLUTION + 1) as usize;
+    let max_row = (1i32 << curve_level) - 1;
 
     let (mut state, delta) = match firewall {
         FloodInput::Firewall(cells) => (FloodState::default(), cells.to_vec()),
@@ -88,7 +88,7 @@ pub fn triple_space_flood_fill(
     let to_ids = |cells: &[[i32; 5]]| -> Result<Vec<u64>, String> {
         cells
             .iter()
-            .map(|&c| triple_cell_to_id(c, hilbert_res, resolution))
+            .map(|&c| triple_cell_to_id(c, curve_level, resolution))
             .collect()
     };
     Ok(FloodResult {

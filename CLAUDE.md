@@ -19,7 +19,7 @@ Docs: ../a5/docs/api-reference/README.md
 
 ## Rust Project Structure
 - `/src` - Rust source code organized into modules:
-  - `/core` - Core geospatial functionality (cell, hex, hilbert, serialization, etc.)
+  - `/core` - Core geospatial functionality (cell, hex, serialization, etc.)
   - `/coordinate_systems` - Coordinate system implementations (vec2, vec3, lonlat, polar, etc.)
   - `/geometry` - Geometric calculations (pentagon, spherical_triangle, spherical_polygon)
   - `/projections` - Map projection implementations (dodecahedron, authalic, gnomonic, etc.)

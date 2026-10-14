@@ -14,7 +14,7 @@ use crate::coordinate_systems::Face;
 use crate::core::cell::{cell_center_to_cell, get_pentagon};
 use crate::core::face_adjacency::{seam_transform, FACE_ADJACENCY};
 use crate::core::serialization::{
-    deserialize, get_resolution, slot_to_cell, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION,
+    deserialize, get_resolution, slot_to_cell, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION,
     RES30_QUINTANTS, WORLD_CELL,
 };
 use crate::core::tiling::get_face_vertices;
@@ -24,7 +24,7 @@ use crate::coverings::SlotRuns;
 use crate::traversal::curve_descent::{descend_in_curve_order, CurveDescentClass};
 
 // How far the center of any descendant of a cell can lie from the cell's own
-// center, in units of the cell's lattice spacing (face units · 2^hilbert_res). A
+// center, in units of the cell's lattice spacing (face units · 2^curve_level). A
 // child's center is within 0.342 of its parent's (the max over every flavor and
 // child), and the offsets halve each level down, so all descendants lie within
 // 2 · 0.342 (observed: 0.648).
@@ -156,7 +156,7 @@ pub fn cell_to_subcell(cell: u64, resolution: i32) -> Result<Vec<u64>, String> {
     // its descendants' to; none at the target, where each cell decides for itself
     let mut reaches = [0.0f64; 31];
     for (res, reach) in reaches.iter_mut().enumerate().take(target as usize).skip(1) {
-        *reach = DESCENDANT_REACH / 2.0_f64.powi(res as i32 - FIRST_HILBERT_RESOLUTION + 1);
+        *reach = DESCENDANT_REACH / 2.0_f64.powi(res as i32 - FIRST_CURVE_RESOLUTION + 1);
     }
     let mut runs = SlotRuns::new();
     descend_in_curve_order(

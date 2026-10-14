@@ -44,8 +44,8 @@ fn seam_transform_agrees_with_the_projection_across_every_base_edge() {
 
 #[test]
 fn seam_triple_is_seam_transform_on_cells() {
-    for hilbert_res in [1, 2, 5] {
-        let max_row = (1 << hilbert_res) - 1;
+    for curve_level in [1, 2, 5] {
+        let max_row = (1 << curve_level) - 1;
         for q in 0..5usize {
             let map = seam_transform(0, q);
             let adjacent_quintant = FACE_ADJACENCY[0][q].1;
@@ -60,10 +60,10 @@ fn seam_triple_is_seam_transform_on_cells() {
                         let flavor = triple_flavor(&triple, max_row);
                         let image = seam_triple(&triple, max_row);
                         assert_eq!(triple_flavor(&image, max_row), flavor ^ 1);
-                        let c = get_pentagon_center(hilbert_res, q, &triple, flavor);
+                        let c = get_pentagon_center(curve_level, q, &triple, flavor);
                         let (cx, cy) = apply(&map, c.x(), c.y());
                         let image_center =
-                            get_pentagon_center(hilbert_res, adjacent_quintant, &image, flavor ^ 1);
+                            get_pentagon_center(curve_level, adjacent_quintant, &image, flavor ^ 1);
                         assert_close(cx, image_center.x());
                         assert_close(cy, image_center.y());
                     }

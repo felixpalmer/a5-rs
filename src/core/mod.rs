@@ -10,7 +10,6 @@ pub mod coordinate_transforms;
 pub mod dodecahedron_quaternions;
 pub mod face_adjacency;
 pub mod hex;
-pub mod hilbert;
 pub mod migrate;
 pub mod origin;
 pub mod pentagon;

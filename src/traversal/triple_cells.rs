@@ -11,9 +11,7 @@ use std::sync::LazyLock;
 
 use crate::coordinate_systems::Spherical;
 use crate::core::origin::{get_origins, quintant_to_segment, segment_to_quintant};
-use crate::core::serialization::{
-    deserialize, serialize, FIRST_HILBERT_RESOLUTION, QUINTANT_SHIFT,
-};
+use crate::core::serialization::{deserialize, serialize, FIRST_CURVE_RESOLUTION, QUINTANT_SHIFT};
 use crate::core::tiling::get_pentagon_center;
 use crate::core::utils::A5Cell;
 use crate::lattice::{
@@ -24,7 +22,7 @@ use crate::traversal::lattice_boundary::get_boundary_neighbor_triples;
 use crate::traversal::neighbors::NEIGHBOR_DELTAS;
 
 // A cell's key packs the quintant (origin.id * 5 + quintant, < 60), parity,
-// and the low KEY_BITS bits of -x and -z (y follows). Up to Hilbert resolution
+// and the low KEY_BITS bits of -x and -z (y follows). Up to curve level
 // 21 the coordinates fit whole; above it, two cells of one quintant share a key
 // only if they are 2^22 rows apart, and a walk holding both would need ~2^21
 // steps (~10^12 cells for a disk) — far past what fits in memory.
@@ -76,14 +74,14 @@ pub fn triple_cell_key(cell: [i32; 5]) -> i64 {
 /// The cell ID of a cell given in triple space.
 pub fn triple_cell_to_id(
     cell: [i32; 5],
-    hilbert_res: usize,
+    curve_level: usize,
     resolution: i32,
 ) -> Result<u64, String> {
     let [origin_id, quintant, x, y, z] = cell;
     let tables = &*QUINTANT_TABLES;
     let q = (origin_id * 5 + quintant) as usize;
     let segment = tables.segment[q];
-    let s = triple_to_s(&Triple::new(x, y, z), hilbert_res, tables.orientation[q])
+    let s = triple_to_s(&Triple::new(x, y, z), curve_level, tables.orientation[q])
         .ok_or("triple_cell_to_id: invalid triple")?;
     serialize(&A5Cell {
         origin_id: origin_id as u8,
@@ -104,8 +102,8 @@ pub fn cell_ids_to_triples(
         let cell = deserialize(cell_id)?;
         let origin = &origins[cell.origin_id as usize];
         let (quintant, orientation) = segment_to_quintant(cell.segment, origin);
-        let hilbert_res = (cell.resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
-        let t = s_to_triple(cell.s, hilbert_res, orientation);
+        let curve_level = (cell.resolution - FIRST_CURVE_RESOLUTION + 1) as usize;
+        let t = s_to_triple(cell.s, curve_level, orientation);
         out.push([origin.id as i32, quintant as i32, t.x, t.y, t.z]);
     }
     Ok(())
@@ -114,12 +112,12 @@ pub fn cell_ids_to_triples(
 /// The center of a cell given in triple space, on the sphere.
 pub fn triple_cell_center(
     cell: [i32; 5],
-    hilbert_res: usize,
+    curve_level: usize,
     max_row: i32,
 ) -> Result<Spherical, String> {
     let triple = Triple::new(cell[2], cell[3], cell[4]);
     let face = get_pentagon_center(
-        hilbert_res as i32,
+        curve_level as i32,
         cell[1] as usize,
         &triple,
         triple_flavor(&triple, max_row),

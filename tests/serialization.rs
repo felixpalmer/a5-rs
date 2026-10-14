@@ -1,7 +1,7 @@
 use a5::core::origin::get_origins;
 use a5::core::serialization::{
     cell_to_children, cell_to_parent, deserialize, get_res0_cells, get_resolution, is_child_of,
-    serialize, FIRST_HILBERT_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
+    serialize, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
 };
 use a5::core::utils::A5Cell;
 use serde_json::Value;
@@ -152,8 +152,8 @@ fn test_round_trip_resolution_masks_with_origins() {
     // Exclude res 30 (different bit layout)
     for binary in masks
         .iter()
-        .skip(FIRST_HILBERT_RESOLUTION as usize)
-        .take((MAX_RESOLUTION - FIRST_HILBERT_RESOLUTION) as usize)
+        .skip(FIRST_CURVE_RESOLUTION as usize)
+        .take((MAX_RESOLUTION - FIRST_CURVE_RESOLUTION) as usize)
     {
         for origin_id in 1..12usize {
             let origin_segment_id = format!("{:06b}", 5 * origin_id);
@@ -265,7 +265,7 @@ fn test_cell_to_children_ascending_id_order() {
 }
 
 #[test]
-fn test_non_hilbert_to_non_hilbert_hierarchy() {
+fn test_non_curve_to_non_curve_hierarchy() {
     let origins = get_origins();
     let origin0 = origins[0].clone();
 
@@ -284,7 +284,7 @@ fn test_non_hilbert_to_non_hilbert_hierarchy() {
 }
 
 #[test]
-fn test_non_hilbert_to_hilbert_hierarchy() {
+fn test_non_curve_to_curve_hierarchy() {
     let origins = get_origins();
     let origin0 = origins[0].clone();
 
@@ -303,7 +303,7 @@ fn test_non_hilbert_to_hilbert_hierarchy() {
 }
 
 #[test]
-fn test_hilbert_to_non_hilbert_hierarchy() {
+fn test_curve_to_non_curve_hierarchy() {
     let origins = get_origins();
     let origin0 = origins[0].clone();
 
@@ -822,10 +822,10 @@ fn test_res30_locations_in_bounds_encode_at_res30() {
 // =============================================================================
 
 #[test]
-fn test_is_child_of_returns_true_for_self_at_same_resolution_hilbert_range() {
+fn test_is_child_of_returns_true_for_self_at_same_resolution_curve_range() {
     let origins = get_origins();
     let origin0 = origins[0].clone();
-    for res in FIRST_HILBERT_RESOLUTION..MAX_RESOLUTION {
+    for res in FIRST_CURVE_RESOLUTION..MAX_RESOLUTION {
         let cell = serialize(&A5Cell {
             origin_id: origin0.id,
             segment: 0,
@@ -841,7 +841,7 @@ fn test_is_child_of_returns_true_for_self_at_same_resolution_hilbert_range() {
 fn test_is_child_of_returns_true_for_direct_children() {
     let origins = get_origins();
     let origin0 = origins[0].clone();
-    for res in FIRST_HILBERT_RESOLUTION..(MAX_RESOLUTION - 1) {
+    for res in FIRST_CURVE_RESOLUTION..(MAX_RESOLUTION - 1) {
         let parent = serialize(&A5Cell {
             origin_id: origin0.id,
             segment: 0,

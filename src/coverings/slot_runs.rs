@@ -120,7 +120,7 @@ pub fn slot_runs_to_cells(runs: &[u64]) -> Vec<u64> {
                     continue;
                 }
             }
-            // The coarsest Hilbert-level cell that starts at lo and fits: its span is
+            // The coarsest curve-level cell that starts at lo and fits: its span is
             // 4^k slots, at most the alignment of lo and the length of the run
             let offset = lo & S_MASK;
             let alignment = if offset == 0 {

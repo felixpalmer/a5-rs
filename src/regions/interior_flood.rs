@@ -9,7 +9,7 @@
 use crate::coordinate_systems::Cartesian;
 use crate::core::cell_info::get_num_cells;
 use crate::core::coordinate_transforms::to_cartesian;
-use crate::core::serialization::FIRST_HILBERT_RESOLUTION;
+use crate::core::serialization::FIRST_CURVE_RESOLUTION;
 use crate::traversal::lattice_flood_fill::{triple_space_flood_fill, FloodInput};
 use crate::traversal::triple_cells::{
     for_each_lattice_neighbor, triple_cell_center, triple_cell_to_id,
@@ -45,8 +45,8 @@ pub(super) fn fill_by_flood(
     resolution: i32,
     overlapping: bool,
 ) -> Result<Vec<u64>, String> {
-    let hilbert_res = (resolution - FIRST_HILBERT_RESOLUTION + 1) as usize;
-    let max_row = (1i32 << hilbert_res) - 1;
+    let curve_level = (resolution - FIRST_CURVE_RESOLUTION + 1) as usize;
+    let max_row = (1i32 << curve_level) - 1;
     let mut out = boundary.output(overlapping);
 
     // The shell: the flood's own moves out of the boundary (each an edge
@@ -58,7 +58,7 @@ pub(super) fn fill_by_flood(
     let mut seeds: Vec<[i32; 5]> = Vec::new();
     let mut firewall: Vec<[i32; 5]> = triples.to_vec();
     for &(cell, parent) in &shell {
-        let center = to_cartesian(triple_cell_center(cell, hilbert_res, max_row)?);
+        let center = to_cartesian(triple_cell_center(cell, curve_level, max_row)?);
         if boundary.inside_next_to(center, parent) {
             seeds.push(cell);
         } else {
@@ -67,7 +67,7 @@ pub(super) fn fill_by_flood(
     }
     if !seeds.is_empty() {
         for &seed in &seeds {
-            out.push(triple_cell_to_id(seed, hilbert_res, resolution)?);
+            out.push(triple_cell_to_id(seed, curve_level, resolution)?);
         }
         let flood =
             triple_space_flood_fill(FloodInput::Firewall(&firewall), &seeds, resolution, None)?;

@@ -5,7 +5,7 @@
 use crate::core::origin::get_origins;
 use crate::core::utils::A5Cell;
 
-pub const FIRST_HILBERT_RESOLUTION: i32 = 2;
+pub const FIRST_CURVE_RESOLUTION: i32 = 2;
 pub const MAX_RESOLUTION: i32 = 30;
 // IDs below res 30 start with a 6-bit origin (res 0) or quintant, above S
 pub const QUINTANT_SHIFT: u32 = 58;
@@ -55,7 +55,7 @@ fn slot_to_res30(slot: u64) -> u64 {
 //
 // A cell at resolution r occupies 4^(30-r) consecutive slots, an aligned block
 // starting at its first slot, and the cells of a resolution step along the
-// slots in strides of that size, as the Hilbert curve does. Unlike cell IDs,
+// slots in strides of that size, as the curve does. Unlike cell IDs,
 // whose layout differs at resolutions 0, 1 and 30, slots put every cell on one
 // integer line in curve order, including all 60 quintants at resolution 30.
 // A leaf slot is not a cell ID.
@@ -100,9 +100,9 @@ pub const SLOT_COUNTS: [u64; 31] = {
 pub const RES30_TAG_BITS: u64 = 0b10101;
 
 /// The tags of resolutions 2-29: the odd bits 55 down to 1
-const HILBERT_TAG_BITS: u64 = {
+const CURVE_TAG_BITS: u64 = {
     let mut bits = 0;
-    let mut r = FIRST_HILBERT_RESOLUTION as usize;
+    let mut r = FIRST_CURVE_RESOLUTION as usize;
     while r < MAX_RESOLUTION as usize {
         bits |= RESOLUTION_TAGS[r];
         r += 1;
@@ -123,7 +123,7 @@ pub fn cell_first_slot(cell: u64) -> Result<u64, String> {
             return Ok(res30_to_slot(cell));
         }
         // Resolutions 2-29, in quintants 0-59: the first slot is the ID without its tag
-        if tag & HILBERT_TAG_BITS != 0 && cell < WORLD_SLOTS {
+        if tag & CURVE_TAG_BITS != 0 && cell < WORLD_SLOTS {
             return Ok(cell - tag);
         }
         if tag == 0 {
@@ -298,7 +298,7 @@ pub fn deserialize(index: u64) -> Result<A5Cell, String> {
         });
     }
     let segment = (quintant + origin.first_quintant) % 5;
-    let s = if resolution < FIRST_HILBERT_RESOLUTION {
+    let s = if resolution < FIRST_CURVE_RESOLUTION {
         0
     } else {
         (slot & S_MASK) / SLOT_COUNTS[resolution as usize]
@@ -331,7 +331,7 @@ pub fn serialize(cell: &A5Cell) -> Result<u64, String> {
     }
 
     // The cell's first slot: its quintant, then S cells of this resolution into it
-    let offset = if resolution >= FIRST_HILBERT_RESOLUTION {
+    let offset = if resolution >= FIRST_CURVE_RESOLUTION {
         let count = SLOT_COUNTS[resolution as usize];
         match s.checked_mul(count) {
             Some(offset) if offset < QUINTANT_SLOTS => offset,
@@ -403,7 +403,7 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
     let all_segments = (current_resolution == -1 && new_resolution > 0) || current_resolution == 0;
 
     let resolution_diff =
-        new_resolution - std::cmp::max(current_resolution, FIRST_HILBERT_RESOLUTION - 1);
+        new_resolution - std::cmp::max(current_resolution, FIRST_CURVE_RESOLUTION - 1);
     let children_count = if resolution_diff <= 0 {
         1
     } else if resolution_diff > 20 {
@@ -461,8 +461,8 @@ fn normalize_res30(index: u64) -> u64 {
 /// Walk a cell up the hierarchy to a coarser resolution.
 ///
 /// Implemented as pure bit ops over the encoded index — no deserialize /
-/// serialize round-trip. The three encoding regimes (non-Hilbert res 0/1,
-/// Hilbert res 2..29, variable-width res 30) all reduce to the same shape
+/// serialize round-trip. The three encoding regimes (non-curve res 0/1,
+/// curve res 2..29, variable-width res 30) all reduce to the same shape
 /// after a small amount of normalization.
 pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64, String> {
     let parent_resolution = parent_resolution.unwrap_or_else(|| get_resolution(index) - 1);
@@ -485,7 +485,7 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
     }
 
     // Normalize res-30 children to the standard res-29 layout. After this,
-    // the fast paths below treat the cell as a Hilbert-range cell.
+    // the fast paths below treat the cell as a curve-range cell.
     let mut c = index;
     if is_max_resolution(index) {
         if parent_resolution == MAX_RESOLUTION {
@@ -497,8 +497,8 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
         }
     }
 
-    if parent_resolution >= FIRST_HILBERT_RESOLUTION {
-        // Hilbert-range parent: clear bits below the parent tag, set the tag.
+    if parent_resolution >= FIRST_CURVE_RESOLUTION {
+        // Curve-range parent: clear bits below the parent tag, set the tag.
         // Identity (parent res === child res) falls out for free: the tag lands
         // in the same position and bits below the keep cut are already zero.
         let keep_shift = (60 - 2 * parent_resolution) as u32;
@@ -537,15 +537,15 @@ pub fn get_res0_cells() -> Result<Vec<u64>, String> {
 
 /// Bit-level descendant test: is `child` the same cell as `parent`, or one of
 /// its descendants at any deeper resolution? Compares the high (quintant +
-/// parent's Hilbert) bits in a single shift, no deserialize needed.
+/// parent's curve) bits in a single shift, no deserialize needed.
 ///
-/// Restricted to the Hilbert range: `parent_resolution` must be in
-/// [FIRST_HILBERT_RESOLUTION .. MAX_RESOLUTION - 1], and `child` must not be
+/// Restricted to the curve range: `parent_resolution` must be in
+/// [FIRST_CURVE_RESOLUTION .. MAX_RESOLUTION - 1], and `child` must not be
 /// a resolution-30 cell (whose encoding uses a variable quintant shift).
 /// Callers handling those cases should fall back to `cell_to_parent` equality.
 pub fn is_child_of(child: u64, parent: u64, parent_resolution: i32) -> bool {
     // Parent's identifying bits occupy positions 63..(60-2P): 6 quintant bits
-    // + 2(P-1) Hilbert bits. Bit (59-2P) is the tag, below that is zero.
+    // + 2(P-1) curve bits. Bit (59-2P) is the tag, below that is zero.
     // Shifting both right by (60-2P) keeps exactly those identifying bits and
     // discards the tag, so a descendant matches iff the high bits match.
     let shift = (60 - 2 * parent_resolution) as u32;
