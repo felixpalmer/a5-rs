@@ -84,7 +84,7 @@ pub fn cell_to_supercell(cell: u64, resolution: i32) -> Result<u64, String> {
 /// # Returns
 ///
 /// Compacted cells sorted in curve order, then the compaction marker
-pub fn cell_to_subcell(cell: u64, resolution: i32) -> Result<Vec<u64>, String> {
+pub fn cell_to_subcells(cell: u64, resolution: i32) -> Result<Vec<u64>, String> {
     let cell_resolution = get_resolution(cell);
     if resolution < cell_resolution {
         return Err(format!(

@@ -1,5 +1,5 @@
 use a5::{
-    cell_to_subcell, cell_to_supercell, count, covering_resolution, get_resolution, hex_to_u64,
+    cell_to_subcells, cell_to_supercell, count, covering_resolution, get_resolution, hex_to_u64,
     u64_to_hex, uncompact,
 };
 use serde::Deserialize;
@@ -37,9 +37,9 @@ fn hex(cell: &str) -> u64 {
 }
 
 #[test]
-fn test_cell_to_subcell() {
+fn test_cell_to_subcells() {
     for f in &load().subcell {
-        let result = cell_to_subcell(hex(&f.cell), f.resolution).unwrap();
+        let result = cell_to_subcells(hex(&f.cell), f.resolution).unwrap();
         let cells: Vec<String> = result.iter().map(|&c| u64_to_hex(c)).collect();
         assert_eq!(cells, f.cells, "subcells of {} at {}", f.cell, f.resolution);
         assert_eq!(count(&result).unwrap(), f.count);
@@ -47,11 +47,11 @@ fn test_cell_to_subcell() {
 }
 
 #[test]
-fn test_cell_to_subcell_maps_back() {
+fn test_cell_to_subcells_maps_back() {
     for f in &load().subcell {
         let cell = hex(&f.cell);
         let cell_resolution = get_resolution(cell);
-        let subcells = uncompact(&cell_to_subcell(cell, f.resolution).unwrap()).unwrap();
+        let subcells = uncompact(&cell_to_subcells(cell, f.resolution).unwrap()).unwrap();
         for subcell in subcells {
             assert_eq!(
                 cell_to_supercell(subcell, cell_resolution).unwrap(),
@@ -65,17 +65,17 @@ fn test_cell_to_subcell_maps_back() {
 }
 
 #[test]
-fn test_cell_to_subcell_own_resolution() {
+fn test_cell_to_subcells_own_resolution() {
     let cell = hex(&load().subcell[5].cell);
-    let result = cell_to_subcell(cell, get_resolution(cell)).unwrap();
+    let result = cell_to_subcells(cell, get_resolution(cell)).unwrap();
     assert_eq!(uncompact(&result).unwrap(), vec![cell]);
     assert_eq!(covering_resolution(&result), get_resolution(cell));
 }
 
 #[test]
-fn test_cell_to_subcell_coarser_resolution_errors() {
+fn test_cell_to_subcells_coarser_resolution_errors() {
     let cell = hex(&load().subcell[5].cell);
-    assert!(cell_to_subcell(cell, get_resolution(cell) - 1).is_err());
+    assert!(cell_to_subcells(cell, get_resolution(cell) - 1).is_err());
 }
 
 #[test]
