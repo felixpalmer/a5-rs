@@ -466,7 +466,8 @@ fn normalize_res30(index: u64) -> u64 {
 /// curve res 2..29, variable-width res 30) all reduce to the same shape
 /// after a small amount of normalization.
 pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64, String> {
-    let parent_resolution = parent_resolution.unwrap_or_else(|| get_resolution(index) - 1);
+    let current_resolution = get_resolution(index);
+    let parent_resolution = parent_resolution.unwrap_or(current_resolution - 1);
 
     // Special case: parent of resolution 0 cells is the world cell
     if parent_resolution == -1 {
@@ -478,7 +479,6 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
             parent_resolution
         ));
     }
-    let current_resolution = get_resolution(index);
     if parent_resolution > current_resolution {
         return Err(format!(
             "Target resolution ({}) must be equal to or less than current resolution ({})",
