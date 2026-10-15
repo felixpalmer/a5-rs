@@ -89,11 +89,13 @@ pub fn polygon_to_cells(
     }
 
     let prep = prepare_polygon(ring_vecs_list.clone());
-    // `Overlapping` output is the boundary itself, so it needs every cell the
-    // boundary touches; `Center` only needs a boundary the fill can't step past
-    // (the curve runs' ring covers any cell the sampling skips).
+    // Both modes need every cell the boundary touches, each with every segment
+    // touching it: the fills classify a cell next to the boundary by the
+    // segments its boundary neighbor records (see `Boundary::inside_next_to`),
+    // so a segment the sampling skipped flips that class, and the fill leaks
+    // out of the polygon.
     let overlapping = options.containment == Containment::Overlapping;
-    let sampled = sample_boundary(&rings, resolution, overlapping)?;
+    let sampled = sample_boundary(&rings, resolution)?;
 
     // Res 30 covers only quintants 0-41 (elsewhere A5 answers at res 29, see
     // serialize), so a polygon reaching past them is filled at res 29: mixing the
