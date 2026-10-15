@@ -30,6 +30,24 @@ struct GeoJSONFeatureCollection {
     features: Vec<GeoJSONFeature>,
 }
 
+#[derive(Deserialize)]
+struct LonLatToCellOutOfRangeFixture {
+    #[serde(rename = "lonLat")]
+    lon_lat: [f64; 2],
+    resolution: i32,
+}
+
+#[derive(Deserialize)]
+struct WorldCellFixtures {
+    #[serde(rename = "lonLatToCellOutOfRange")]
+    lon_lat_to_cell_out_of_range: Vec<LonLatToCellOutOfRangeFixture>,
+}
+
+fn load_world_cell_fixtures() -> WorldCellFixtures {
+    let data = include_str!("fixtures/world-cell.json");
+    serde_json::from_str(data).expect("Failed to parse world-cell.json")
+}
+
 fn load_populated_places() -> GeoJSONFeatureCollection {
     let data = include_str!("../tests/data/ne_50m_populated_places_nameonly.json");
     serde_json::from_str(data).expect("Failed to parse populated places data")
@@ -41,10 +59,15 @@ fn test_world_cell_for_resolution_minus_1() {
     assert_eq!(cell_id, 0);
 }
 
+// Resolutions outside -1 to 30 are errors, not panics
 #[test]
 fn test_lonlat_to_cell_resolution_out_of_range() {
-    assert!(lonlat_to_cell(LonLat::new(0.0, 0.0), -2).is_err());
-    assert!(lonlat_to_cell(LonLat::new(0.0, 0.0), MAX_RESOLUTION + 1).is_err());
+    for f in &load_world_cell_fixtures().lon_lat_to_cell_out_of_range {
+        let err = lonlat_to_cell(LonLat::new(f.lon_lat[0], f.lon_lat[1]), f.resolution).expect_err(
+            &format!("lonLat={:?} resolution={}", f.lon_lat, f.resolution),
+        );
+        assert!(err.contains("is out of range"), "{}", err);
+    }
 }
 
 #[test]

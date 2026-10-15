@@ -1,0 +1,327 @@
+{
+  "lonLatToCellOutOfRange": [
+    {
+      "lonLat": [
+        0,
+        0
+      ],
+      "resolution": -2
+    },
+    {
+      "lonLat": [
+        0,
+        0
+      ],
+      "resolution": 31
+    }
+  ],
+  "lineStringToCells": [
+    {
+      "waypoints": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "resolution": -1,
+      "cells": [
+        "0"
+      ]
+    },
+    {
+      "waypoints": [
+        [
+          0,
+          0
+        ]
+      ],
+      "resolution": -1,
+      "cells": [
+        "0"
+      ]
+    },
+    {
+      "waypoints": [],
+      "resolution": -1,
+      "cells": []
+    }
+  ],
+  "lineStringToCellsOutOfRange": [
+    {
+      "waypoints": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "resolution": -2
+    },
+    {
+      "waypoints": [
+        [
+          0,
+          0
+        ]
+      ],
+      "resolution": -2
+    },
+    {
+      "waypoints": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "resolution": 31
+    },
+    {
+      "waypoints": [
+        [
+          0,
+          0
+        ]
+      ],
+      "resolution": 31
+    }
+  ],
+  "polygonToCells": [
+    {
+      "polygon": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            0,
+            10
+          ]
+        ]
+      ],
+      "resolution": -1,
+      "containment": "overlapping",
+      "compactedCells": [
+        "0"
+      ]
+    },
+    {
+      "polygon": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            0,
+            10
+          ]
+        ]
+      ],
+      "resolution": -1,
+      "containment": "center",
+      "compactedCells": []
+    }
+  ],
+  "polygonToCellsOutOfRange": [
+    {
+      "polygon": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            0,
+            10
+          ]
+        ]
+      ],
+      "resolution": -2,
+      "containment": "center"
+    },
+    {
+      "polygon": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            0,
+            10
+          ]
+        ]
+      ],
+      "resolution": -2,
+      "containment": "overlapping"
+    },
+    {
+      "polygon": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            0,
+            10
+          ]
+        ]
+      ],
+      "resolution": 31,
+      "containment": "center"
+    },
+    {
+      "polygon": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            0,
+            10
+          ]
+        ]
+      ],
+      "resolution": 31,
+      "containment": "overlapping"
+    }
+  ],
+  "sphericalCap": [
+    {
+      "cellId": "0",
+      "radius": 0,
+      "compactedCells": [
+        "0"
+      ]
+    },
+    {
+      "cellId": "0",
+      "radius": 1000,
+      "compactedCells": [
+        "0"
+      ]
+    },
+    {
+      "cellId": "0",
+      "radius": 10000000,
+      "compactedCells": [
+        "0"
+      ]
+    },
+    {
+      "cellId": "0",
+      "radius": 1000000000,
+      "compactedCells": [
+        "0"
+      ]
+    }
+  ],
+  "gridDisk": [
+    {
+      "cellId": "0",
+      "k": 0,
+      "compactedCells": [
+        "0"
+      ]
+    },
+    {
+      "cellId": "0",
+      "k": 1,
+      "compactedCells": [
+        "0"
+      ]
+    },
+    {
+      "cellId": "0",
+      "k": 5,
+      "compactedCells": [
+        "0"
+      ]
+    }
+  ],
+  "gridDiskVertex": [
+    {
+      "cellId": "0",
+      "k": 0,
+      "compactedCells": [
+        "0"
+      ]
+    },
+    {
+      "cellId": "0",
+      "k": 1,
+      "compactedCells": [
+        "0"
+      ]
+    },
+    {
+      "cellId": "0",
+      "k": 5,
+      "compactedCells": [
+        "0"
+      ]
+    }
+  ]
+}

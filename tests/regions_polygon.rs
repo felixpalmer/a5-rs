@@ -34,6 +34,43 @@ struct Fixtures {
     country: Vec<CountryFixture>,
 }
 
+#[derive(Deserialize)]
+struct WorldCellPolygonFixture {
+    polygon: Vec<Vec<[f64; 2]>>,
+    resolution: i32,
+    containment: String,
+    #[serde(rename = "compactedCells")]
+    compacted_cells: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct PolygonOutOfRangeFixture {
+    polygon: Vec<Vec<[f64; 2]>>,
+    resolution: i32,
+    containment: String,
+}
+
+#[derive(Deserialize)]
+struct WorldCellFixtures {
+    #[serde(rename = "polygonToCells")]
+    polygon_to_cells: Vec<WorldCellPolygonFixture>,
+    #[serde(rename = "polygonToCellsOutOfRange")]
+    polygon_to_cells_out_of_range: Vec<PolygonOutOfRangeFixture>,
+}
+
+fn load_world_cell_fixtures() -> WorldCellFixtures {
+    let data = include_str!("fixtures/world-cell.json");
+    serde_json::from_str(data).expect("Failed to parse world-cell.json")
+}
+
+fn to_containment(name: &str) -> Containment {
+    match name {
+        "center" => Containment::Center,
+        "overlapping" => Containment::Overlapping,
+        _ => panic!("unknown containment {name}"),
+    }
+}
+
 fn to_rings(polygon: &[Vec<[f64; 2]>]) -> Vec<Vec<LonLat>> {
     polygon
         .iter()
@@ -180,37 +217,36 @@ fn test_polygon_to_cells_country_fixtures() {
     }
 }
 
+// At resolution -1 the world cell overlaps every polygon but has no center, so
+// only overlapping containment returns it
 #[test]
-fn test_polygon_to_cells_resolution_out_of_range() {
-    let square = vec![vec![
-        LonLat::new(0.0, 0.0),
-        LonLat::new(10.0, 0.0),
-        LonLat::new(10.0, 10.0),
-        LonLat::new(0.0, 10.0),
-    ]];
-    for resolution in [-2, a5::MAX_RESOLUTION + 1] {
-        for containment in [Containment::Center, Containment::Overlapping] {
-            let options = Some(PolygonToCellsOptions { containment });
-            assert!(polygon_to_cells(&square, resolution, options).is_err());
-        }
+fn test_polygon_to_cells_world_cell() {
+    for f in &load_world_cell_fixtures().polygon_to_cells {
+        let options = Some(PolygonToCellsOptions {
+            containment: to_containment(&f.containment),
+        });
+        let result: Vec<String> = polygon_to_cells(&to_rings(&f.polygon), f.resolution, options)
+            .unwrap()
+            .into_iter()
+            .map(u64_to_hex)
+            .collect();
+        assert_eq!(
+            result, f.compacted_cells,
+            "resolution={} containment={}",
+            f.resolution, f.containment
+        );
     }
 }
 
 #[test]
-fn test_polygon_to_cells_world_resolution() {
-    let square = vec![vec![
-        LonLat::new(0.0, 0.0),
-        LonLat::new(10.0, 0.0),
-        LonLat::new(10.0, 10.0),
-        LonLat::new(0.0, 10.0),
-    ]];
-    // The world cell overlaps every polygon but has no center to contain
-    let overlapping = Some(PolygonToCellsOptions {
-        containment: Containment::Overlapping,
-    });
-    assert_eq!(
-        polygon_to_cells(&square, -1, overlapping).unwrap(),
-        vec![a5::WORLD_CELL]
-    );
-    assert!(polygon_to_cells(&square, -1, None).unwrap().is_empty());
+fn test_polygon_to_cells_resolution_out_of_range() {
+    for f in &load_world_cell_fixtures().polygon_to_cells_out_of_range {
+        let options = Some(PolygonToCellsOptions {
+            containment: to_containment(&f.containment),
+        });
+        let err = polygon_to_cells(&to_rings(&f.polygon), f.resolution, options).expect_err(
+            &format!("resolution={} containment={}", f.resolution, f.containment),
+        );
+        assert!(err.contains("is out of range"), "{}", err);
+    }
 }

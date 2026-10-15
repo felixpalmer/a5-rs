@@ -15,9 +15,31 @@ struct Fixture {
     extra_vertex_cells: Vec<String>,
 }
 
+#[derive(Deserialize)]
+struct WorldCellFixture {
+    #[serde(rename = "cellId")]
+    cell_id: String,
+    k: usize,
+    #[serde(rename = "compactedCells")]
+    compacted_cells: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct WorldCellFixtures {
+    #[serde(rename = "gridDisk")]
+    grid_disk: Vec<WorldCellFixture>,
+    #[serde(rename = "gridDiskVertex")]
+    grid_disk_vertex: Vec<WorldCellFixture>,
+}
+
 fn load_fixtures() -> Vec<Fixture> {
     let data = include_str!("fixtures/traversal/grid-disk.json");
     serde_json::from_str(data).expect("Failed to parse grid-disk.json")
+}
+
+fn load_world_cell_fixtures() -> WorldCellFixtures {
+    let data = include_str!("fixtures/world-cell.json");
+    serde_json::from_str(data).expect("Failed to parse world-cell.json")
 }
 
 /// Sort hex cell IDs by numeric value for stable comparison
@@ -103,12 +125,26 @@ fn test_grid_disk_vertex_k0() {
 
 #[test]
 fn test_grid_disk_of_world_cell() {
-    // The world cell is the only cell at resolution -1: its disk is itself
-    for k in [0, 1, 5] {
-        assert_eq!(grid_disk(a5::WORLD_CELL, k).unwrap(), vec![a5::WORLD_CELL]);
-        assert_eq!(
-            grid_disk_vertex(a5::WORLD_CELL, k).unwrap(),
-            vec![a5::WORLD_CELL]
-        );
+    for f in &load_world_cell_fixtures().grid_disk {
+        let cell_id = hex_to_u64(&f.cell_id).unwrap();
+        let result: Vec<String> = grid_disk(cell_id, f.k)
+            .unwrap()
+            .into_iter()
+            .map(u64_to_hex)
+            .collect();
+        assert_eq!(result, f.compacted_cells, "cellId={} k={}", f.cell_id, f.k);
+    }
+}
+
+#[test]
+fn test_grid_disk_vertex_of_world_cell() {
+    for f in &load_world_cell_fixtures().grid_disk_vertex {
+        let cell_id = hex_to_u64(&f.cell_id).unwrap();
+        let result: Vec<String> = grid_disk_vertex(cell_id, f.k)
+            .unwrap()
+            .into_iter()
+            .map(u64_to_hex)
+            .collect();
+        assert_eq!(result, f.compacted_cells, "cellId={} k={}", f.cell_id, f.k);
     }
 }
