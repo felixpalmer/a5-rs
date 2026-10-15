@@ -8,8 +8,11 @@
 
 use super::resolution::covering_resolution;
 use super::slot_runs::to_covering;
+use crate::core::cell_info::get_num_children;
 use crate::core::compaction_marker::is_compaction_marker;
-use crate::core::serialization::{cell_to_children, descendant_id_count};
+use crate::core::serialization::{
+    cell_to_children, checked_resolution, descendant_id_count, get_resolution, MAX_RESOLUTION,
+};
 
 /// Expand a set of cells to all their cells at its resolution: the resolution
 /// of its compaction marker, or of its finest cell when it has none.
@@ -38,8 +41,16 @@ pub fn uncompact(cells: &[u64]) -> Result<Vec<u64>, String> {
         if is_compaction_marker(cell) {
             continue;
         }
-        n = usize::try_from(descendant_id_count(cell, target_resolution)?)
-            .ok()
+        // Only resolution 30 needs the slot-based count (see descendant_id_count)
+        let children = if target_resolution == MAX_RESOLUTION {
+            usize::try_from(descendant_id_count(cell, target_resolution)?).ok()
+        } else {
+            Some(get_num_children(
+                checked_resolution(cell)?,
+                target_resolution,
+            ))
+        };
+        n = children
             .and_then(|c| c.checked_add(n))
             .ok_or("Too many cells to uncompact")?;
     }
@@ -53,7 +64,12 @@ pub fn uncompact(cells: &[u64]) -> Result<Vec<u64>, String> {
         if is_compaction_marker(cell) {
             continue;
         }
-        if descendant_id_count(cell, target_resolution)? == 1 {
+        let own = if target_resolution == MAX_RESOLUTION {
+            descendant_id_count(cell, target_resolution)? == 1
+        } else {
+            get_num_children(get_resolution(cell), target_resolution) == 1
+        };
+        if own {
             result.push(cell);
         } else {
             result.extend(cell_to_children(cell, Some(target_resolution))?);
