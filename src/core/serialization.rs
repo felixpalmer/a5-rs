@@ -458,7 +458,8 @@ fn normalize_res30(index: u64) -> u64 {
     (res30_to_slot(index) & !3) | 0b10
 }
 
-/// Walk a cell up the hierarchy to a coarser resolution.
+/// Walk a cell up the hierarchy to a coarser resolution (or its own, giving the
+/// cell). A finer resolution is an error.
 ///
 /// Implemented as pure bit ops over the encoded index — no deserialize /
 /// serialize round-trip. The three encoding regimes (non-curve res 0/1,
@@ -477,10 +478,11 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
             parent_resolution
         ));
     }
-    if index == WORLD_CELL {
+    let current_resolution = get_resolution(index);
+    if parent_resolution > current_resolution {
         return Err(format!(
-            "Target resolution ({}) must be equal to or less than current resolution (-1)",
-            parent_resolution
+            "Target resolution ({}) must be equal to or less than current resolution ({})",
+            parent_resolution, current_resolution
         ));
     }
 
