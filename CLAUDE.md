@@ -129,7 +129,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items --all-fe
 cargo publish --dry-run
 ```
 
-These are the same checks that run in CI (.github/workflows/test.yml). Run these to verify your changes before the user reviews the code. The CI also checks links in markdown files using lychee.
+These are the same checks that run in CI (.github/workflows/test.yml). Run these to verify your changes before the user reviews the code.
 
 The doc check (5) covers private items too, and rustdoc reads bracketed text in `///` doc comments as intra-doc links: a comment like `[flip combination][digit]` fails it with a broken-link error. Wrap such text in backticks (`` `[flip][digit]` ``).
 

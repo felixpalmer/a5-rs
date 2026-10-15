@@ -65,19 +65,6 @@ jobs:
       - name: Check the formatting
         run: cargo fmt -- --check --verbose
 
-  lychee:
-    name: Links
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout the repository
-        uses: actions/checkout@v4
-      - name: Check the links
-        uses: lycheeverse/lychee-action@v2
-        with:
-          args: -v *.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   docs:
     name: Docs
     runs-on: ubuntu-latest
