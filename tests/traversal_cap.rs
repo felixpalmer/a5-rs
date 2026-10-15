@@ -147,3 +147,14 @@ fn test_pick_coarse_resolution() {
         );
     }
 }
+
+#[test]
+fn test_spherical_cap_of_world_cell() {
+    // The world cell has no center and is the only cell at resolution -1: its cap is itself
+    for radius in [0.0, 1000.0, 1e7, 1e9] {
+        assert_eq!(
+            spherical_cap(a5::WORLD_CELL, radius).unwrap(),
+            vec![a5::WORLD_CELL]
+        );
+    }
+}

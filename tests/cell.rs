@@ -42,6 +42,12 @@ fn test_world_cell_for_resolution_minus_1() {
 }
 
 #[test]
+fn test_lonlat_to_cell_resolution_out_of_range() {
+    assert!(lonlat_to_cell(LonLat::new(0.0, 0.0), -2).is_err());
+    assert!(lonlat_to_cell(LonLat::new(0.0, 0.0), MAX_RESOLUTION + 1).is_err());
+}
+
+#[test]
 fn test_world_cell_center() {
     let lon_lat = cell_to_lonlat(0).expect("Failed to get center");
     assert_eq!(lon_lat.longitude(), 0.0);

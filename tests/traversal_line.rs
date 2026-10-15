@@ -76,3 +76,26 @@ fn test_dedup_at_segment_junctions() {
     unique.dedup();
     assert_eq!(result.len(), unique.len());
 }
+
+#[test]
+fn test_line_string_to_cells_world_resolution() {
+    let line = [LonLat::new(0.0, 0.0), LonLat::new(1.0, 1.0)];
+    assert_eq!(
+        line_string_to_cells(&line, -1).unwrap(),
+        vec![a5::WORLD_CELL]
+    );
+    assert_eq!(
+        line_string_to_cells(&line[..1], -1).unwrap(),
+        vec![a5::WORLD_CELL]
+    );
+    assert!(line_string_to_cells(&[], -1).unwrap().is_empty());
+}
+
+#[test]
+fn test_line_string_to_cells_resolution_out_of_range() {
+    let line = [LonLat::new(0.0, 0.0), LonLat::new(1.0, 1.0)];
+    for resolution in [-2, a5::MAX_RESOLUTION + 1] {
+        assert!(line_string_to_cells(&line, resolution).is_err());
+        assert!(line_string_to_cells(&line[..1], resolution).is_err());
+    }
+}

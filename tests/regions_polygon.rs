@@ -179,3 +179,38 @@ fn test_polygon_to_cells_country_fixtures() {
         );
     }
 }
+
+#[test]
+fn test_polygon_to_cells_resolution_out_of_range() {
+    let square = vec![vec![
+        LonLat::new(0.0, 0.0),
+        LonLat::new(10.0, 0.0),
+        LonLat::new(10.0, 10.0),
+        LonLat::new(0.0, 10.0),
+    ]];
+    for resolution in [-2, a5::MAX_RESOLUTION + 1] {
+        for containment in [Containment::Center, Containment::Overlapping] {
+            let options = Some(PolygonToCellsOptions { containment });
+            assert!(polygon_to_cells(&square, resolution, options).is_err());
+        }
+    }
+}
+
+#[test]
+fn test_polygon_to_cells_world_resolution() {
+    let square = vec![vec![
+        LonLat::new(0.0, 0.0),
+        LonLat::new(10.0, 0.0),
+        LonLat::new(10.0, 10.0),
+        LonLat::new(0.0, 10.0),
+    ]];
+    // The world cell overlaps every polygon but has no center to contain
+    let overlapping = Some(PolygonToCellsOptions {
+        containment: Containment::Overlapping,
+    });
+    assert_eq!(
+        polygon_to_cells(&square, -1, overlapping).unwrap(),
+        vec![a5::WORLD_CELL]
+    );
+    assert!(polygon_to_cells(&square, -1, None).unwrap().is_empty());
+}

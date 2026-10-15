@@ -100,3 +100,15 @@ fn test_grid_disk_vertex_k0() {
     assert!(is_compaction_marker(result[1]));
     assert_eq!(uncompact(&result).unwrap(), vec![cell_id]);
 }
+
+#[test]
+fn test_grid_disk_of_world_cell() {
+    // The world cell is the only cell at resolution -1: its disk is itself
+    for k in [0, 1, 5] {
+        assert_eq!(grid_disk(a5::WORLD_CELL, k).unwrap(), vec![a5::WORLD_CELL]);
+        assert_eq!(
+            grid_disk_vertex(a5::WORLD_CELL, k).unwrap(),
+            vec![a5::WORLD_CELL]
+        );
+    }
+}
