@@ -1,7 +1,8 @@
 use a5::core::origin::get_origins;
 use a5::core::serialization::{
-    cell_to_children, cell_to_parent, deserialize, get_res0_cells, get_resolution, is_child_of,
-    serialize, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
+    cell_first_slot, cell_to_children, cell_to_parent, deserialize, get_res0_cells, get_resolution,
+    is_child_of, serialize, slot_to_cell, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS,
+    WORLD_CELL,
 };
 use a5::core::utils::A5Cell;
 use serde_json::Value;
@@ -930,5 +931,65 @@ fn test_cell_to_parent_finer_resolution_errors() {
             "{}",
             err
         );
+    }
+}
+
+// =============================================================================
+// resolution 30 in quintants without res-30 IDs
+// =============================================================================
+
+/// The res-29 cell with S = 0 in quintant `quintant` (0-59, in ID order).
+fn res29_cell_in_quintant(quintant: usize) -> u64 {
+    let origin = &get_origins()[quintant / 5];
+    serialize(&A5Cell {
+        origin_id: origin.id,
+        segment: (quintant % 5 + origin.first_quintant) % 5,
+        s: 0,
+        resolution: 29,
+    })
+    .unwrap()
+}
+
+#[test]
+fn test_res30_children_are_distinct() {
+    for quintant in 0..60 {
+        let cell = res29_cell_in_quintant(quintant);
+        let grandparent = cell_to_parent(cell, Some(27)).unwrap();
+        let children = cell_to_children(cell, Some(30)).unwrap();
+        let descendants = cell_to_children(grandparent, Some(30)).unwrap();
+        let mut distinct = descendants.clone();
+        distinct.dedup();
+        assert_eq!(distinct, descendants, "quintant {}", quintant);
+        if quintant < RES30_QUINTANTS {
+            assert_eq!(children.len(), 4, "quintant {}", quintant);
+            assert_eq!(descendants.len(), 64, "quintant {}", quintant);
+            assert!(descendants.iter().all(|&c| get_resolution(c) == 30));
+        } else {
+            // No res-30 IDs here: each res-29 cell stands in for its children, once
+            assert_eq!(children, vec![cell], "quintant {}", quintant);
+            assert_eq!(
+                descendants,
+                cell_to_children(grandparent, Some(29)).unwrap(),
+                "quintant {}",
+                quintant
+            );
+        }
+    }
+}
+
+#[test]
+fn test_slot_to_cell_res30_without_ids() {
+    for quintant in 0..60 {
+        let cell = res29_cell_in_quintant(quintant);
+        let slot = cell_first_slot(cell).unwrap();
+        for offset in 0..4 {
+            let res30 = slot_to_cell(slot + offset, MAX_RESOLUTION);
+            if quintant < RES30_QUINTANTS {
+                assert_eq!(get_resolution(res30), MAX_RESOLUTION);
+                assert_eq!(cell_first_slot(res30).unwrap(), slot + offset);
+            } else {
+                assert_eq!(res30, cell, "quintant {} offset {}", quintant, offset);
+            }
+        }
     }
 }

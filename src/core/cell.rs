@@ -77,6 +77,9 @@ pub fn last_projection(spherical: Spherical, origin_id: OriginId) -> Option<Face
 }
 
 /// Convert lon/lat coordinates to A5 cell ID
+///
+/// Resolution 30 IDs exist only in quintants 0-41 (`RES30_QUINTANTS`); elsewhere
+/// a request for resolution 30 gives the res-29 cell containing the point.
 pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
     spherical_to_cell(from_lon_lat(lonlat), resolution)
 }

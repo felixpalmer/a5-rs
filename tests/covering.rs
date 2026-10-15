@@ -319,3 +319,25 @@ fn test_valid_edge_cells_are_accepted() {
         }
     }
 }
+
+#[test]
+fn test_res30_count_matches_uncompact() {
+    use a5::core::compaction_marker::compaction_marker;
+    // Res-29 cells in quintants 42-44 (origin 8) stand in for res 30, once each
+    let res29 = hex_to_u64("aa55554e4c220de2").unwrap();
+    let grandparent = a5::cell_to_parent(res29, Some(27)).unwrap();
+    let covering = [grandparent, compaction_marker(30)];
+    let cells = uncompact(&covering).unwrap();
+    assert_eq!(cells.len(), 16);
+    assert_eq!(count(&covering).unwrap(), 16);
+    assert!(cells.iter().all(|&c| a5::get_resolution(c) == 29));
+    let mut distinct = cells.clone();
+    distinct.dedup();
+    assert_eq!(distinct, cells);
+    // Origin 8 holds quintants 40-44: two with res-30 IDs, three without
+    let origin8 = a5::get_res0_cells().unwrap()[8];
+    assert_eq!(
+        count(&[origin8, compaction_marker(30)]).unwrap(),
+        2 * 4u64.pow(29) + 3 * 4u64.pow(28)
+    );
+}

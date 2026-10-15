@@ -6,6 +6,8 @@ use crate::core::origin::get_origins;
 use crate::core::utils::A5Cell;
 
 pub const FIRST_CURVE_RESOLUTION: i32 = 2;
+/// The finest resolution. Resolution 30 IDs exist only in quintants 0-41
+/// (`RES30_QUINTANTS`); elsewhere a request for resolution 30 gives res-29 cells.
 pub const MAX_RESOLUTION: i32 = 30;
 // IDs below res 30 start with a 6-bit origin (res 0) or quintant, above S
 pub const QUINTANT_SHIFT: u32 = 58;
@@ -241,7 +243,32 @@ pub fn cell_slot_count(cell: u64) -> u64 {
     tag << 1
 }
 
-/// The res-r cell whose block of slots starts at `slot`.
+/// The number of distinct cell IDs among a cell's descendants at `resolution`:
+/// 0 if it is coarser than the cell, 1 if it is the cell's own. At resolution
+/// 30, quintants past `RES30_QUINTANTS` have no IDs and their res-29 cells stand
+/// in (see `serialize`), so they count once per res-29 cell. Below resolution 30
+/// this is `get_num_children`.
+pub fn descendant_id_count(cell: u64, resolution: i32) -> Result<u64, String> {
+    let cell_resolution = checked_resolution(cell)?;
+    if resolution <= cell_resolution {
+        return Ok((resolution == cell_resolution) as u64);
+    }
+    if resolution > MAX_RESOLUTION {
+        return Err(format!("Resolution ({}) is too large", resolution));
+    }
+    let first = cell_first_slot(cell)?;
+    let end = first + cell_slot_count(cell);
+    if resolution < MAX_RESOLUTION {
+        return Ok((end - first) / SLOT_COUNTS[resolution as usize]);
+    }
+    let split = (RES30_QUINTANTS as u64) << QUINTANT_SHIFT;
+    let with_ids = end.min(split).saturating_sub(first);
+    let without_ids = end.saturating_sub(first.max(split));
+    Ok(with_ids + without_ids / SLOT_COUNTS[MAX_RESOLUTION as usize - 1])
+}
+
+/// The res-r cell whose block of slots starts at `slot`. At resolution 30 in
+/// quintants past `RES30_QUINTANTS`, the res-29 cell holding `slot`.
 pub fn slot_to_cell(slot: u64, resolution: i32) -> u64 {
     if resolution < 0 {
         return WORLD_CELL;
@@ -251,6 +278,10 @@ pub fn slot_to_cell(slot: u64, resolution: i32) -> u64 {
     }
     if resolution == 0 {
         return (((slot >> QUINTANT_SHIFT) / 5) << QUINTANT_SHIFT) | RESOLUTION_TAGS[0];
+    }
+    // Quintants past RES30_QUINTANTS have no res-30 IDs: give the res-29 cell
+    if (slot >> QUINTANT_SHIFT) as usize >= RES30_QUINTANTS {
+        return slot_to_cell(slot & !3, MAX_RESOLUTION - 1);
     }
     slot_to_res30(slot)
 }
@@ -364,7 +395,8 @@ pub fn serialize(cell: &A5Cell) -> Result<u64, String> {
 }
 
 /// The children of a cell at `child_resolution` (default: the next resolution),
-/// in ascending ID order.
+/// in ascending ID order. At resolution 30, quintants past `RES30_QUINTANTS` have
+/// no IDs, so there each res-29 descendant stands in for its four children, once.
 pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec<u64>, String> {
     let cell = deserialize(index)?;
     let A5Cell {
@@ -440,6 +472,10 @@ pub fn cell_to_children(index: u64, child_resolution: Option<i32>) -> Result<Vec
                 children.push(serialize(&new_cell)?);
             }
         }
+    }
+    // Without res-30 IDs, serialize gives four children the same res-29 cell
+    if new_resolution == MAX_RESOLUTION {
+        children.dedup();
     }
 
     Ok(children)
