@@ -466,8 +466,10 @@ fn normalize_res30(index: u64) -> u64 {
 /// curve res 2..29, variable-width res 30) all reduce to the same shape
 /// after a small amount of normalization.
 pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64, String> {
-    let current_resolution = get_resolution(index);
-    let parent_resolution = parent_resolution.unwrap_or(current_resolution - 1);
+    // The immediate parent (None) is never finer than the cell: only an explicit
+    // target needs the check below.
+    let check = parent_resolution.is_some();
+    let parent_resolution = parent_resolution.unwrap_or_else(|| get_resolution(index) - 1);
 
     // Special case: parent of resolution 0 cells is the world cell
     if parent_resolution == -1 {
@@ -479,11 +481,11 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
             parent_resolution
         ));
     }
-    if parent_resolution > current_resolution {
-        return Err(format!(
-            "Target resolution ({}) must be equal to or less than current resolution ({})",
-            parent_resolution, current_resolution
-        ));
+    // A cell coarser than the target has no parent there. Each branch below
+    // detects that from bits it already reads, so the common case never pays
+    // for get_resolution.
+    if index == WORLD_CELL {
+        return Err(finer_target(index, parent_resolution));
     }
 
     // Normalize res-30 children to the standard res-29 layout. After this,
@@ -503,13 +505,26 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
         // Curve-range parent: clear bits below the parent tag, set the tag.
         // Identity (parent res === child res) falls out for free: the tag lands
         // in the same position and bits below the keep cut are already zero.
+        // A cell at the parent resolution or finer has its tag below the cut;
+        // a coarser cell has no bits there (at resolution 30 the cut is bit 0,
+        // so every cell not already res 30 is coarser).
         let keep_shift = (60 - 2 * parent_resolution) as u32;
+        if check && c & ((1u64 << keep_shift) - 1) == 0 {
+            return Err(finer_target(index, parent_resolution));
+        }
         return Ok(
             ((c >> keep_shift) << keep_shift) | (1u64 << (59 - 2 * parent_resolution) as u32)
         );
     }
 
+    // A res-0 cell has bit 57 set with all lower bits zero — equivalently, all
+    // bottom 57 bits are zero.
+    let is_res0 = (c & ((1u64 << 57) - 1)) == 0;
+
     if parent_resolution == 1 {
+        if is_res0 {
+            return Err(finer_target(index, parent_resolution));
+        }
         // Top 6 bits already encode 5*originId + segmentN; only the tag moves.
         // Identity (cell already at res 1) is preserved.
         return Ok(((c >> 58) << 58) | (1u64 << 56));
@@ -517,12 +532,21 @@ pub fn cell_to_parent(index: u64, parent_resolution: Option<i32>) -> Result<u64,
 
     // parent_resolution == 0: top 6 bits change from quintant (0-59) to originId (0-11).
     // Identity (cell already at res 0) needs an explicit guard since dividing
-    // an originId by 5 would corrupt it. A res-0 cell has bit 57 set with all
-    // lower bits zero — equivalently, all bottom 57 bits are zero.
-    if (c & ((1u64 << 57) - 1)) == 0 {
+    // an originId by 5 would corrupt it.
+    if is_res0 {
         return Ok(c);
     }
     Ok((((c >> 58) / 5) << 58) | (1u64 << 57))
+}
+
+/// The error for a target resolution finer than the cell's own.
+#[cold]
+fn finer_target(index: u64, parent_resolution: i32) -> String {
+    format!(
+        "Target resolution ({}) must be equal to or less than current resolution ({})",
+        parent_resolution,
+        get_resolution(index)
+    )
 }
 
 /// The 12 resolution-0 cells (dodecahedron faces) — a constant, computed once.
