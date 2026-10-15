@@ -23,20 +23,20 @@ fn bench_subcell(c: &mut Criterion) {
     });
 
     let mut j = 0usize;
-    g.bench_function("cellToSubcell res 8 -> 11", |b| {
+    g.bench_function("cellToSubcells res 8 -> 11", |b| {
         b.iter(|| {
             let cell = cells8[j & (N - 1)];
             j += 1;
-            black_box(a5::cell_to_subcell(black_box(cell), 11).unwrap())
+            black_box(a5::cell_to_subcells(black_box(cell), 11).unwrap())
         })
     });
 
     let mut k = 0usize;
-    g.bench_function("cellToSubcell res 8 -> 16", |b| {
+    g.bench_function("cellToSubcells res 8 -> 16", |b| {
         b.iter(|| {
             let cell = cells8[k & (N - 1)];
             k += 1;
-            black_box(a5::cell_to_subcell(black_box(cell), 16).unwrap())
+            black_box(a5::cell_to_subcells(black_box(cell), 16).unwrap())
         })
     });
     g.finish();
