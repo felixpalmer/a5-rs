@@ -45,7 +45,7 @@ pub use core::serialization::{
     cell_to_children, cell_to_parent, get_res0_cells, get_resolution, is_valid_cell,
     MAX_RESOLUTION, WORLD_CELL,
 };
-pub use regions::subcell::{cell_to_subcell, cell_to_supercell};
+pub use regions::subcell::{cell_to_subcells, cell_to_supercell};
 
 // Compaction
 pub use core::compaction_marker::is_compaction_marker;
