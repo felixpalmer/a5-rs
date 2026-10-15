@@ -51,14 +51,11 @@ pub(super) struct Boundary<'a> {
     pub prep: &'a PreparedPolygon,
 }
 
-/// The boundary cells, each recorded with the ring segments (outer ring and
-/// holes) that reached it: with `exact`, every cell a segment touches; without,
-/// the cells holding samples along the segments at half-cell-radius spacing,
-/// which can miss a cell whose corner a segment clips between samples.
+/// The boundary cells: every cell a ring segment (outer ring or hole) touches,
+/// each recorded with every segment touching it.
 pub(super) fn sample_boundary(
     rings: &[&[LonLat]],
     resolution: i32,
-    exact: bool,
 ) -> Result<SampledBoundary, String> {
     let mut sampled = SampledBoundary {
         cells: Vec::new(),
@@ -81,7 +78,7 @@ pub(super) fn sample_boundary(
                     entry.push(seg_idx);
                 }
             },
-            exact,
+            true,
         )?;
         seg_offset += ring.len();
     }
