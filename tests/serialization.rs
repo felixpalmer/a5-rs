@@ -916,3 +916,27 @@ fn test_is_child_of_returns_false_when_child_is_shallower_than_parent() {
     let parent = cell_to_children(grandparent, None).unwrap()[0]; // res 5
     assert!(!is_child_of(grandparent, parent, 5));
 }
+
+#[test]
+fn test_cell_to_parent_finer_resolution_errors() {
+    let cell = cell_to_children(get_res0_cells().unwrap()[3], Some(5)).unwrap()[7];
+    assert_eq!(cell_to_parent(cell, Some(5)).unwrap(), cell);
+    for resolution in [6, 10, 29, MAX_RESOLUTION] {
+        let err = cell_to_parent(cell, Some(resolution)).unwrap_err();
+        assert!(
+            err.contains("must be equal to or less than current resolution (5)"),
+            "{}",
+            err
+        );
+    }
+    // Resolutions 0, 1 and 30 have their own encodings
+    let res0 = get_res0_cells().unwrap()[3];
+    assert_eq!(cell_to_parent(res0, Some(0)).unwrap(), res0);
+    assert!(cell_to_parent(res0, Some(1)).is_err());
+    let res1 = cell_to_parent(cell, Some(1)).unwrap();
+    assert_eq!(cell_to_parent(res1, Some(1)).unwrap(), res1);
+    assert!(cell_to_parent(res1, Some(2)).is_err());
+    let res2 = cell_to_parent(cell, Some(2)).unwrap();
+    assert!(cell_to_parent(res2, Some(3)).is_err());
+    assert!(cell_to_parent(WORLD_CELL, Some(0)).is_err());
+}
