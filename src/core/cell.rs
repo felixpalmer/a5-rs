@@ -9,7 +9,8 @@ use crate::core::coordinate_transforms::{
     face_to_ij, from_lon_lat, normalize_longitudes, to_lon_lat, to_polar,
 };
 use crate::core::origin::{
-    find_nearest_origin, find_nearest_origins, quintant_to_segment, segment_to_quintant,
+    find_nearest_origin, find_nearest_origins, get_origins, haversine, quintant_to_segment,
+    segment_to_quintant,
 };
 use crate::core::serialization::{
     deserialize, serialize, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, RES30_QUINTANTS, WORLD_CELL,
@@ -80,6 +81,10 @@ pub fn lonlat_to_cell(lonlat: LonLat, resolution: i32) -> Result<u64, String> {
     spherical_to_cell(from_lon_lat(lonlat), resolution)
 }
 
+// Haversine of the angle from a face center to its edge midpoints, atan(2)/2:
+// a point closer than that to a face center is on that face.
+const FACE_INRADIUS_HAVERSINE: f64 = 0.07467459582398002;
+
 /// Like `lonlat_to_cell`, but accepts a point already in A5's internal
 /// spherical representation (rotated authalic frame, as produced by
 /// `from_lon_lat` or `to_spherical(authalic_cartesian)`). Skips the redundant
@@ -108,12 +113,24 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
 
     // Try the cached pentagon first — skips the full lookup when consecutive
     // calls land in the same cell (common in dense-sample loops).
+    let mut nearest_origin: Option<&Origin> = None;
     let cached_hit = LAST_RESULT.with(|c| -> Result<Option<u64>, String> {
         let last_ref = c.borrow();
         let last = match last_ref.as_ref() {
             Some(l) if l.resolution == resolution => l,
             _ => return Ok(None),
         };
+        // The projection maps points from other faces into this face's frame
+        // too (the antipodal face center onto this one's center), so the cached
+        // pentagon only answers for points on its own face: the nearest origin.
+        let axis = get_origins()[last.origin_id as usize].axis;
+        if haversine(spherical, axis) >= FACE_INRADIUS_HAVERSINE {
+            let origin = find_nearest_origin(spherical);
+            nearest_origin = Some(origin);
+            if origin.id != last.origin_id {
+                return Ok(None);
+            }
+        }
         let dodecahedron = DodecahedronProjection::get_thread_local();
         let projected = dodecahedron.forward(spherical, last.origin_id)?;
         LAST_POINT.with(|p| *p.borrow_mut() = Some((spherical, last.origin_id, projected)));
@@ -133,7 +150,7 @@ pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, S
     // not congruent, but the containing pentagon is always the triangle's cell
     // or one of its fixed neighbor deltas (verified exhaustively), so at most
     // one 7-candidate walk resolves it — then a single curve encode.
-    let origin = find_nearest_origin(spherical);
+    let origin = nearest_origin.unwrap_or_else(|| find_nearest_origin(spherical));
     let dodecahedron = DodecahedronProjection::get_thread_local();
     let dodec_point = dodecahedron.forward(spherical, origin.id)?;
     LAST_POINT.with(|p| *p.borrow_mut() = Some((spherical, origin.id, dodec_point)));
