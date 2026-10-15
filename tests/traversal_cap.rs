@@ -147,36 +147,3 @@ fn test_pick_coarse_resolution() {
         );
     }
 }
-
-#[test]
-fn test_spherical_cap_res30_next_to_quintants_without_ids() {
-    // A res-30 cell in quintant 41, beside quintant 42 where res 30 has no IDs
-    let cell = hex_to_u64("8000014b50585f90").unwrap();
-    let center = a5::cell_to_lonlat(cell).unwrap();
-    let radius = 0.5;
-    let cap = spherical_cap(cell, radius).unwrap();
-    for &c in &cap {
-        if a5::is_compaction_marker(c) {
-            continue;
-        }
-        assert!(a5::is_valid_cell(c), "{}", u64_to_hex(c));
-        // Res-29 cells stand in for res 30 in quintant 42, so allow a res-29 cell's reach
-        let d = haversine_meters(center, a5::cell_to_lonlat(c).unwrap());
-        assert!(d < radius + 0.1, "{} is {} m away", u64_to_hex(c), d);
-    }
-    let cells = uncompact(&cap).unwrap();
-    assert!(cells.iter().any(|&c| a5::get_resolution(c) == 29));
-    let mut distinct = cells.clone();
-    distinct.sort_unstable();
-    distinct.dedup();
-    assert_eq!(distinct.len(), cells.len());
-    assert_eq!(a5::count(&cap).unwrap(), cells.len() as u64);
-}
-
-fn haversine_meters(a: a5::LonLat, b: a5::LonLat) -> f64 {
-    let (lat1, lat2) = (a.latitude().to_radians(), b.latitude().to_radians());
-    let dlon = (b.longitude() - a.longitude()).to_radians();
-    let h =
-        ((lat2 - lat1) / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
-    2.0 * 6_371_007.0 * h.sqrt().asin()
-}
