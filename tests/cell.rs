@@ -284,37 +284,38 @@ fn test_cell_to_lonlat_matches_fixture_values() {
     }
 }
 
-// A lookup's result must not depend on the lookups before it. Points on other
-// faces used to come back as the cell of the previous lookup when they
-// projected inside it; a face center projects onto the antipodal face's
-// center, so the south pole came back as the north pole's cell.
+#[derive(Deserialize)]
+struct LonLatToCellSequence {
+    resolution: i32,
+    lookups: Vec<usize>,
+    cells: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct LonLatToCellSequenceFixtures {
+    points: Vec<[f64; 2]>,
+    sequences: Vec<LonLatToCellSequence>,
+}
+
+// The lookups are made in order: each must match a cold lookup of its point,
+// whatever the lookup before it was
 #[test]
-fn test_lonlat_to_cell_ignores_earlier_lookups_on_other_faces() {
-    use a5::core::coordinate_transforms::to_lon_lat;
+fn test_lonlat_to_cell_does_not_depend_on_earlier_lookups() {
     use a5::core::hex::u64_to_hex;
-    use a5::core::origin::get_origins;
 
-    let north = lonlat_to_cell(LonLat::new(0.0, 90.0), 24).unwrap();
-    let south = lonlat_to_cell(LonLat::new(0.0, -90.0), 24).unwrap();
-    assert_ne!(north, south, "the poles share cell {}", u64_to_hex(north));
-
-    let centers: Vec<LonLat> = get_origins().iter().map(|o| to_lon_lat(o.axis)).collect();
-    for resolution in 1..=MAX_RESOLUTION {
-        // A lookup at another resolution leaves nothing for this one to reuse
-        let cold = |point: LonLat| {
-            lonlat_to_cell(point, (resolution + 1) % (MAX_RESOLUTION + 1)).unwrap();
-            lonlat_to_cell(point, resolution).unwrap()
-        };
-        let expected: Vec<u64> = centers.iter().map(|&p| cold(p)).collect();
-        for &before in &centers {
-            for (face, &center) in centers.iter().enumerate() {
-                lonlat_to_cell(before, resolution).unwrap();
-                assert_eq!(
-                    lonlat_to_cell(center, resolution).unwrap(),
-                    expected[face],
-                    "face {face} center at resolution {resolution}, after {before:?}"
-                );
-            }
+    let data = include_str!("fixtures/lonlat-to-cell-sequence.json");
+    let fixtures: LonLatToCellSequenceFixtures =
+        serde_json::from_str(data).expect("Failed to parse lonlat-to-cell-sequence fixtures");
+    for sequence in &fixtures.sequences {
+        for (i, (&point, cell)) in sequence.lookups.iter().zip(&sequence.cells).enumerate() {
+            let [lon, lat] = fixtures.points[point];
+            let result = lonlat_to_cell(LonLat::new(lon, lat), sequence.resolution).unwrap();
+            assert_eq!(
+                &u64_to_hex(result),
+                cell,
+                "resolution {}, lookup {i}",
+                sequence.resolution
+            );
         }
     }
 }
