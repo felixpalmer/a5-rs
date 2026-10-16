@@ -4,7 +4,22 @@
 
 use a5::traversal::cap::{estimate_cell_radius, meters_to_h, pick_coarse_resolution};
 use a5::{hex_to_u64, spherical_cap, u64_to_hex, uncompact};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+
+/// A JSON number, or one of "NaN", "Infinity" and "-Infinity", which JSON
+/// cannot hold as numbers
+fn number<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Number {
+        Value(f64),
+        Text(String),
+    }
+    match Number::deserialize(deserializer)? {
+        Number::Value(x) => Ok(x),
+        Number::Text(s) => s.parse().map_err(serde::de::Error::custom),
+    }
+}
 
 #[derive(Deserialize)]
 struct SphericalCapFixture {
@@ -18,6 +33,7 @@ struct SphericalCapFixture {
 struct SphericalCapCompactFixture {
     #[serde(rename = "cellId")]
     cell_id: String,
+    #[serde(deserialize_with = "number")]
     radius: f64,
     #[serde(rename = "compactedCells")]
     compacted_cells: Vec<String>,
@@ -25,6 +41,7 @@ struct SphericalCapCompactFixture {
 
 #[derive(Deserialize)]
 struct MetersToHFixture {
+    #[serde(deserialize_with = "number")]
     meters: f64,
     #[serde(rename = "expectedH")]
     expected_h: f64,
@@ -57,12 +74,22 @@ struct Helpers {
 }
 
 #[derive(Deserialize)]
+struct InvalidRadiusFixture {
+    #[serde(rename = "cellId")]
+    cell_id: String,
+    #[serde(deserialize_with = "number")]
+    radius: f64,
+}
+
+#[derive(Deserialize)]
 struct Fixtures {
     #[serde(rename = "sphericalCap")]
     spherical_cap: Vec<SphericalCapFixture>,
     #[serde(rename = "sphericalCapCompact")]
     spherical_cap_compact: Vec<SphericalCapCompactFixture>,
     helpers: Helpers,
+    #[serde(rename = "invalidRadii")]
+    invalid_radii: Vec<InvalidRadiusFixture>,
 }
 
 fn load_fixtures() -> Fixtures {
@@ -145,5 +172,16 @@ fn test_pick_coarse_resolution() {
             "pick_coarse_resolution({}, {})",
             f.radius, f.target_res
         );
+    }
+}
+
+#[test]
+fn test_spherical_cap_invalid_radius_errors() {
+    let fixtures = load_fixtures();
+    for f in &fixtures.invalid_radii {
+        let cell_id = hex_to_u64(&f.cell_id).unwrap();
+        let err = spherical_cap(cell_id, f.radius)
+            .expect_err(&format!("cellId={} radius={}", f.cell_id, f.radius));
+        assert!(err.contains("must be zero or more"), "{}", err);
     }
 }

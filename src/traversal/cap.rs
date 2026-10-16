@@ -9,7 +9,7 @@ use crate::core::constants::AUTHALIC_RADIUS_EARTH;
 use crate::core::face_adjacency::walk_faces;
 use crate::core::origin::haversine;
 use crate::core::serialization::{
-    cell_to_parent, deserialize, get_resolution, serialize, FIRST_CURVE_RESOLUTION,
+    cell_to_parent, deserialize, get_resolution, serialize, FIRST_CURVE_RESOLUTION, WORLD_CELL,
 };
 use crate::core::utils::A5Cell;
 use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
@@ -44,12 +44,16 @@ lazy_static::lazy_static! {
     };
 }
 
+/// Half the circumference: the greatest great-circle distance between two points.
+const HALF_CIRCUMFERENCE: f64 = std::f64::consts::PI * AUTHALIC_RADIUS_EARTH;
+
 /// Convert a distance in meters to a haversine threshold value.
 /// Since haversine h = sin^2(d/2R) is monotonic in d for d in [0, piR],
 /// comparing h <= threshold is equivalent to comparing dist <= radius
-/// but avoids the asin/sqrt per point.
+/// but avoids the asin/sqrt per point. Distances beyond piR reach every
+/// point, so they give the threshold of piR (1).
 pub fn meters_to_h(meters: f64) -> f64 {
-    let s = (meters / (2.0 * AUTHALIC_RADIUS_EARTH)).sin();
+    let s = (meters.min(HALF_CIRCUMFERENCE) / (2.0 * AUTHALIC_RADIUS_EARTH)).sin();
     s * s
 }
 
@@ -112,9 +116,17 @@ fn coarse_cap_cells(
 ///
 /// Descends the hierarchy (see curve_descent): starts at a coarse resolution and
 /// subdivides boundary cells, keeping interior cells at coarser resolutions.
-/// Only cells whose centers fall within the radius are included.
+/// Only cells whose centers fall within the radius are included. A radius of
+/// half the circumference (piR) or more covers the globe; a negative or NaN
+/// radius is an error.
 pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
+    if radius.is_nan() || radius < 0.0 {
+        return Err(format!("Radius ({}) must be zero or more", radius));
+    }
     let target_res = get_resolution(cell_id);
+    if radius >= HALF_CIRCUMFERENCE {
+        return to_covering(&[WORLD_CELL], target_res);
+    }
     let coarse_res = pick_coarse_resolution(radius, target_res);
     let center = cell_to_spherical(cell_id)?;
 
