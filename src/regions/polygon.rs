@@ -15,6 +15,7 @@ use crate::traversal::triple_cells::cell_ids_to_triples;
 use super::curve_runs::fill_by_curve_runs;
 use super::interior_flood::{fill_by_flood, prefers_flood};
 use super::polygon_boundary::{classify_boundary, sample_boundary};
+use super::ring_check::ring_crosses_itself;
 
 /// How a cell is judged to belong to the polygon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -41,7 +42,8 @@ pub struct PolygonToCellsOptions {
 /// `polygon` is GeoJSON-style rings `[outer, ...holes]` of `[longitude, latitude]`
 /// vertices; cells inside a hole are excluded. Rings may be open or closed
 /// (GeoJSON-style, first vertex repeated at the end) — closure is automatic
-/// either way. Holes with fewer than 3 distinct vertices are ignored.
+/// either way. Holes with fewer than 3 distinct vertices are ignored. A ring
+/// whose edges cross, such as a bow tie, is an error.
 ///
 /// Pass `None` for `options` to use the defaults. `options.containment` selects
 /// [`Containment::Center`] (default, cell center inside the polygon) or
@@ -86,6 +88,11 @@ pub fn polygon_to_cells(
             ring_vecs.push(to_cartesian(from_lon_lat(*v)));
         }
         ring_vecs_list.push(ring_vecs);
+    }
+    // A ring that crosses itself has no consistent inside: the fill would
+    // flood out of it
+    if ring_vecs_list.iter().any(|ring| ring_crosses_itself(ring)) {
+        return Err("Polygon ring crosses itself".to_string());
     }
 
     let prep = prepare_polygon(ring_vecs_list.clone());
