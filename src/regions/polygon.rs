@@ -47,11 +47,16 @@ pub struct PolygonToCellsOptions {
 /// [`Containment::Center`] (default, cell center inside the polygon) or
 /// [`Containment::Overlapping`] (any cell touching the polygon, for gap-free
 /// coverage). Returns compacted cells sorted in curve order, then the compaction marker.
+/// At resolution -1 the world cell overlaps every polygon but has no center, so
+/// only [`Containment::Overlapping`] returns it.
 pub fn polygon_to_cells(
     polygon: &[Vec<LonLat>],
     resolution: i32,
     options: Option<PolygonToCellsOptions>,
 ) -> Result<Vec<u64>, String> {
+    if !(-1..=MAX_RESOLUTION).contains(&resolution) {
+        return Err(format!("Resolution ({}) is out of range", resolution));
+    }
     let options = options.unwrap_or_default();
     // GeoJSON rings repeat the first vertex at the end — drop the duplicate.
     fn strip_closing(ring: &[LonLat]) -> &[LonLat] {
@@ -68,6 +73,10 @@ pub fn polygon_to_cells(
     let outer = strip_closing(&polygon[0]);
     if outer.len() < 3 {
         return to_covering(&[], resolution);
+    }
+    if resolution == -1 {
+        let overlapping = options.containment == Containment::Overlapping;
+        return to_covering(if overlapping { &[WORLD_CELL] } else { &[] }, resolution);
     }
     let mut rings: Vec<&[LonLat]> = vec![outer];
     for hole in &polygon[1..] {

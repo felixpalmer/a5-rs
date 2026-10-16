@@ -12,7 +12,9 @@ use crate::core::cell::{
 use crate::core::coordinate_transforms::{from_lon_lat, to_cartesian, to_lon_lat, to_spherical};
 use crate::core::face_adjacency::walk_faces;
 use crate::core::origin::get_origins;
-use crate::core::serialization::{deserialize, serialize, FIRST_CURVE_RESOLUTION};
+use crate::core::serialization::{
+    deserialize, serialize, FIRST_CURVE_RESOLUTION, MAX_RESOLUTION, WORLD_CELL,
+};
 use crate::core::tiling::get_pentagon_vertices;
 use crate::core::utils::A5Cell;
 use crate::geometry::pentagon::clip_segment;
@@ -342,10 +344,17 @@ fn search_subsegment(
 ///
 /// Pass `[start, end]` for a simple two-point line segment.
 ///
-/// Returns unique cell IDs along the polyline, in order.
+/// Returns unique cell IDs along the polyline, in order. At resolution -1 that is
+/// the world cell.
 pub fn line_string_to_cells(waypoints: &[LonLat], resolution: i32) -> Result<Vec<u64>, String> {
+    if !(-1..=MAX_RESOLUTION).contains(&resolution) {
+        return Err(format!("Resolution ({}) is out of range", resolution));
+    }
     if waypoints.is_empty() {
         return Ok(Vec::new());
+    }
+    if resolution == -1 {
+        return Ok(vec![WORLD_CELL]);
     }
     if waypoints.len() == 1 {
         return Ok(vec![lonlat_to_cell(waypoints[0], resolution)?]);

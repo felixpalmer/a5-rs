@@ -20,9 +20,39 @@ struct Fixtures {
     line_segment: Vec<LineSegmentFixture>,
 }
 
+#[derive(Deserialize)]
+struct LineStringToCellsFixture {
+    waypoints: Vec<[f64; 2]>,
+    resolution: i32,
+    cells: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct LineStringToCellsOutOfRangeFixture {
+    waypoints: Vec<[f64; 2]>,
+    resolution: i32,
+}
+
+#[derive(Deserialize)]
+struct WorldCellFixtures {
+    #[serde(rename = "lineStringToCells")]
+    line_string_to_cells: Vec<LineStringToCellsFixture>,
+    #[serde(rename = "lineStringToCellsOutOfRange")]
+    line_string_to_cells_out_of_range: Vec<LineStringToCellsOutOfRangeFixture>,
+}
+
+fn to_waypoints(points: &[[f64; 2]]) -> Vec<LonLat> {
+    points.iter().map(|p| LonLat::new(p[0], p[1])).collect()
+}
+
 fn load_fixtures() -> Fixtures {
     let data = include_str!("fixtures/traversal/line.json");
     serde_json::from_str(data).expect("Failed to parse line.json")
+}
+
+fn load_world_cell_fixtures() -> WorldCellFixtures {
+    let data = include_str!("fixtures/world-cell.json");
+    serde_json::from_str(data).expect("Failed to parse world-cell.json")
 }
 
 #[test]
@@ -75,4 +105,31 @@ fn test_dedup_at_segment_junctions() {
     unique.sort();
     unique.dedup();
     assert_eq!(result.len(), unique.len());
+}
+
+// At resolution -1 a line with any waypoints is the world cell
+#[test]
+fn test_line_string_to_cells_world_cell() {
+    for f in &load_world_cell_fixtures().line_string_to_cells {
+        let result: Vec<String> = line_string_to_cells(&to_waypoints(&f.waypoints), f.resolution)
+            .unwrap()
+            .into_iter()
+            .map(u64_to_hex)
+            .collect();
+        assert_eq!(
+            result, f.cells,
+            "waypoints={:?} resolution={}",
+            f.waypoints, f.resolution
+        );
+    }
+}
+
+#[test]
+fn test_line_string_to_cells_resolution_out_of_range() {
+    for f in &load_world_cell_fixtures().line_string_to_cells_out_of_range {
+        let err = line_string_to_cells(&to_waypoints(&f.waypoints), f.resolution).expect_err(
+            &format!("waypoints={:?} resolution={}", f.waypoints, f.resolution),
+        );
+        assert!(err.contains("is out of range"), "{}", err);
+    }
 }

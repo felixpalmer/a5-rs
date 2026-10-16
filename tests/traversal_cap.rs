@@ -65,9 +65,20 @@ struct Fixtures {
     helpers: Helpers,
 }
 
+#[derive(Deserialize)]
+struct WorldCellFixtures {
+    #[serde(rename = "sphericalCap")]
+    spherical_cap: Vec<SphericalCapCompactFixture>,
+}
+
 fn load_fixtures() -> Fixtures {
     let data = include_str!("fixtures/traversal/cap.json");
     serde_json::from_str(data).expect("Failed to parse cap.json")
+}
+
+fn load_world_cell_fixtures() -> WorldCellFixtures {
+    let data = include_str!("fixtures/world-cell.json");
+    serde_json::from_str(data).expect("Failed to parse world-cell.json")
 }
 
 #[test]
@@ -144,6 +155,20 @@ fn test_pick_coarse_resolution() {
             result, f.expected_coarse_res,
             "pick_coarse_resolution({}, {})",
             f.radius, f.target_res
+        );
+    }
+}
+
+#[test]
+fn test_spherical_cap_of_world_cell() {
+    for f in &load_world_cell_fixtures().spherical_cap {
+        let cell_id = hex_to_u64(&f.cell_id).unwrap();
+        let result = spherical_cap(cell_id, f.radius).unwrap();
+        let result_hex: Vec<String> = result.iter().map(|n| u64_to_hex(*n)).collect();
+        assert_eq!(
+            result_hex, f.compacted_cells,
+            "cellId={} radius={}",
+            f.cell_id, f.radius
         );
     }
 }

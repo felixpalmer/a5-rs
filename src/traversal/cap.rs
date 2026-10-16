@@ -9,7 +9,7 @@ use crate::core::constants::AUTHALIC_RADIUS_EARTH;
 use crate::core::face_adjacency::walk_faces;
 use crate::core::origin::haversine;
 use crate::core::serialization::{
-    cell_to_parent, deserialize, get_resolution, serialize, FIRST_CURVE_RESOLUTION,
+    cell_to_parent, deserialize, get_resolution, serialize, FIRST_CURVE_RESOLUTION, WORLD_CELL,
 };
 use crate::core::utils::A5Cell;
 use crate::coverings::slot_runs::{slot_runs_to_covering, to_covering};
@@ -112,8 +112,12 @@ fn coarse_cap_cells(
 ///
 /// Descends the hierarchy (see curve_descent): starts at a coarse resolution and
 /// subdivides boundary cells, keeping interior cells at coarser resolutions.
-/// Only cells whose centers fall within the radius are included.
+/// Only cells whose centers fall within the radius are included. The world cell
+/// has no center and is the only cell at its resolution, so its cap is itself.
 pub fn spherical_cap(cell_id: u64, radius: f64) -> Result<Vec<u64>, String> {
+    if cell_id == WORLD_CELL {
+        return to_covering(&[WORLD_CELL], -1);
+    }
     let target_res = get_resolution(cell_id);
     let coarse_res = pick_coarse_resolution(radius, target_res);
     let center = cell_to_spherical(cell_id)?;

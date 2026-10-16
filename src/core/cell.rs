@@ -91,6 +91,9 @@ const FACE_INRADIUS_HAVERSINE: f64 = 0.07467459582398002;
 /// authalic inverse/forward round-trip in dense-sample loops where the input
 /// already comes from authalic Cartesian space (e.g. polygon-fill boundary slerp).
 pub fn spherical_to_cell(spherical: Spherical, resolution: i32) -> Result<u64, String> {
+    if !(-1..=MAX_RESOLUTION).contains(&resolution) {
+        return Err(format!("Resolution ({}) is out of range", resolution));
+    }
     // Resolution -1 represents WORLD_CELL, which covers the entire world
     if resolution == -1 {
         return Ok(WORLD_CELL);
@@ -445,6 +448,9 @@ impl Default for CellToBoundaryOptions {
 }
 
 /// Convert A5 cell ID to boundary coordinates
+///
+/// The world cell covers the whole sphere and has no boundary, so its boundary is
+/// empty, as is a compaction marker's.
 pub fn cell_to_boundary(
     cell_id: u64,
     options: Option<CellToBoundaryOptions>,

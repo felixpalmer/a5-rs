@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use crate::core::face_adjacency::walk_faces;
-use crate::core::serialization::{deserialize, serialize, FIRST_CURVE_RESOLUTION};
+use crate::core::serialization::{deserialize, serialize, FIRST_CURVE_RESOLUTION, WORLD_CELL};
 use crate::core::utils::A5Cell;
 use crate::coverings::slot_runs::{compact_cells, to_covering};
 use crate::traversal::triple_cells::{
@@ -57,7 +57,8 @@ fn push_cell_ids(
 /// periodically compacted to reduce memory pressure.
 fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, String> {
     let cell = deserialize(cell_id)?;
-    if k == 0 {
+    // The world cell is the only cell at its resolution, so it is its own disk
+    if k == 0 || cell_id == WORLD_CELL {
         return to_covering(&[cell_id], cell.resolution);
     }
     if cell.resolution == 0 {
@@ -133,14 +134,16 @@ fn grid_disk_bfs(cell_id: u64, k: usize, edge_only: bool) -> Result<Vec<u64>, St
 
 /// Compute the grid disk of edge-sharing neighbors within k hops.
 /// Returns compacted cell IDs including the center cell, sorted in curve
-/// order, then a compaction marker recording the resolution.
+/// order, then a compaction marker recording the resolution. The disk of the
+/// world cell is the world cell.
 pub fn grid_disk(cell_id: u64, k: usize) -> Result<Vec<u64>, String> {
     grid_disk_bfs(cell_id, k, true)
 }
 
 /// Compute the grid disk of all neighbors (edge + vertex sharing) within k hops.
 /// Returns compacted cell IDs including the center cell, sorted in curve
-/// order, then a compaction marker recording the resolution.
+/// order, then a compaction marker recording the resolution. The disk of the
+/// world cell is the world cell.
 pub fn grid_disk_vertex(cell_id: u64, k: usize) -> Result<Vec<u64>, String> {
     grid_disk_bfs(cell_id, k, false)
 }
