@@ -5,7 +5,7 @@
 use super::resolution::covering_resolution;
 use crate::core::cell_info::{cell_area, get_num_children};
 use crate::core::compaction_marker::is_compaction_marker;
-use crate::core::serialization::checked_resolution;
+use crate::core::serialization::{checked_resolution, descendant_id_count, MAX_RESOLUTION};
 
 /// The number of cells in a set at its resolution: the length of the
 /// uncompacted set. This differs from the length of a compacted array. Each
@@ -31,7 +31,12 @@ pub fn count(cells: &[u64]) -> Result<u64, String> {
         if is_compaction_marker(cell) {
             continue;
         }
-        let children = get_num_children(checked_resolution(cell)?, resolution) as u64;
+        // Only resolution 30 needs the slot-based count (see descendant_id_count)
+        let children = if resolution == MAX_RESOLUTION {
+            descendant_id_count(cell, resolution)?
+        } else {
+            get_num_children(checked_resolution(cell)?, resolution) as u64
+        };
         total = total.checked_add(children).ok_or("Count exceeds u64")?;
     }
     Ok(total)

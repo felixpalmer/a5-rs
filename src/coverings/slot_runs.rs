@@ -11,8 +11,9 @@ use super::SlotRuns;
 use crate::core::compaction_marker::{compaction_marker, is_compaction_marker};
 use crate::core::serialization::{
     cell_first_slot, cell_slot_count, slot_to_cell, ORIGIN_SLOTS, QUINTANT_SHIFT, QUINTANT_SLOTS,
-    RES30_TAG_BITS, RESOLUTION_TAGS, SLOT_COUNTS, S_MASK, WORLD_CELL, WORLD_SLOTS,
+    RES30_QUINTANTS, RES30_TAG_BITS, RESOLUTION_TAGS, SLOT_COUNTS, S_MASK, WORLD_CELL, WORLD_SLOTS,
 };
+use std::borrow::Cow;
 
 /// Merge cells, in the given order, into sorted and disjoint slot runs in `out`.
 /// With `check_order`, stop and return false at the first cell starting before
@@ -95,12 +96,33 @@ pub fn append_slot_run(runs: &mut SlotRuns, lo: u64, hi: u64) {
     }
 }
 
+/// Quintants past RES30_QUINTANTS have no res-30 IDs, and their res-29 cells stand
+/// in (see `serialize`): widen runs ending inside one of those to the whole cell.
+fn widen_to_res30_ids(runs: &[u64]) -> Cow<'_, [u64]> {
+    let split = (RES30_QUINTANTS as u64) << QUINTANT_SHIFT;
+    let has_id = |slot: u64| slot <= split || slot & 3 == 0;
+    if runs.iter().all(|&slot| has_id(slot)) {
+        return Cow::Borrowed(runs);
+    }
+    let mut widened = SlotRuns::with_capacity(runs.len());
+    for run in runs.chunks_exact(2) {
+        let lo = if run[0] < split { run[0] } else { run[0] & !3 };
+        let hi = if has_id(run[1]) {
+            run[1]
+        } else {
+            (run[1] | 3) + 1
+        };
+        append_slot_run(&mut widened, lo, hi);
+    }
+    Cow::Owned(widened)
+}
+
 /// The coarsest cells covering the slot runs, in curve order. Runs built from
 /// cells at resolution r or coarser are aligned to res-r cells, so no cell finer
 /// than r is needed.
 pub fn slot_runs_to_cells(runs: &[u64]) -> Vec<u64> {
     let mut out = Vec::new();
-    for run in runs.chunks_exact(2) {
+    for run in widen_to_res30_ids(runs).chunks_exact(2) {
         let (mut lo, hi) = (run[0], run[1]);
         while lo < hi {
             if lo == 0 && hi == WORLD_SLOTS {
