@@ -20,15 +20,34 @@ fn cross(a: Cartesian, b: Cartesian) -> Cartesian {
     )
 }
 
-/// The side of the great circle through `a` and `b` that `c` lies on.
+// Points closer than this (on the unit sphere, about 6 um on the Earth) are
+// one point, and a point this close to a great circle lies on it. Vertices
+// that should coincide, as in a zero-width spike, can differ in their last
+// bits, and rounding then makes their edges appear to cross.
+const EPS: f64 = 1e-12;
+
+fn same(a: Cartesian, b: Cartesian) -> bool {
+    (a.x() - b.x()).abs() <= EPS && (a.y() - b.y()).abs() <= EPS && (a.z() - b.z()).abs() <= EPS
+}
+
+/// The side of the great circle through `a` and `b` that `c` lies on, or 0
+/// when `c` is within `EPS` of it.
 fn orient(a: Cartesian, b: Cartesian, c: Cartesian) -> i8 {
-    let d = dot(cross(a, b), c);
+    let n = cross(a, b);
+    let d = dot(n, c);
+    if d.abs() <= EPS * dot(n, n).sqrt() {
+        return 0;
+    }
     (d > 0.0) as i8 - (d < 0.0) as i8
 }
 
-/// Whether arcs `ab` and `cd` cross at a point interior to both. Touching and
-/// collinear arcs do not count, so no simple ring is reported.
+/// Whether arcs `ab` and `cd` cross at a point interior to both, as S2's
+/// CrossingSign decides it. Arcs sharing a vertex, touching or collinear do
+/// not count, so no simple ring is reported.
 fn arcs_cross(a: Cartesian, b: Cartesian, c: Cartesian, d: Cartesian) -> bool {
+    if same(a, c) || same(a, d) || same(b, c) || same(b, d) {
+        return false;
+    }
     let acb = -orient(a, b, c);
     let bda = orient(a, b, d);
     if acb == 0 || acb != bda {
@@ -60,11 +79,11 @@ fn arc_box(a: Cartesian, b: Cartesian) -> ([f64; 3], [f64; 3]) {
 pub(super) fn ring_crosses_itself(ring: &[Cartesian]) -> bool {
     let mut pts: Vec<Cartesian> = Vec::with_capacity(ring.len());
     for &p in ring {
-        if pts.last() != Some(&p) {
+        if !matches!(pts.last(), Some(&q) if same(q, p)) {
             pts.push(p);
         }
     }
-    if pts.len() > 1 && pts.first() == pts.last() {
+    if pts.len() > 1 && same(pts[0], pts[pts.len() - 1]) {
         pts.pop();
     }
     let n = pts.len();
