@@ -6,4 +6,5 @@ mod curve_runs;
 mod interior_flood;
 pub mod polygon;
 mod polygon_boundary;
+mod ring_check;
 pub mod subcell;

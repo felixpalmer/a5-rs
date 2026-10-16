@@ -26,12 +26,21 @@ struct CountryFixture {
 }
 
 #[derive(Deserialize)]
+struct SelfIntersectingFixture {
+    name: String,
+    polygon: Vec<Vec<[f64; 2]>>,
+    resolution: i32,
+}
+
+#[derive(Deserialize)]
 struct Fixtures {
     polygon: Vec<PolygonFixture>,
     #[serde(default)]
     overlapping: Vec<PolygonFixture>,
     #[serde(default)]
     country: Vec<CountryFixture>,
+    #[serde(rename = "selfIntersecting")]
+    self_intersecting: Vec<SelfIntersectingFixture>,
 }
 
 fn to_rings(polygon: &[Vec<[f64; 2]>]) -> Vec<Vec<LonLat>> {
@@ -177,5 +186,25 @@ fn test_polygon_to_cells_country_fixtures() {
             "{}: cell count mismatch",
             f.name
         );
+    }
+}
+
+// A ring that crosses itself has no consistent inside, in either containment
+#[test]
+fn test_polygon_to_cells_self_intersecting_ring_errors() {
+    let content = fs::read_to_string("tests/fixtures/regions/polygon.json")
+        .expect("Could not read polygon.json");
+    let fixtures: Fixtures = serde_json::from_str(&content).expect("Could not parse polygon.json");
+    for f in &fixtures.self_intersecting {
+        let rings = to_rings(&f.polygon);
+        for containment in [Containment::Center, Containment::Overlapping] {
+            let err = polygon_to_cells(
+                &rings,
+                f.resolution,
+                Some(PolygonToCellsOptions { containment }),
+            )
+            .expect_err(&format!("{} {:?}", f.name, containment));
+            assert!(err.contains("crosses itself"), "{}: {}", f.name, err);
+        }
     }
 }
